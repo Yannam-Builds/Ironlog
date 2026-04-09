@@ -22,44 +22,46 @@
   <p><sub>Android 7.0+ • offline-first • backup and CSV export built in</sub></p>
 </div>
 
-## Screenshots
+## Featured Screens
 
 <table>
   <tr>
     <td align="center" width="50%">
-      <img src="assets/readme/home-overview.png" alt="IronLog home screen with recommendation card, workout streak, and recovery heatmap." width="100%" />
+      <img src="features/12-home-train-core-next-overview.jpg" alt="IronLog home screen with smart recommendation cards, weekly plan chips, and recovery heatmap." width="100%" />
       <br />
-      <strong>Home overview</strong>
+      <strong>Smart home overview</strong>
       <br />
-      Recovery map, streaks, and a clear next-workout recommendation.
+      Program intelligence, weekly structure, body weight, and recovery visibility in one screen.
     </td>
     <td align="center" width="50%">
-      <img src="assets/readme/workout-logging.png" alt="IronLog workout logging screen with exercise cards and quick set logging." width="100%" />
+      <img src="features/05-workout-logging-set-history.jpg" alt="IronLog workout logging screen with set history, target reps, and quick logging controls." width="100%" />
       <br />
       <strong>Workout logging</strong>
       <br />
-      Fast set-by-set logging with notes, rest timers, and smart defaults.
+      Fast set-by-set logging with history, notes, rest timers, and smart defaults.
     </td>
   </tr>
   <tr>
     <td align="center" width="50%">
-      <img src="assets/readme/volume-analytics.png" alt="IronLog analytics screen showing muscle breakdown and push-pull-legs balance." width="100%" />
+      <img src="features/27-volume-analytics-week-summary-radar.jpg" alt="IronLog analytics screen showing weekly volume summary and muscle radar chart." width="100%" />
       <br />
       <strong>Volume analytics</strong>
       <br />
-      Radar, muscle breakdowns, and push/pull/legs balance from real training data.
+      Weekly summary cards, radar views, and muscle volume breakdowns from real training data.
     </td>
     <td align="center" width="50%">
-      <img src="assets/readme/plans-and-templates.png" alt="IronLog plans screen with reusable workout programs and templates." width="100%" />
+      <img src="features/13-muscle-recovery-front-inspector.jpg" alt="IronLog muscle recovery screen with front muscle map and tooltip inspection." width="100%" />
       <br />
-      <strong>Plans and templates</strong>
+      <strong>Recovery heatmaps</strong>
       <br />
-      Reusable workout days, program structure, and quick setup for your next block.
+      Interactive front and back muscle maps make recovery and fatigue easy to inspect.
     </td>
   </tr>
 </table>
 
 > Built for lifters who want speed, local control, and recovery visibility without subscription bloat.
+
+See the full 30-image feature gallery in [features/README.md](features/README.md).
 
 ## Download
 
