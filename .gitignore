@@ -1,0 +1,78 @@
+# dependencies
+node_modules/
+
+# Expo and local build output
+.expo/
+.expo-check-tmp/
+.expo-export-check/
+dist/
+web-build/
+expo-env.d.ts
+
+# local native generation
+ios/
+android/
+.kotlin/
+
+# editor and workspace
+.vscode/
+.idea/
+.DS_Store
+
+# local environment and signing material
+.env*.local
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.pem
+
+# logs and caches
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+*.log
+
+# temp repo-cleanup / QA artifacts
+artifacts/
+IronLogGithub/
+IronlogIOS/
+tmp*
+temp*
+wdump.xml
+window_dump_current.xml
+x.exercise_name
+
+# screenshots and verification captures
+check_*.png
+step_check_*.png
+verify_*.png
+t*.png
+new*.png
+
+# one-off local scratch scripts and notes
+scripts/
+__*.py
+__*.js
+.tmp_check.js
+buildSVGComponent.js
+generate*.js
+parse_*.js
+process_exercises.js
+check_svg*.js
+verify_coverage.js
+exercise_meta.txt
+exercises_formatted*.txt
+exercises_full.json
+ironlog_873_exercises.txt
+svg_analysis.txt
+svg_out.json
+
+# python cache
+__pycache__/
+*.pyc
+
+# TypeScript
+*.tsbuildinfo
