@@ -88,6 +88,70 @@ IronLog is designed to feel fast in the gym and useful after the session. You ca
 - Gym setup features including gym profiles, bar weight settings, plate calculator, and equipment-aware workflows.
 - App customization with AMOLED, dark, light, and Monet themes plus haptics, keep-awake, and effort tracking settings.
 
+## IRONLOG 2.0 - Upcoming Improvements
+
+IRONLOG already covers logging, analytics, and recovery tracking.
+Version 2.0 focuses on making those systems smarter, more accurate, and more useful for progression.
+
+### Smarter Training Guidance
+
+- More accurate next-session recommendations based on real performance trends.
+- Plateau detection with actionable suggestions, not just static numbers.
+- Deload recommendations when performance consistently drops.
+- Improved post-workout insights that explain what actually happened.
+
+### Improved Muscle and Recovery Accuracy
+
+- More detailed muscle contribution per exercise beyond basic groups.
+- Better weekly volume distribution across muscles.
+- More reliable fatigue and recovery estimation.
+- Stronger detection of imbalances such as overtraining front delts vs back.
+
+### Better Performance Tracking
+
+- Automatic PR detection for weight, reps, and volume.
+- Estimated strength tracking with 1RM trends.
+- Clearer exercise-level progress trends over time.
+- Workout performance scoring relative to your baseline.
+
+### More Adaptive Programs
+
+- Programs that adjust based on your actual performance.
+- Smarter handling of missed workouts.
+- Better exercise rotation when lifts stall.
+
+### Smarter Volume Interpretation
+
+- Reworked volume comparisons with a wider and more realistic range.
+- Less repetitive analogies with fresher context.
+- Context-aware insights tied to your progress.
+
+### Retention and Feedback Improvements
+
+- Workout and logging streaks.
+- Milestones and progress highlights.
+- Improved weekly summaries.
+- Smarter notifications with less spam and more relevance.
+- More refined haptic feedback.
+
+### UX Improvements
+
+- Faster logging with better defaults from previous sessions.
+- Drag and reorder exercises.
+- Collapsible exercise blocks.
+- Clearer comparisons to previous performance.
+
+### Goal for 2.0
+
+Make IRONLOG not just track workouts, but interpret them, adapt to them, and help you improve them.
+
+## Suggestions and Community Chat
+
+Have an idea, feature request, or feedback from training with IRONLOG?
+
+- Join the community chat in [GitHub Discussions](https://github.com/Yannam-Builds/Ironlog/discussions).
+- Post a structured request in [Issues](https://github.com/Yannam-Builds/Ironlog/issues/new/choose) if Discussions are unavailable.
+
 ## Build From Source
 
 ```bash
