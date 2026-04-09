@@ -75,14 +75,18 @@ IronLog is designed to feel fast in the gym and useful after the session. You ca
 
 ## What You Get
 
-- Fast workout logging with set-by-set entry, smart defaults, rest timers, resume support, and in-workout actions.
-- Recovery heatmaps with interactive front/back muscle views instead of generic recovery scores.
-- Volume analytics with weekly totals, muscle breakdowns, push/pull/legs balance, radar charts, and share cards.
-- Programs and planning tools with editable workout days, templates, onboarding setup, and plan recommendations.
-- Exercise tools with search, custom exercises, swaps, and YouTube demo links right from workout flows.
-- Progress tracking for body weight, measurements, PRs, history, and calendar views.
-- Local-first data tools with backups, restore flows, CSV import/export, privacy controls, and image caching.
-- Gym quality-of-life features including gym profiles, bar weight setup, plate calculator, haptics, and theme support.
+- Fast workout logging with set-by-set entry, set history, smart defaults, notes, resume support, and in-workout actions.
+- Rest timer controls with quick add, pause, skip, and workout-in-progress recovery when you leave a session.
+- Program intelligence that suggests the next workout, adapts to your training history, and unlocks better recommendations as you log more sessions.
+- Built-in programs and plans with browse/import flows, editable workout days, templates, and plan-structure switching.
+- Exercise tools with the exercise library, search, custom exercises, swaps, supersets, warm-up generation, and YouTube demo links.
+- Recovery heatmaps with interactive front and back muscle maps, touch tooltips, and color-coded readiness.
+- Volume analytics with weekly summaries, muscle breakdowns, push/pull/legs balance, radar charts, and shareable cards.
+- Progress tracking for body weight, body measurements, progress photos, PRs, history, and calendar views.
+- Stats screens with personal bests, session totals, streaks, weekly trends, and workout history.
+- Local-first data tools with backup center, restore flows, JSON and CSV import/export, privacy controls, and image caching.
+- Gym setup features including gym profiles, bar weight settings, plate calculator, and equipment-aware workflows.
+- App customization with AMOLED, dark, light, and Monet themes plus haptics, keep-awake, and effort tracking settings.
 
 ## Build From Source
 
