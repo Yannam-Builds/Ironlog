@@ -10,7 +10,7 @@
   <p>
     <a href="https://github.com/DeccanHYD/Ironlog/releases"><img src="https://img.shields.io/github/v/release/DeccanHYD/Ironlog?label=stable" alt="Latest release" /></a>
     <a href="https://github.com/DeccanHYD/Ironlog/releases"><img src="https://img.shields.io/github/downloads/DeccanHYD/Ironlog/total" alt="Downloads" /></a>
-    <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License" /></a>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/license-personal%20%2B%20non--commercial-orange.svg" alt="Personal and non-commercial license" /></a>
   </p>
 </div>
 
@@ -19,6 +19,8 @@
 ## Download
 
 Download the latest Android APK from [Releases](https://github.com/DeccanHYD/Ironlog/releases).
+
+Source is available for personal and non-commercial use. Commercial use requires permission.
 
 ## Features
 
@@ -58,4 +60,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.
 
 ## License
 
-Released under the [MIT License](LICENSE).
+Released under the [IronLog Personal Use License](LICENSE).
