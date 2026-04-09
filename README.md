@@ -149,8 +149,8 @@ Make IRONLOG not just track workouts, but interpret them, adapt to them, and hel
 
 Have an idea, feature request, or feedback from training with IRONLOG?
 
-- Join the community chat in [GitHub Discussions](https://github.com/Yannam-Builds/Ironlog/discussions).
-- Post a structured request in [Issues](https://github.com/Yannam-Builds/Ironlog/issues/new/choose) if Discussions are unavailable.
+- Post it in [Issues](https://github.com/Yannam-Builds/Ironlog/issues/new/choose) so it reaches us directly.
+- Want chat-style discussion threads? Enable Discussions in repo settings, then use [GitHub Discussions](https://github.com/Yannam-Builds/Ironlog/discussions).
 
 ## Build From Source
 
