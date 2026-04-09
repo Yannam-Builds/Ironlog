@@ -1,0 +1,16 @@
+--- C:/Users/prana/Downloads/Male_Front.svg ---
+Length: 191696
+Tags: paths=3, polygons=0, groups=0
+IDs (first 10): 
+--- C:/Users/prana/Downloads/Male_Back.svg ---
+Length: 133100
+Tags: paths=3, polygons=0, groups=0
+IDs (first 10): 
+--- C:/Users/prana/Downloads/Female_Front.svg ---
+Length: 206037
+Tags: paths=3, polygons=0, groups=0
+IDs (first 10): 
+--- C:/Users/prana/Downloads/Female_Back.svg ---
+Length: 142117
+Tags: paths=3, polygons=0, groups=0
+IDs (first 10): 

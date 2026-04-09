@@ -1,0 +1,45 @@
+{
+  "expo": {
+    "name": "IRONLOG",
+    "slug": "ironlog",
+    "version": "1.0.0",
+    "scheme": "ironlog",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/splash-logo.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#080808"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#080808"
+      },
+      "package": "com.ironlog.app",
+      "allowBackup": false,
+      "permissions": [
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE"
+      ]
+    },
+    "plugins": [
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#FF4500"
+        }
+      ],
+      "expo-font",
+      "expo-secure-store",
+      "expo-web-browser"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "ironlog-app"
+      }
+    }
+  }
+}
