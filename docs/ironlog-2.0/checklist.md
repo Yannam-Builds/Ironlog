@@ -1,53 +1,47 @@
-# IRONLOG 2.0 Implementation Checklist
+# IRONLOG Android Checklist
 
-## Foundation
-- [x] Create 2.0 docs
-- [x] Add SQLite dependency
-- [x] Create SQLite schema and helpers
-- [x] Add one-time AsyncStorage to SQLite migration
-- [x] Mirror write paths during transition
+## A. Shipped Beta Closure Snapshot
 
-## Phase 0 + A + B
-- [x] Volume interpretation engine
-- [x] Exercise profile engine
-- [x] Muscle contribution engine
-- [x] Progression engine
-- [x] Plateau and deload detection
-- [x] Substitution ranking
-- [x] Session quality summary
-- [x] Home screen integration
-- [x] Active workout integration
-- [x] Volume analytics rebuild
-- [x] Recovery map rebuild
+These items are already shipped in 1.1.0-beta and should not appear under upcoming roadmap copy:
 
-## Phase C + D
-- [x] PR event engine
-- [x] Exercise trend dashboards
-- [x] Workout performance score
-- [x] Consistency metrics
-- [x] Program insights
-- [x] Goal modes
-- [x] Missed-workout rescheduling
+- [x] progression, plateau, deload, and substitution suggestions
+- [x] muscle analytics and recovery map windows (`Workout`, `7D`, `30D`, `Program`)
+- [x] PR/e1RM/exercise trend dashboards
+- [x] program insights and goal mode controls
+- [x] recovery score plus manual recovery check-ins
+- [x] streaks, milestones, weekly summary card
+- [x] notification policies, quiet hours, cooldowns, snooze, decision logging
+- [x] restore wizard and SQLite export/import foundation
+- [x] share cards expansion and in-workout add/edit/delete improvements
 
-## Phase E + F
-- [x] Recovery score
-- [x] Manual recovery inputs
-- [x] Streaks and milestones
-- [x] Weekly summary card
-- [x] Notification scheduler foundation
+## B. Pending Execution Checklist
 
-## Phase G + H
-- [x] SQLite-backed export and restore
-- [x] Share cards expansion
-- [x] Faster logging defaults
-- [x] Better history compare UX
-- [x] Settings expansion
+### Phase 0 - Doc Truth Cleanup
+- [ ] remove stale upcoming claims in root README
+- [ ] align beta release-note source with shipped scope
+- [ ] mark historical 2.0 specs versus pending roadmap docs
 
-## 2.0 Closure Gates
-- [x] Balanced notification policy contract (`max 1/day`, `max 3/week`, quiet hours, per-topic cooldowns)
-- [x] Notification arbitration + suppression reasons with local decision log
-- [x] Notification control surface: profile, snooze, cap mode, cooldowns, lead-time
-- [x] First-launch restore entrypoint for uninstall/reinstall users
-- [x] Restore flows for encrypted backup + SQLite export
-- [x] Full regression matrix run (migration idempotency, export round-trip, progression/recovery determinism)
-- [x] Final release-candidate QA signoff (logic suite + release build verification)
+### Phase 1 - Portability and Release Trust
+- [ ] ship OpenWeight export codec with `ironlog:*` namespaced extras
+- [ ] ship OpenWeight import parser with validation report
+- [ ] create Import Center for Strong/Hevy/OpenWeight
+- [ ] implement dry-run preview, duplicate checks, alias review, and import summary
+- [ ] close export/import parity for currently missing app-state domains
+- [ ] enforce Play Protect hardening baseline:
+- [ ] `blockedPermissions` in `app.json` for unused risky permissions
+- [ ] remove `RECORD_AUDIO` and `SYSTEM_ALERT_WINDOW` from Android manifest
+- [ ] require release-keystore signing for release builds
+
+### Phase 2 - Program and Adherence Depth
+- [ ] block/mesocycle builder and per-exercise progression models
+- [ ] optional `%1RM` and RPE/RIR prescriptions
+- [ ] deload week builder plus anchor/accessory rule sets
+- [ ] busy-week compression and fatigue-aware rescheduling
+- [ ] adherence health score with clear rationale
+
+### Phase 3 - Explainability and Hardening
+- [ ] confidence/rationale payloads across intelligence surfaces
+- [ ] readiness-adjusted context and persistence-based imbalance signals
+- [ ] large-history performance profiling and cache/index tuning
+- [ ] regression suite for migration/import/export/backup/analytics
+- [ ] accessibility and critical error-state polish

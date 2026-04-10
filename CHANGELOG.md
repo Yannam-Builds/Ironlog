@@ -24,6 +24,7 @@
 - Notification cap override parsing fixed so `null` overrides no longer collapse weekly caps.
 - Backup domain coverage now includes manual recovery and milestone state for restore parity.
 - Volume Analytics now respects compact number preference for set displays.
+- Android release packaging now enforces blocked risky unused permissions (`RECORD_AUDIO`, `SYSTEM_ALERT_WINDOW`) via Expo config guidance and release-trust policy.
 
 ## [1.1.0-alpha.3] - 2026-04-10
 

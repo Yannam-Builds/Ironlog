@@ -1,51 +1,95 @@
-# IRONLOG 2.0 Master Plan
+# IRONLOG Android Master Blueprint (Post 1.1.0-beta Audit)
 
-## Product Goal
-IRONLOG 2.0 upgrades the current offline-first workout logger into a serious training intelligence system. The release keeps logging fast, keeps recommendations deterministic, and makes analytics explain something useful instead of showing disconnected charts.
+This document is the single source of truth for what is genuinely still pending after the shipped 1.0 baseline and 1.1.0-beta work.
 
-## Release Structure
-1. Milestone 1: Phase 0 + A + B
-2. Milestone 2: Phase C + D
-3. Milestone 3: Phase E + F
-4. Milestone 4: Phase G + H
+## Current Product Truth
 
-## Milestone 1 Scope
-- SQLite-backed training persistence and migration bridge
-- Volume interpretation engine with realistic comparison dataset and anti-repetition rules
-- Exercise profile classification
-- Deterministic progression, plateau, deload, and substitution logic
-- Fine-grained muscle contribution inference with confidence-aware fallbacks
-- Rebuilt muscle analytics, recovery windows, and imbalance detection
-- UI integration on Home, Active Workout, Volume Analytics, and Recovery Map
+Already shipped in meaningful form:
 
-## Architecture
-- `AppContext` remains the UI facade.
-- Training data lives in SQLite and is mirrored to the legacy AsyncStorage keys during the transition.
-- Business logic moves into reusable domain services:
-  - `src/domain/storage`
-  - `src/domain/intelligence`
-- Existing screens consume structured payloads instead of screen-local heuristics.
+- logging, plans, program picker, exercise library
+- volume analytics, recovery heatmap, bodyweight analytics
+- progression/plateau/deload/substitution suggestions
+- PR/e1RM/trend dashboards
+- program insights, goal mode, missed-day guidance
+- streaks, milestones, weekly summary, recovery score, manual check-ins
+- notification controls (quiet hours, cooldowns, snooze, policy caps, decision log)
+- restore wizard, SQLite export/import foundation, share cards
+- in-workout set edit/delete and add-exercise flows
 
-## Data Flow
-1. App boot runs legacy AsyncStorage migrations.
-2. Boot then ensures the SQLite schema exists.
-3. Legacy data is migrated into SQLite one time and marked with `@ironlog/v2SqliteMigrated`.
-4. `AppContext` hydrates plans, history, and bodyweight from SQLite.
-5. User actions write through repositories, then mirror back to legacy keys for backward-compatible export and restore.
-6. Intelligence engines derive:
-  - exercise profiles
-  - muscle contributions
-  - progression suggestions
-  - recovery snapshots
-  - session summaries
-  - comparison usage history
+This roadmap tracks only missing deltas.
 
-## Rollout Order
-1. Docs and specs
-2. SQLite foundation and migration
-3. Exercise profile + muscle contribution catalog
-4. Progression and volume interpretation engines
-5. Analytics and recovery aggregation
-6. Home and workout logging integration
-7. Analytics and recovery screen upgrade
-8. Verification and stabilization
+## Phase 0 - Audit and Public-Doc Cleanup (Mandatory)
+
+Objective:
+- remove stale roadmap claims and align public messaging with shipped Android reality.
+
+Scope:
+- root README truth map (`1.0`, `1.1.0-beta`, `pending`)
+- rewrite stale "upcoming" sections
+- tighten beta release-note source
+- label historical docs versus pending roadmap docs
+
+Acceptance:
+- no shipped feature remains mislabeled as upcoming
+- docs and release-note source tell the same story
+
+## Phase 1 - Portability and Release Trust
+
+Objective:
+- make migration and release trust the next clear strength.
+
+Scope:
+- OpenWeight interoperability layer (import/export only)
+- Import Center for Strong CSV, Hevy CSV, OpenWeight JSON
+- pre-import validation, duplicate detection, dry-run preview, alias review, import summary
+- deterministic mapping first; no silent exercise renaming
+- preserve richer IRONLOG metadata with `ironlog:*` namespaced fields
+- close export/import parity for all shipped app-state domains
+- Play Protect hardening baseline:
+  - block risky unused permissions in `app.json`
+  - remove `RECORD_AUDIO` and `SYSTEM_ALERT_WINDOW` from Android manifest
+  - require release keystore signing (no debug cert release builds)
+
+Acceptance:
+- OpenWeight round-trip preserves core logs and namespaced IRONLOG extras
+- Strong and Hevy imports complete with deterministic mapping and clear unmatched review
+- release builds are keystore-signed and permission hygiene is documented
+
+## Phase 2 - Program and Adherence Depth
+
+Objective:
+- move from recommendation layer to coach-grade planning depth.
+
+Scope:
+- advanced program builder: blocks/mesocycles, progression model per exercise
+- rep-range templates, optional `%1RM`, optional RPE/RIR prescriptions
+- anchor lift and accessory pool logic, deload-week builder
+- adherence v2: busy-week compression, fatigue-aware reshuffle, adherence health score
+
+Acceptance:
+- users can build advanced plans without losing quick logging flow
+- missed-day handling becomes actionable rescheduling, not only narrative guidance
+
+## Phase 3 - Explainability and Quality
+
+Objective:
+- raise trust and stability for large-history users.
+
+Scope:
+- confidence/rationale copy across Home, Workout, Recovery, and Analytics
+- undertraining persistence and readiness-adjusted context
+- large-history performance profiling and cache/index hardening
+- regression matrix for migration, import/export, analytics windows, and backup restore
+- accessibility and error-state cleanup
+
+Acceptance:
+- no fake precision; weak-confidence outputs degrade safely
+- logging and analytics remain responsive with large histories
+- RC checklist can hit 100% with reproducible evidence
+
+## Explicit Non-Goals
+
+- iOS planning or implementation
+- calorie tracking, meal planning, social feed, fake AI coach
+- OpenWeight as internal source of truth
+- full live cloud sync platform in this roadmap window

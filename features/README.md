@@ -1,5 +1,7 @@
 # IronLog Feature Gallery
 
+This gallery reflects the current Android product state, including shipped 1.1.0-beta capabilities. It is not a future roadmap.
+
 All current IronLog screenshots live in this folder with descriptive filenames so they are easy to browse locally and on GitHub.
 
 1. [Log history and progress photos](01-log-history-progress-photos.jpg) - Log tab with workout history cards and progress photo entry.

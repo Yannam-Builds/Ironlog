@@ -1,74 +1,68 @@
-# IRONLOG 2.0 UI Screen Plan
+# IRONLOG UI Plan: Pending Android Delta
 
-## Home Screen
-- Purpose
-  - Show next-step training guidance without slowing navigation
-- Inputs
-  - active plan, history, bodyweight, muscle analytics, progression suggestions
-- Components
-  - program intelligence card
-  - next-session targets card
-  - plateau or deload callout
-  - muscle focus insight
-  - recovery heatmap preview
-- States
-  - no plan
-  - low history
-  - active recommendation
+## Status Note
 
-## Active Workout Screen
-- Purpose
-  - Keep logging fast while showing useful context inline
-- Inputs
-  - current day prescription, last performance, progression suggestion, swap candidates
-- Components
-  - inline previous-performance line
-  - target chip per exercise
-  - smarter swap ranking
-  - post-workout session summary modal
-  - refined volume interpretation
-- States
-  - fresh start
-  - resumed workout
-  - deload
-  - workout complete
+Home intelligence, active workout targets, volume analytics, and recovery map are already live.
+This UI plan tracks only new screens or meaningful pending deltas.
 
-## Volume Analytics Screen
-- Purpose
-  - Make muscle analytics a flagship view
-- Inputs
-  - recent sessions, active plan, muscle contribution catalog
-- Components
-  - timeframe toggles
-  - effective sets summary cards
-  - muscle leaderboard chart
-  - imbalance insights
-  - volume interpretation line
-- States
-  - empty
-  - week or month
-  - program view
+## 1) Import Center (New)
 
-## Recovery Map Screen
-- Purpose
-  - Show contribution-driven muscle freshness cleanly
-- Inputs
-  - muscle analytics across selected windows
-- Components
-  - front and back map
-  - window toggles
-  - selected-muscle details
-  - quick link back to analytics
-- States
-  - workout
-  - 7 day
-  - 30 day
-  - program
+Purpose:
+- serious migration and portability entrypoint.
 
-## Follow-on Screens
-- Program Insights
-  - target muscles, completed work, adherence, projected progression
-- Weekly Summary
-  - workouts, PRs, top muscles, weekly volume, bodyweight trend
+Core UI:
+- source picker (`Strong CSV`, `Hevy CSV`, `OpenWeight JSON`)
+- dry-run preview card
+- unmatched exercise review with manual mapping
+- duplicate report and final import summary
+
+Entry points:
 - Settings
-  - progression, analytics, notifications, backup and export controls
+- Restore wizard
+- optional onboarding fast path
+
+## 2) Backup/Restore Trust Delta (Existing Screens, Expanded)
+
+Purpose:
+- make continuity behavior explicit and understandable.
+
+Core UI:
+- clearer backup-health status
+- explicit local backup vs Drive backup mode copy
+- restore list and validation feedback improvements
+- Play Protect and signing guidance in docs/release notes, not noisy in-app warnings
+
+Screens:
+- Backup Center
+- Restore Data
+
+## 3) Program Builder and Adherence Delta (Existing + New Sections)
+
+Purpose:
+- add coach-grade structure without slowing core logging.
+
+Core UI:
+- block/mesocycle builder sections in program editor
+- per-exercise progression model settings
+- busy-week compression and reschedule suggestion cards
+- adherence health explanation rows in Program Insights
+
+Screens:
+- Plan Editor / Plans
+- Program Insights
+- Home (adherence prompts)
+
+## 4) Explainability Delta (Existing Screens)
+
+Purpose:
+- make recommendations understandable and trustworthy.
+
+Core UI:
+- short rationale chips on Home/Workout/Recovery/Volume views
+- confidence-safe display rules (hide weak precision)
+
+Screens:
+- Home
+- Active Workout
+- Recovery Map
+- Volume Analytics

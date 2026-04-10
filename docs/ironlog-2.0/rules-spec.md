@@ -1,65 +1,43 @@
-# IRONLOG 2.0 Rules Spec
+# IRONLOG Rules Spec: Shipped vs Pending Delta
 
-## Volume Interpretation Rules
-- Use the 100-object dataset.
-- Default maximum comparison weight is `100000 kg`.
-- Exclude extreme entries unless the comparison explicitly needs them.
-- Use closest-match selection with category rotation and recent-usage blocking.
-- Output one sentence only.
-- Always combine volume with performance context.
-- If no good match exists, fall back to tons.
+## Status Note
 
-## Progression Rules
-- Barbell upper compounds
-  - Success: `+2.5 kg`
-  - Partial success: hold
-  - Repeated misses: `-5%` or rep reset
-- Barbell lower compounds
-  - Success: `+5 kg`
-  - Repeated misses: `-5%` to `-7.5%`
-- Dumbbells
-  - Use next pair increment when reasonable
-  - Use rep-first progression when the jump is large
-- Machine and cable movements
-  - Use one stack step or `+2.5 kg`
-  - Otherwise hold load and add reps
-- Bodyweight movements
-  - Add reps until the rep ceiling
-  - Then add external load
+The deterministic rules below are already shipped in 1.1.0-beta.
+This file now tracks only refinement deltas still pending.
 
-## Plateau Rules
-- Minimum 3 non-deload exposures
-- Flag when e1RM, reps, and volume remain meaningfully flat
-- Recommend one primary action in this order:
-  - microload
-  - rep reset
-  - variation swap
-  - local deload
+## Shipped Rule Families (Baseline)
 
-## Deload Rules
-- Never auto-apply deloads
-- Surface when repeated underperformance overlaps with low freshness or unusually high recent fatigue
-- Keep rationale explainable
+- Volume interpretation with dataset-driven comparisons, anti-repetition, one-line output, and tons fallback.
+- Progression by exercise profile (barbell, dumbbell, machine/cable, bodyweight).
+- Plateau and deload recommendation gates (suggestion-first, never auto-apply).
+- Muscle contribution inference with confidence-aware fallback behavior.
+- Recovery state classification (`fresh`, `recovering`, `fatigued`) from workload and recency.
+- Session quality summary generation.
 
-## Muscle Contribution Method
-- Use layered inference:
-  - anchor lift overrides
-  - movement-family templates
-  - library-muscle expansion
-  - equipment, mechanic, and name inference
-- Store confidence per exercise-to-muscle assignment
-- When confidence is weak, aggregate display to a broader region instead of pretending the split is precise
+## Pending Rule Deltas
 
-## Recovery Rules
-- Estimate effective stress with time decay
-- Report per-muscle state as:
-  - fresh
-  - recovering
-  - fatigued
-- Use real workload history plus optional manual recovery inputs later
+### 1) OpenWeight Interop Mapping Rules
+- deterministic exercise alias matching first
+- explicit unresolved-exercise review; no silent renaming
+- namespaced metadata preservation for richer IRONLOG-only fields:
+  - `ironlog:recovery`
+  - `ironlog:manualRecovery`
+  - `ironlog:milestones`
+  - `ironlog:analytics`
+  - `ironlog:muscleContribution`
+  - `ironlog:notificationPolicy`
 
-## Session Quality Rules
-- Keep summaries brief and practical
-- Count progression wins and dips from repeated lifts
-- Include at least one muscle-volume interpretation
-- Use one sentence only
+### 2) Program/Adherence Rule Expansion
+- busy-week compression with minimum-effective-session logic
+- fatigue-aware reshuffle constraints
+- optional `%1RM` and optional RPE/RIR target integration
+
+### 3) Explainability/Confidence Rules
+- every surfaced recommendation must carry a concise rationale
+- low-confidence recommendations should degrade to broader guidance or stay hidden
+- no fake precision for ambiguous inputs
+
+### 4) Release Trust Rules (Android)
+- release builds must use non-debug keystore signing
+- release manifests must not include blocked high-risk unused permissions
+- docs must describe Drive as backup target behavior, not real-time sync
