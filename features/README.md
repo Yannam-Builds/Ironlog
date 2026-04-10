@@ -1,36 +1,44 @@
-# IronLog Feature Gallery
+# IronLog Screenshot Gallery
 
-This gallery reflects the current Android product state, including shipped 1.1.0-beta capabilities. It is not a future roadmap.
+This folder is the current Android UI gallery for IronLog, including the AMOLED, light, and Monet-inspired theme work.
 
-All current IronLog screenshots live in this folder with descriptive filenames so they are easy to browse locally and on GitHub.
+The homepage README highlights 8 screenshots. The full set of 23 current captures lives in [features/screenshots/](screenshots/).
 
-1. [Log history and progress photos](01-log-history-progress-photos.jpg) - Log tab with workout history cards and progress photo entry.
-2. [Home smart recommendations: train core next](02-home-smart-recommendations-train-core.jpg) - Home screen recommendation card with weekly plan chips and recovery map.
-3. [Workout share summary card](03-workout-share-summary-card.jpg) - Shareable post-workout summary with volume, streak, and top lifts.
-4. [Program browser with built-in templates](04-program-browser-built-in-templates.jpg) - Built-in beginner templates organized by category.
-5. [Workout logging with set history](05-workout-logging-set-history.jpg) - Working set flow with set history, RPE, notes, and quick log controls.
-6. [Rest timer in workout](06-rest-timer-in-workout.jpg) - Integrated rest timer with extend, pause, and skip actions.
-7. [Home smart recommendations onboarding](07-home-smart-recommendations-onboarding.jpg) - Early-history guidance that explains when smarter recommendations unlock.
-8. [Volume analytics muscle breakdown](08-volume-analytics-muscle-breakdown.jpg) - Sets per muscle group plus push/pull/legs balance.
-9. [Settings backup restore and privacy](09-settings-backup-restore-privacy.jpg) - Backup center, local-first controls, import, and export tools.
-10. [Home recommendation to switch plan structure](10-home-recommendation-plan-structure-switch.jpg) - Program intelligence suggesting a 4x/week structure change.
-11. [Next session targets progression](11-next-session-targets-progression.jpg) - Suggested progression targets for the next session with share support.
-12. [Home train core next overview](12-home-train-core-next-overview.jpg) - Home dashboard with recommendation card, weekly chips, body weight, and recovery map.
-13. [Muscle recovery front inspector](13-muscle-recovery-front-inspector.jpg) - Front recovery map with per-muscle tooltip inspection.
-14. [Workout complete celebration for lower day](14-workout-complete-celebration-lower-day.jpg) - Completion modal with total volume and playful comparison.
-15. [Program add confirmation modal](15-program-add-confirmation-modal.jpg) - Confirmation flow when adding a built-in program to plans.
-16. [Settings light theme](16-settings-light-theme.jpg) - Theme switching plus units, rest timers, and workout preferences.
-17. [Home workout in progress banner](17-home-workout-in-progress-banner.jpg) - Persistent in-progress workout banner that brings you back into the session.
-18. [Settings monet theme overview](18-settings-monet-theme-overview.jpg) - Monet theme variant with theme, units, and workout preferences.
-19. [Body weight tracker chart](19-body-weight-tracker-chart.jpg) - Body-weight logging with rolling stats and a trend chart.
-20. [Exercise quick actions menu](20-exercise-quick-actions-menu.jpg) - Exercise actions for supersets, swaps, YouTube demos, and warm-up generation.
-21. [Settings monet theme controls](21-settings-monet-theme-controls.jpg) - Additional Monet-theme settings capture for preference controls.
-22. [Home smart recommendations early history](22-home-smart-recommendations-early-history.jpg) - Another home-state capture showing recommendation onboarding and weekly structure.
-23. [Plans overview with active program](23-plans-overview-active-program.jpg) - Plan list with active split, browse programs, import, and create actions.
-24. [Stats dashboard with personal bests](24-stats-dashboard-personal-bests.jpg) - Stats screen with session counts, streak, and tracked PRs.
-25. [Settings gym tools and library](25-settings-gym-tools-and-library.jpg) - Gym profiles, plate calculator, exercise library, and progress photo utilities.
-26. [Progress photos add modal](26-progress-photos-add-modal.jpg) - Camera or gallery import flow for progress photos.
-27. [Volume analytics week summary radar](27-volume-analytics-week-summary-radar.jpg) - Weekly analytics summary with workout totals, volume, and radar chart.
-28. [Workout complete celebration for upper day](28-workout-complete-celebration-upper-day.jpg) - Another completion modal showing a different workout total and comparison.
-29. [Settings rest timers and haptics](29-settings-rest-timers-and-haptics.jpg) - Rest timer configuration, keep-awake, effort tracking, and haptic feedback settings.
-30. [Muscle recovery back inspector](30-muscle-recovery-back-inspector.jpg) - Back recovery map with per-muscle tooltip inspection.
+## Home, Themes, and Plans
+
+1. [AMOLED smart dashboard](screenshots/01-home-dashboard-amoled-smart-overview.jpg) - Primary home view with next-session targets, weekly summary, and recovery map.
+2. [Light theme dashboard](screenshots/02-home-dashboard-light-theme.jpg) - The same home layout carried into the light theme.
+3. [Program Insights and adaptive targets](screenshots/03-program-insights-adaptive-targets.jpg) - Adherence, goal mode, day status, and next-session targets.
+4. [Plans overview and import entry points](screenshots/04-plans-overview-and-import.jpg) - Active plan card plus browse and import actions.
+5. [Alternate AMOLED dashboard](screenshots/20-home-dashboard-amoled-alt.jpg) - Another populated home state with different weekly totals.
+6. [Compact AMOLED dashboard](screenshots/21-home-dashboard-amoled-compact.jpg) - A tighter home state that still preserves the full information hierarchy.
+
+## Logging, History, Calendar, and Library
+
+1. [Log history with multiple session cards](screenshots/05-log-history-session-cards.jpg) - Dense workout history with two recorded sessions.
+2. [Single-session log card](screenshots/06-log-history-single-session.jpg) - Focused pull-day history card.
+3. [Calendar month overview](screenshots/14-calendar-month-overview.jpg) - Calendar with streak, monthly volume, and recent session list.
+4. [Calendar session detail sheet](screenshots/15-calendar-session-detail-sheet.jpg) - Session modal opened from the calendar.
+5. [Full-scroll history capture](screenshots/22-log-history-full-scroll.jpg) - Long-scroll history view for browsing many sessions quickly.
+6. [Add exercise library with filter chips](screenshots/23-add-exercise-library-filter-chips.jpg) - Exercise picker with search and muscle-group chips.
+
+## Analytics and Recovery
+
+1. [Volume analytics overview](screenshots/07-volume-analytics-radar-overview.jpg) - Weekly muscle analytics, totals, and radar chart.
+2. [Volume analytics breakdown](screenshots/08-volume-analytics-muscle-breakdown.jpg) - Effective sets, push/pull/legs balance, and detailed muscle list.
+3. [Recovery front map](screenshots/09-muscle-recovery-front-map.jpg) - Front-side muscle recovery heatmap.
+4. [Recovery back map](screenshots/10-muscle-recovery-back-map.jpg) - Back-side muscle recovery heatmap.
+5. [Stats dashboard with personal bests](screenshots/16-stats-dashboard-personal-bests.jpg) - Multi-session stats plus tracked PR list.
+6. [Compact stats dashboard](screenshots/17-stats-dashboard-compact.jpg) - Stats in a leaner single-session state.
+7. [Bodyweight tracker](screenshots/11-bodyweight-tracker-30d.jpg) - Weight logging, trend cards, and 30-day graph.
+
+## Backup, Settings, and Progress Photos
+
+1. [Backup center](screenshots/12-backup-center-drive-and-encrypted-backups.jpg) - Encrypted snapshots, Drive backup setup, and restore actions.
+2. [Settings controls](screenshots/13-settings-notification-and-backup-controls.jpg) - Notification policy, quiet hours, backup, and app settings in one long settings view.
+3. [Progress photos calendar](screenshots/18-progress-photos-calendar.jpg) - Progress photo calendar and export/clear actions.
+4. [Add progress photo modal](screenshots/19-progress-photos-add-photo-modal.jpg) - Camera or gallery photo entry flow.
+
+## Browse Raw Images
+
+- Open the folder directly: [features/screenshots/](screenshots/)

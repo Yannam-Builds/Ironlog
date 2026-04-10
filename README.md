@@ -3,9 +3,9 @@
 
   <h1>IronLog</h1>
 
-  <p><strong>Offline-first Android workout tracker with recovery heatmaps and practical training intelligence.</strong></p>
+  <p><strong>Offline-first Android workout tracker with live next-session targets, muscle analytics, premium themes, and local-first backups.</strong></p>
 
-  <p>Built for lifters who want fast logging, clear muscle and recovery analytics, and local-first control over training data.</p>
+  <p>Built for lifters who want fast logging in the gym, serious feedback after the session, and full control over their data.</p>
 
   <p>
     <a href="https://github.com/Yannam-Builds/Ironlog/releases"><img src="https://img.shields.io/github/v/release/Yannam-Builds/Ironlog?label=stable" alt="Latest release" /></a>
@@ -19,7 +19,7 @@
     <a href="https://github.com/Yannam-Builds/Ironlog/releases/latest"><img src="https://img.shields.io/badge/Android-Only-1b1b1b?style=for-the-badge&logo=android&logoColor=3DDC84" alt="Android only" /></a>
   </p>
 
-  <p><sub>Android 7.0+ | offline-first | backup and import/export built in</sub></p>
+  <p><sub>Android 7.0+ | local-first SQLite | encrypted backup and import/export built in</sub></p>
 </div>
 
 ## Featured Screens
@@ -27,102 +27,101 @@
 <table>
   <tr>
     <td align="center" width="50%">
-      <img src="features/12-home-train-core-next-overview.jpg" alt="IronLog home screen with smart recommendation cards, weekly plan chips, and recovery heatmap." width="100%" />
+      <img src="features/screenshots/01-home-dashboard-amoled-smart-overview.jpg" alt="IronLog AMOLED home dashboard with smart training targets, weekly summary, and recovery map." width="100%" />
       <br />
-      <strong>Smart home overview</strong>
+      <strong>AMOLED smart dashboard</strong>
       <br />
-      Program intelligence, weekly structure, bodyweight context, and recovery visibility in one screen.
+      Home combines next-session targets, weekly progress, bodyweight context, and recovery at a glance.
     </td>
     <td align="center" width="50%">
-      <img src="features/05-workout-logging-set-history.jpg" alt="IronLog workout logging screen with set history, target reps, and quick logging controls." width="100%" />
+      <img src="features/screenshots/02-home-dashboard-light-theme.jpg" alt="IronLog light theme home dashboard showing the same smart recommendation and weekly recovery layout." width="100%" />
       <br />
-      <strong>Workout logging</strong>
+      <strong>Theme parity</strong>
       <br />
-      Fast set-by-set logging with history, notes, rest timers, smart targets, and in-workout actions.
+      The visual system carries across AMOLED and light themes instead of treating alternate themes like second-class modes.
     </td>
   </tr>
   <tr>
     <td align="center" width="50%">
-      <img src="features/27-volume-analytics-week-summary-radar.jpg" alt="IronLog analytics screen showing weekly volume summary and muscle radar chart." width="100%" />
+      <img src="features/screenshots/03-program-insights-adaptive-targets.jpg" alt="IronLog program insights screen with adherence, goal mode, and adaptive next targets." width="100%" />
       <br />
-      <strong>Volume analytics</strong>
+      <strong>Program intelligence</strong>
       <br />
-      Weekly summary cards, radar views, imbalance insights, and muscle breakdowns from real training data.
+      Goal mode, adherence, day status, and adaptive next targets stay tied to real session history.
     </td>
     <td align="center" width="50%">
-      <img src="features/13-muscle-recovery-front-inspector.jpg" alt="IronLog muscle recovery screen with front muscle map and tooltip inspection." width="100%" />
+      <img src="features/screenshots/05-log-history-session-cards.jpg" alt="IronLog log screen with multiple workout cards and detailed exercise history." width="100%" />
       <br />
-      <strong>Recovery heatmaps</strong>
+      <strong>Fast logging, readable history</strong>
       <br />
-      Interactive front and back muscle maps for freshness, fatigue, and workload inspection.
+      The app stays fast in-session and still gives you dense session history without turning the log into noise.
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="50%">
+      <img src="features/screenshots/07-volume-analytics-radar-overview.jpg" alt="IronLog muscle analytics overview with radar chart and weekly totals." width="100%" />
+      <br />
+      <strong>Muscle analytics</strong>
+      <br />
+      Effective sets, volume interpretation, workout totals, and radar views turn raw logs into useful context.
+    </td>
+    <td align="center" width="50%">
+      <img src="features/screenshots/09-muscle-recovery-front-map.jpg" alt="IronLog recovery screen with front muscle map and recovery score." width="100%" />
+      <br />
+      <strong>Recovery maps</strong>
+      <br />
+      Front and back heatmaps reflect recent training stimulus instead of decorative anatomy art.
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="50%">
+      <img src="features/screenshots/11-bodyweight-tracker-30d.jpg" alt="IronLog bodyweight screen with 30-day chart and history cards." width="100%" />
+      <br />
+      <strong>Bodyweight tracking</strong>
+      <br />
+      Weight history, trend cards, and share flow stay integrated with the rest of the training system.
+    </td>
+    <td align="center" width="50%">
+      <img src="features/screenshots/12-backup-center-drive-and-encrypted-backups.jpg" alt="IronLog backup center with encrypted snapshots, Google Drive options, and restore tools." width="100%" />
+      <br />
+      <strong>Backup and ownership</strong>
+      <br />
+      Encrypted local snapshots, import/export flows, and Drive backup targets are built into the product, not bolted on later.
     </td>
   </tr>
 </table>
 
-See the full 30-image gallery in [features/README.md](features/README.md).
+See the full 23-shot gallery in [features/README.md](features/README.md) or browse the raw screenshot folder in [features/screenshots/](features/screenshots/).
+
+## Current Android Feature Set
+
+- Fast workout logging with set history, edit/delete, add exercise during session, rest timer, warm-up generation, and premium haptics.
+- Plans, built-in program picker, goal modes, Program Insights, adaptive targets, and practical progression rules.
+- Muscle analytics, volume radar, imbalance insights, recovery score, front/back recovery maps, and session quality summaries.
+- Bodyweight tracking, progress photos, calendar history, stats, PR surfacing, weekly summaries, and share cards.
+- AMOLED, light, and Monet-inspired theme variants with the same dense information layout across modes.
+- Local-first SQLite storage, encrypted backup center, Drive backup targets, SQLite import/export, and notification policy controls.
+
+## Themes
+
+IronLog is not locked to one visual style. The current Android build ships with an AMOLED-first look, a full light theme, and Monet-inspired variants while keeping the same layout, contrast hierarchy, and training density across all of them.
+
+## What Comes Next
+
+- Phase 1: portability and migration with OpenWeight export/import, Strong and Hevy import review, duplicate detection, and alias resolution.
+- Phase 2: coach-grade program building with mesocycle tools, progression models, `%1RM` prescriptions, and optional `RPE` / `RIR` support.
+- Phase 3: explainability upgrades so progression, plateau, recovery, and imbalance outputs state why they fired and how confident they are.
+- Phase 4: continuity and hardening for larger histories, export parity closure, deeper QA, and optional encrypted multi-device continuity where it genuinely helps.
+
+## Data Ownership
+
+- Internal source of truth: local SQLite on Android.
+- Backup today: encrypted local snapshots, SQLite export/import, JSON/CSV flows, and optional Google Drive backup targets.
+- Drive supports hidden `AppData` mode and visible folder mode. It is a backup target, not a fake always-on sync layer.
 
 ## Download
 
 Download the latest Android APK from [GitHub Releases](https://github.com/Yannam-Builds/Ironlog/releases/latest).
-
-## Release Status (Truth Map)
-
-### 1.0 Baseline (Shipped)
-
-- Fast workout logging with rest timers and set history.
-- Plans/programs, exercise library, and custom exercise support.
-- Volume analytics, recovery heatmap, and bodyweight analytics.
-- Program recommendations and YouTube exercise demo links.
-
-### 1.1.0-beta Additions (Shipped in beta)
-
-- Program Insights, adaptive targets, and goal mode (`Hypertrophy`, `Strength`, `General Fitness`).
-- Exercise progress dashboards (`E1RM`, `Load`, `Reps`, `Volume`, `Consistency`, `History`).
-- Recovery score plus manual recovery check-ins (soreness, sleep, energy).
-- Streaks, milestones, and weekly summary card surfacing.
-- Smart notification policy controls: profile modes, quiet hours, cooldowns, snooze, and decision logging.
-- Restore wizard, versioned SQLite export/import foundation, and backup parity hardening.
-- Added set edit/delete controls and add-exercise flow during active workouts.
-
-### What Is Actually Next (Pending)
-
-- OpenWeight interoperability layer (import/export) and stronger migration paths from Strong and Hevy.
-- Import Center with dry-run preview, alias review, duplicate detection, and import reports.
-- Full parity closure for all 1.1.0-beta app-state domains in versioned export/import contracts.
-- Coach-grade program builder (block/mesocycle logic, progression models, %1RM and optional RPE/RIR prescriptions).
-- Adherence v2 (busy-week compression, fatigue-aware reshuffling, stronger rationale copy).
-- Analytics explainability and confidence layering across Home, Recovery, and Volume insights.
-- Performance, reliability, and accessibility hardening for large-history users.
-
-## Data Ownership and Portability
-
-- Internal source of truth: local SQLite on Android.
-- Backup model today: local encrypted snapshots, SQLite export/import, and optional Google Drive backup targets.
-- Google Drive supports AppData mode and visible folder mode; this is backup, not live sync.
-- OpenWeight support is planned as an interoperability contract, not as the internal database architecture.
-
-## Android Security and Play Protect Notes
-
-To reduce Play Protect false positives and improve release trust:
-
-- blocked permissions are set in `app.json` for risky capabilities not used by the app.
-- local native manifest removes `RECORD_AUDIO` and `SYSTEM_ALERT_WINDOW`.
-- release signing is configured for a real keystore and must not use debug signing.
-
-If a device still warns after upgrading:
-
-1. uninstall old debug-signed builds,
-2. install the new release-signed build,
-3. then submit a false-positive appeal if warning reputation lags.
-
-## Why IronLog
-
-IronLog is built to stay fast during training and useful after training. It keeps serious analytics practical, not noisy, while preserving local-first ownership of your data.
-
-## Suggestions and Community Chat
-
-- Feature requests and bug reports: [Issues](https://github.com/Yannam-Builds/Ironlog/issues/new/choose)
-- Optional discussion threads: [GitHub Discussions](https://github.com/Yannam-Builds/Ironlog/discussions)
 
 ## Build From Source
 
@@ -136,6 +135,11 @@ If native folders need to be generated locally first:
 ```bash
 npx expo prebuild
 ```
+
+## Suggestions and Community Chat
+
+- Feature requests and bug reports: [Issues](https://github.com/Yannam-Builds/Ironlog/issues/new/choose)
+- Optional discussion threads: [GitHub Discussions](https://github.com/Yannam-Builds/Ironlog/discussions)
 
 ## Contributing
 
