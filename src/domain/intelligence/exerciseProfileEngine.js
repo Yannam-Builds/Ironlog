@@ -187,30 +187,31 @@ function deriveRepCeiling(profile) {
 }
 
 export function buildExerciseProfile(exercise = {}) {
+  const safeExercise = exercise || {};
   const primaryMuscles = unique([
-    ...toArray(exercise.primaryMuscles),
-    ...toArray(exercise.primaryMuscle),
-    ...toArray(exercise.primary),
-    ...toArray(exercise.muscle),
-    ...toArray(exercise.target),
-    ...toArray(exercise.targetMuscle),
-    ...toArray(exercise.bodyPart),
+    ...toArray(safeExercise.primaryMuscles),
+    ...toArray(safeExercise.primaryMuscle),
+    ...toArray(safeExercise.primary),
+    ...toArray(safeExercise.muscle),
+    ...toArray(safeExercise.target),
+    ...toArray(safeExercise.targetMuscle),
+    ...toArray(safeExercise.bodyPart),
   ]);
-  const family = detectFamily(exercise.name, primaryMuscles);
-  const equipmentClass = resolveEquipmentClass(exercise);
+  const family = detectFamily(safeExercise.name, primaryMuscles);
+  const equipmentClass = resolveEquipmentClass(safeExercise);
   const compound = detectCompound(family.id);
   const base = {
-    id: exercise.exerciseId || exercise.id || exercise.name,
-    name: exercise.name || 'Unknown Exercise',
+    id: safeExercise.exerciseId || safeExercise.id || safeExercise.name || 'unknown_exercise',
+    name: safeExercise.name || 'Unknown Exercise',
     family: family.id,
     movementPattern: family.movementPattern,
     lane: family.lane,
     equipmentClass,
     compound,
-    unilateral: detectUnilateral(exercise.name),
+    unilateral: detectUnilateral(safeExercise.name),
     primaryRegion: inferPrimaryRegion(primaryMuscles, family),
-    category: normalizeText(exercise.category || exercise.trackingType || 'strength') || 'strength',
-    force: normalizeText(exercise.force),
+    category: normalizeText(safeExercise.category || safeExercise.trackingType || 'strength') || 'strength',
+    force: normalizeText(safeExercise.force),
   };
   const profile = { ...base, loadModel: deriveLoadModel(equipmentClass, family, compound) };
   return {
@@ -233,11 +234,12 @@ export function buildExerciseProfileCatalog(exercises = []) {
 }
 
 export function resolveExerciseProfile(exercise, catalog = null) {
-  const id = exercise?.exerciseId || exercise?.id || exercise?.name;
-  const nameKey = normalizeText(exercise?.name);
+  const safeExercise = exercise || {};
+  const id = safeExercise.exerciseId || safeExercise.id || safeExercise.name;
+  const nameKey = normalizeText(safeExercise.name);
   if (catalog?.byId?.[id]) return catalog.byId[id];
   if (catalog?.byName?.[nameKey]) return catalog.byName[nameKey];
-  return buildExerciseProfile(exercise);
+  return buildExerciseProfile(safeExercise);
 }
 
 export { normalizeText };

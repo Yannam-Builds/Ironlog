@@ -22,7 +22,7 @@ export function rankSubstitutionCandidates({
   const sourceMuscles = sourceContribution.primaryMuscles || [];
 
   return candidates
-    .filter((candidate) => normalizeName(candidate?.name) !== normalizeName(exercise?.name))
+    .filter((candidate) => candidate && normalizeName(candidate?.name) !== normalizeName(exercise?.name))
     .map((candidate) => {
       const candidateProfile = resolveExerciseProfile(candidate, profileCatalog);
       const candidateContribution = resolveExerciseContribution(candidate, contributionCatalog, profileCatalog);
