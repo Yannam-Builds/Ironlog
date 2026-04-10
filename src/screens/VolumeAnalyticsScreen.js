@@ -8,6 +8,8 @@ import { AppContext } from '../context/AppContext';
 import { useTheme } from '../context/ThemeContext';
 import { EXERCISES } from '../data/exerciseLibrary';
 import { getExerciseIndex } from '../services/ExerciseLibraryService';
+import { computeMuscleAnalytics } from '../domain/intelligence/trainingAnalyticsEngine';
+import { buildVolumeInterpretationSentence } from '../domain/intelligence/volumeInterpretationEngine';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const CHART_WIDTH = SCREEN_WIDTH - 32;
@@ -57,6 +59,9 @@ const MUSCLE_SHORT = {
   lats: 'Lats',
   biceps: 'Bis',
   'rear delt': 'R.Delt',
+  'rear delts': 'R.Delts',
+  'front delts': 'F.Delts',
+  'side delts': 'S.Delts',
   quadriceps: 'Quads',
   quads: 'Quads',
   hamstrings: 'Hams',
@@ -64,10 +69,22 @@ const MUSCLE_SHORT = {
   calves: 'Calves',
   forearms: 'Forems',
   abs: 'Abs',
+  'upper abs': 'U.Abs',
+  'lower abs': 'L.Abs',
+  'upper chest': 'U.Chest',
+  'mid chest': 'M.Chest',
+  'lower chest': 'L.Chest',
   traps: 'Traps',
   'lower back': 'L.Back',
   'middle back': 'M.Back',
   'upper back': 'U.Back',
+  'spinal erectors': 'Erectors',
+  brachialis: 'Brach',
+  'biceps long': 'B.Long',
+  'biceps short': 'B.Short',
+  'triceps long': 'T.Long',
+  'triceps lateral': 'T.Lat',
+  'triceps medial': 'T.Med',
 };
 
 const MUSCLE_ALIAS_TABLE = [
@@ -119,7 +136,10 @@ function normalizeNameKey(value) {
 }
 
 function normalizeMuscle(muscle) {
-  return String(muscle || '').toLowerCase().trim();
+  return String(muscle || '')
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .toLowerCase()
+    .trim();
 }
 
 function canonicalMuscle(muscle) {
@@ -153,6 +173,14 @@ function inferMusclesFromName(name) {
 function getShortName(muscle) {
   const m = normalizeMuscle(muscle);
   return MUSCLE_SHORT[m] || (m.length > 6 ? m.slice(0, 6) : m);
+}
+
+function formatMuscleLabel(muscle) {
+  return normalizeMuscle(muscle)
+    .split(' ')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
 }
 
 function getBarColor(sets) {
@@ -207,6 +235,19 @@ function getVolumeEquivalent(totalVolumeKg) {
 function formatVolumeKg(totalVolumeKg) {
   if (totalVolumeKg >= 1000) return `${(totalVolumeKg / 1000).toFixed(1)}t`;
   return `${Math.round(totalVolumeKg)}kg`;
+}
+
+function roundMetric(value, decimals = 1) {
+  const n = Number(value || 0);
+  if (!Number.isFinite(n)) return 0;
+  const factor = 10 ** decimals;
+  return Math.round(n * factor) / factor;
+}
+
+function formatSetsValue(value) {
+  const rounded = roundMetric(value, 1);
+  if (Math.abs(rounded) >= 100) return String(Math.round(rounded));
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
 }
 
 function isSameWeek(sessionDate, monday) {
@@ -348,13 +389,24 @@ function RadarChart({ data, colors }) {
   );
 }
 
+function isWithinDays(sessionDate, days) {
+  const stamp = new Date(sessionDate || 0).getTime();
+  if (!Number.isFinite(stamp)) return false;
+  return stamp >= (Date.now() - (days * 86400000));
+}
+
 export default function VolumeAnalyticsScreen() {
-  const { history, exerciseMap } = useContext(AppContext);
+  const { history, plans } = useContext(AppContext);
   const colors = useTheme();
   const analyticsShareRef = useRef(null);
-  const [weekOffset, setWeekOffset] = useState(0);
+  const [windowKey, setWindowKey] = useState('current_week');
   const [shareStatus, setShareStatus] = useState('');
   const [libraryIndex, setLibraryIndex] = useState(EXERCISES);
+  const activePlan = plans[0];
+  const programHasExercises = useMemo(() => {
+    if (!Array.isArray(activePlan?.days)) return false;
+    return activePlan.days.some((day) => Array.isArray(day?.exercises) && day.exercises.length > 0);
+  }, [activePlan]);
 
   useEffect(() => {
     let mounted = true;
@@ -382,74 +434,63 @@ export default function VolumeAnalyticsScreen() {
     return { byId, byName, entries };
   }, [libraryIndex]);
 
-  const currentMonday = useMemo(() => {
+  const workoutCount = useMemo(() => {
+    if (windowKey === 'program') return activePlan?.days?.length || 0;
+    if (windowKey === '30d') return history.filter((session) => !session?.isDeload && isWithinDays(session.date, 30)).length;
+    if (windowKey === '7d') return history.filter((session) => !session?.isDeload && isWithinDays(session.date, 7)).length;
     const monday = getMondayOfWeek(new Date());
-    monday.setDate(monday.getDate() + weekOffset * 7);
-    return monday;
-  }, [weekOffset]);
-
-  const weekSessions = useMemo(() => {
-    if (!history) return [];
-    return history.filter((session) => !session.isDeload && isSameWeek(session.date, currentMonday));
-  }, [history, currentMonday]);
+    return history.filter((session) => !session?.isDeload && isSameWeek(session.date, monday)).length;
+  }, [activePlan, history, windowKey]);
 
   const analytics = useMemo(() => {
-    const muscleSetCounts = {};
-    const radarGroups = { core: 0, arms: 0, chest: 0, legs: 0, back: 0, shoulders: 0 };
-    let totalSets = 0;
-    let totalVolumeKg = 0;
-
-    weekSessions.forEach((session) => {
-      (session.exercises || []).forEach((exercise) => {
-        const workingSets = exerciseWorkingSetCount(exercise);
-        if (workingSets <= 0) return;
-        totalSets += workingSets;
-        totalVolumeKg += (exercise.sets || []).reduce((sum, set) => sum + getSetVolumeKg(set), 0);
-
-        const muscles = resolveExerciseMuscles(exercise, exerciseLookup, exerciseMap);
-        muscles.forEach((muscle) => {
-          muscleSetCounts[muscle] = (muscleSetCounts[muscle] || 0) + workingSets;
-        });
-
-        const groups = [...new Set(muscles.map((muscle) => muscleToRadarGroup(muscle)).filter(Boolean))];
-        groups.forEach((group) => {
-          radarGroups[group] = (radarGroups[group] || 0) + workingSets;
-        });
-      });
+    return computeMuscleAnalytics({
+      history,
+      exerciseIndex: exerciseLookup.entries,
+      activePlan,
+      window: windowKey,
     });
+  }, [activePlan, exerciseLookup.entries, history, windowKey]);
 
-    return { muscleSetCounts, radarGroups, totalSets, totalVolumeKg };
-  }, [exerciseLookup, exerciseMap, weekSessions]);
+  useEffect(() => {
+    if (windowKey === 'program' && !programHasExercises) {
+      setWindowKey('7d');
+    }
+  }, [programHasExercises, windowKey]);
 
   const sortedMuscles = useMemo(() => {
-    return Object.entries(analytics.muscleSetCounts).sort((a, b) => b[1] - a[1]);
-  }, [analytics.muscleSetCounts]);
+    return Object.entries(analytics.muscles || {})
+      .map(([muscle, metrics]) => [muscle, roundMetric(metrics.effectiveSets || 0, 3)])
+      .filter(([, sets]) => sets > 0.15)
+      .sort((a, b) => b[1] - a[1]);
+  }, [analytics.muscles]);
 
   const maxSets = useMemo(() => {
     if (sortedMuscles.length === 0) return 1;
     return Math.max(...sortedMuscles.map((entry) => entry[1]));
   }, [sortedMuscles]);
 
-  const pushSets = useMemo(() => PUSH_MUSCLES.reduce((sum, muscle) => sum + (analytics.muscleSetCounts[muscle] || 0), 0), [analytics.muscleSetCounts]);
-  const pullSets = useMemo(() => PULL_MUSCLES.reduce((sum, muscle) => sum + (analytics.muscleSetCounts[muscle] || 0), 0), [analytics.muscleSetCounts]);
-  const legSets = useMemo(() => LEG_MUSCLES.reduce((sum, muscle) => sum + (analytics.muscleSetCounts[muscle] || 0), 0), [analytics.muscleSetCounts]);
+  const pushSets = useMemo(() => (analytics.groups?.chest || 0) + (analytics.groups?.shoulders || 0), [analytics.groups]);
+  const pullSets = useMemo(() => (analytics.groups?.back || 0) + (analytics.muscles?.bicepsLong?.effectiveSets || 0) + (analytics.muscles?.bicepsShort?.effectiveSets || 0), [analytics.groups, analytics.muscles]);
+  const legSets = useMemo(() => analytics.groups?.legs || 0, [analytics.groups]);
   const pplTotal = pushSets + pullSets + legSets;
 
   const barCount = sortedMuscles.length;
   const BAR_PAD = 8;
   const barWidth = barCount > 0 ? Math.max(18, Math.min(40, (CHART_WIDTH - BAR_PAD * 2) / barCount - BAR_PAD)) : 30;
   const barSpacing = barCount > 0 ? (CHART_WIDTH - BAR_PAD * 2 - barWidth * barCount) / Math.max(barCount - 1, 1) : 0;
-  const isCurrentWeek = weekOffset === 0;
-  const weekEnd = useMemo(() => {
-    const d = new Date(currentMonday);
-    d.setDate(d.getDate() + 6);
-    return d;
-  }, [currentMonday]);
-  const weekRangeLabel = useMemo(() => `${formatDateShort(currentMonday)} - ${formatDate(weekEnd)}`, [currentMonday, weekEnd]);
+  const windowLabel = useMemo(() => {
+    if (windowKey === 'program') return activePlan?.name ? `${activePlan.name} · program view` : 'Program view';
+    if (windowKey === '30d') return 'Last 30 days';
+    if (windowKey === '7d') return 'Last 7 days';
+    return 'Current week';
+  }, [activePlan?.name, windowKey]);
   const shareFunLine = useMemo(() => {
-    if (analytics.totalVolumeKg <= 0) return 'Log a workout this week to unlock your lift equivalent.';
-    return `You lifted about ${formatVolumeKg(analytics.totalVolumeKg)} - roughly ${getVolumeEquivalent(analytics.totalVolumeKg)}.`;
-  }, [analytics.totalVolumeKg]);
+    if (analytics.totalVolumeKg <= 0) return 'Log training to unlock your volume interpretation.';
+    return buildVolumeInterpretationSentence({
+      totalKg: analytics.totalVolumeKg,
+      baselineLabel: windowKey === 'program' ? 'your current program target' : 'your recent baseline',
+    });
+  }, [analytics.totalVolumeKg, windowKey]);
 
   const handleShare = async () => {
     try {
@@ -472,23 +513,39 @@ export default function VolumeAnalyticsScreen() {
   return (
     <ScrollView style={[s.container, { backgroundColor: colors.bg }]} contentContainerStyle={s.content}>
       <View style={s.weekRow}>
-        <TouchableOpacity onPress={() => setWeekOffset((offset) => offset - 1)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-          <Ionicons name="chevron-back" size={22} color={colors.accent} />
-        </TouchableOpacity>
-
         <View style={{ alignItems: 'center', flex: 1 }}>
-          <Text style={[s.weekLabel, { color: colors.text }]}>WEEK OF {formatDate(currentMonday).toUpperCase()}</Text>
-          {isCurrentWeek && <Text style={[s.currentBadge, { color: colors.accent }]}>Current Week</Text>}
+          <Text style={[s.weekLabel, { color: colors.text }]}>MUSCLE ANALYTICS</Text>
+          <Text style={[s.currentBadge, { color: colors.accent }]}>{windowLabel}</Text>
         </View>
 
         <TouchableOpacity onPress={handleShare} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} style={{ marginRight: 8 }}>
           <Ionicons name="share-social-outline" size={20} color={colors.accent} />
         </TouchableOpacity>
-
-        <TouchableOpacity onPress={() => setWeekOffset((offset) => Math.min(0, offset + 1))} disabled={isCurrentWeek} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-          <Ionicons name="chevron-forward" size={22} color={isCurrentWeek ? colors.faint : colors.accent} />
-        </TouchableOpacity>
       </View>
+
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 12 }}>
+        {[
+          ['current_week', 'Week'],
+          ['7d', '7D'],
+          ['30d', '30D'],
+          ['program', 'Program'],
+        ].map(([key, label]) => {
+          const disabled = key === 'program' && !programHasExercises;
+          return (
+            <TouchableOpacity
+              key={key}
+              onPress={disabled ? undefined : () => setWindowKey(key)}
+              disabled={disabled}
+              style={[s.windowChip, {
+                opacity: disabled ? 0.45 : 1,
+                borderColor: windowKey === key ? colors.accent : colors.faint,
+                backgroundColor: windowKey === key ? colors.accentSoft : 'transparent',
+              }]}>
+              <Text style={[s.windowChipText, { color: windowKey === key ? colors.accent : colors.muted }]}>{label}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
 
       {shareStatus ? <Text style={[s.shareStatus, { color: colors.muted }]}>{shareStatus}</Text> : null}
 
@@ -496,14 +553,14 @@ export default function VolumeAnalyticsScreen() {
         <View style={[s.shareHeaderCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
           <Text style={[s.shareBrand, { color: colors.text }]}>IRONLOG</Text>
           <Text style={[s.shareTitle, { color: colors.text }]}>VOLUME ANALYTICS</Text>
-          <Text style={[s.shareWeek, { color: colors.muted }]}>{weekRangeLabel}</Text>
+          <Text style={[s.shareWeek, { color: colors.muted }]}>{windowLabel}</Text>
           <Text style={[s.shareFun, { color: colors.accent }]}>{shareFunLine}</Text>
         </View>
 
         <View style={[s.statsRow, { borderColor: colors.faint }]}>
           {[
-            { val: weekSessions.length, label: 'Workouts' },
-            { val: analytics.totalSets, label: 'Total Sets' },
+            { val: workoutCount, label: windowKey === 'program' ? 'Plan Days' : 'Workouts' },
+            { val: Math.round(analytics.totalWorkingSets), label: 'Direct Sets' },
             { val: sortedMuscles.length, label: 'Muscles Hit' },
             { val: formatVolumeKg(analytics.totalVolumeKg), label: 'Volume' },
           ].map(({ val, label }, idx) => (
@@ -517,23 +574,34 @@ export default function VolumeAnalyticsScreen() {
           ))}
         </View>
 
+      <View style={[s.card, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+        <Text style={[s.cardTitle, { color: colors.text }]}>MUSCLE VOLUME RADAR</Text>
+        {analytics.totalWorkingSets === 0 ? (
+          <View style={s.emptyChart}>
+            <Text style={[s.emptyText, { color: colors.muted }]}>No training logged for this view</Text>
+          </View>
+        ) : (
+          <RadarChart data={analytics.groups} colors={colors} />
+        )}
+      </View>
+
+      {analytics.imbalances?.length ? (
         <View style={[s.card, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
-          <Text style={[s.cardTitle, { color: colors.text }]}>WEEKLY MUSCLE VOLUME RADAR</Text>
-          {analytics.totalSets === 0 ? (
-            <View style={s.emptyChart}>
-              <Text style={[s.emptyText, { color: colors.muted }]}>No workouts logged this week</Text>
+          <Text style={[s.cardTitle, { color: colors.text }]}>IMBALANCE INSIGHTS</Text>
+          {analytics.imbalances.slice(0, 3).map((insight) => (
+            <View key={insight.id} style={[s.insightRow, { borderColor: colors.faint }]}>
+              <Text style={[s.insightText, { color: colors.text }]}>{insight.text}</Text>
             </View>
-          ) : (
-            <RadarChart data={analytics.radarGroups} colors={colors} />
-          )}
+          ))}
         </View>
+      ) : null}
       </View>
 
       <View style={[s.card, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
-        <Text style={[s.cardTitle, { color: colors.text }]}>SETS PER MUSCLE GROUP</Text>
+        <Text style={[s.cardTitle, { color: colors.text }]}>EFFECTIVE SETS PER MUSCLE</Text>
         {barCount === 0 ? (
           <View style={s.emptyChart}>
-            <Text style={[s.emptyText, { color: colors.muted }]}>No workouts logged this week</Text>
+            <Text style={[s.emptyText, { color: colors.muted }]}>No training logged for this view</Text>
           </View>
         ) : (
           <Svg width={CHART_WIDTH} height={CHART_HEIGHT}>
@@ -558,7 +626,7 @@ export default function VolumeAnalyticsScreen() {
                 <React.Fragment key={muscle}>
                   <Rect x={x} y={y} width={barWidth} height={Math.max(2, barHeight)} fill={barColor} rx={3} ry={3} />
                   <SvgText x={x + barWidth / 2} y={y - 4} fontSize={10} fontWeight="bold" fill={colors.text} textAnchor="middle">
-                    {sets}
+                    {formatSetsValue(sets)}
                   </SvgText>
                   <SvgText
                     x={x + barWidth / 2}
@@ -593,7 +661,7 @@ export default function VolumeAnalyticsScreen() {
       <View style={[s.card, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
         <Text style={[s.cardTitle, { color: colors.text }]}>PUSH / PULL / LEGS BALANCE</Text>
         {pplTotal === 0 ? (
-          <Text style={[s.emptyText, { color: colors.muted }]}>No push/pull/leg data this week</Text>
+            <Text style={[s.emptyText, { color: colors.muted }]}>No push/pull/leg data for this view</Text>
         ) : (
           <>
             <View style={s.pplBar}>
@@ -610,7 +678,7 @@ export default function VolumeAnalyticsScreen() {
                 <View key={label} style={s.pplItem}>
                   <View style={[s.pplDot, { backgroundColor: color }]} />
                   <Text style={[s.pplLabelText, { color: colors.text }]}>{label}</Text>
-                  <Text style={[s.pplCount, { color }]}>{sets}</Text>
+                  <Text style={[s.pplCount, { color }]}>{formatSetsValue(sets)}</Text>
                   <Text style={[s.pplPct, { color: colors.muted }]}>{Math.round((sets / pplTotal) * 100)}%</Text>
                 </View>
               ))}
@@ -622,12 +690,12 @@ export default function VolumeAnalyticsScreen() {
       <View style={[s.card, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
         <Text style={[s.cardTitle, { color: colors.text }]}>MUSCLE BREAKDOWN</Text>
         {sortedMuscles.length === 0 ? (
-          <Text style={[s.emptyText, { color: colors.muted }]}>No data for this week</Text>
+          <Text style={[s.emptyText, { color: colors.muted }]}>No data for this view</Text>
         ) : (
           sortedMuscles.map(([muscle, sets]) => {
             const color = getBarColor(sets);
             const pct = maxSets > 0 ? sets / maxSets : 0;
-            const displayName = muscle.charAt(0).toUpperCase() + muscle.slice(1);
+            const displayName = formatMuscleLabel(muscle);
             return (
               <View key={muscle} style={s.muscleRow}>
                 <View style={s.muscleLeft}>
@@ -637,7 +705,7 @@ export default function VolumeAnalyticsScreen() {
                 <View style={[s.muscleBarBg, { backgroundColor: colors.faint }]}>
                   <View style={[s.muscleFill, { width: `${Math.round(pct * 100)}%`, backgroundColor: color + '88', borderColor: color }]} />
                 </View>
-                <Text style={[s.muscleCount, { color }]}>{sets}</Text>
+                <Text style={[s.muscleCount, { color }]}>{formatSetsValue(sets)}</Text>
               </View>
             );
           })
@@ -653,6 +721,8 @@ const s = StyleSheet.create({
   weekRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
   weekLabel: { fontSize: 13, fontWeight: '700', letterSpacing: 1 },
   currentBadge: { fontSize: 11, marginTop: 2, fontWeight: '600' },
+  windowChip: { paddingHorizontal: 14, paddingVertical: 8, borderWidth: 1, borderRadius: 16 },
+  windowChipText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
   shareStatus: { fontSize: 11, marginBottom: 8, textAlign: 'center' },
   shareHeaderCard: { borderWidth: 1, padding: 14, marginBottom: 12, alignItems: 'center' },
   shareBrand: { fontSize: 20, fontWeight: '900', letterSpacing: 3 },
@@ -666,6 +736,8 @@ const s = StyleSheet.create({
   statDivider: { width: 1, marginVertical: 8 },
   card: { borderWidth: 1, padding: 16, marginBottom: 16 },
   cardTitle: { fontSize: 10, fontWeight: '800', letterSpacing: 3, marginBottom: 14 },
+  insightRow: { borderWidth: 1, padding: 12, marginBottom: 8 },
+  insightText: { fontSize: 12, lineHeight: 18 },
   emptyChart: { height: CHART_HEIGHT, justifyContent: 'center', alignItems: 'center' },
   emptyText: { fontSize: 13, textAlign: 'center', paddingVertical: 16 },
   legendRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 8, flexWrap: 'wrap', gap: 12 },

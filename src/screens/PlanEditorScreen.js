@@ -8,6 +8,12 @@ import { AppContext } from '../context/AppContext';
 import { useTheme } from '../context/ThemeContext';
 import { getExerciseIndex } from '../services/ExerciseLibraryService';
 import { triggerHaptic } from '../services/hapticsEngine';
+import {
+  buildFilterChipOptions,
+  getExerciseFilterSummary,
+  getExercisePrimaryFocus,
+  matchesExerciseFilter,
+} from '../utils/exerciseFilters';
 
 function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
 function toTitleCase(value) {
@@ -18,82 +24,6 @@ function toTitleCase(value) {
     .filter(Boolean)
     .map(part => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
     .join(' ');
-}
-
-const FILTER_ALIAS = [
-  { tokens: ['upper chest', 'lower chest', 'serratus', 'pec', 'chest'], label: 'Chest' },
-  { tokens: ['upper back', 'lower back', 'middle back', 'lats', 'lat', 'rhomboid', 'trap', 'back'], label: 'Back' },
-  { tokens: ['deltoid', 'delt', 'shoulder', 'rotator cuff'], label: 'Shoulders' },
-  { tokens: ['biceps', 'bicep'], label: 'Biceps' },
-  { tokens: ['triceps', 'tricep'], label: 'Triceps' },
-  { tokens: ['forearm', 'hand', 'wrist'], label: 'Forearms' },
-  { tokens: ['abs', 'abdominal', 'oblique', 'core'], label: 'Core' },
-  { tokens: ['quad', 'quadriceps', 'inner quad', 'outer quad'], label: 'Quads' },
-  { tokens: ['hamstring', 'adductor'], label: 'Hamstrings' },
-  { tokens: ['glute', 'abductor'], label: 'Glutes' },
-  { tokens: ['calf', 'tibialis'], label: 'Calves' },
-  { tokens: ['cardio', 'conditioning', 'hiit', 'metcon', 'aerobic'], label: 'Cardio' },
-];
-
-function toFilterTag(value) {
-  const normalized = String(value || '')
-    .replace(/([a-z])([A-Z])/g, '$1 $2')
-    .replace(/[_-]+/g, ' ')
-    .toLowerCase()
-    .trim();
-  if (!normalized) return '';
-  for (const alias of FILTER_ALIAS) {
-    if (alias.tokens.some((token) => normalized.includes(token))) return alias.label;
-  }
-  if (normalized === 'strength' || normalized.includes('weight') || normalized.includes('rep')) return 'Strength';
-  if (normalized.includes('duration') || normalized.includes('distance') || normalized.includes('cardio')) return 'Cardio';
-  return toTitleCase(normalized);
-}
-
-function getCategoryTag(ex) {
-  const raw = [
-    ex?.category,
-    ex?.type,
-    ex?.movement,
-    ex?.trackingType,
-  ]
-    .filter(Boolean)
-    .join(' ')
-    .toLowerCase();
-  if (!raw) return '';
-  if (raw.includes('duration') || raw.includes('distance') || raw.includes('cardio') || raw.includes('conditioning')) return 'Cardio';
-  if (raw.includes('weight') || raw.includes('rep') || raw.includes('strength')) return 'Strength';
-  return '';
-}
-
-function getExerciseMuscles(ex) {
-  const candidates = [];
-  if (Array.isArray(ex?.primaryMuscles)) candidates.push(...ex.primaryMuscles);
-  else if (ex?.primaryMuscles) candidates.push(ex.primaryMuscles);
-  if (Array.isArray(ex?.secondaryMuscles)) candidates.push(...ex.secondaryMuscles);
-  if (ex?.primaryMuscle) candidates.push(ex.primaryMuscle);
-  if (ex?.muscle) candidates.push(ex.muscle);
-  if (ex?.muscleGroup) candidates.push(ex.muscleGroup);
-  if (ex?.target) candidates.push(ex.target);
-  if (ex?.targetMuscle) candidates.push(ex.targetMuscle);
-  if (ex?.bodyPart) candidates.push(ex.bodyPart);
-  const cleaned = candidates
-    .map(v => toFilterTag(v))
-    .filter(Boolean);
-  return [...new Set(cleaned)];
-}
-function getExerciseFilterTags(ex) {
-  const tags = [...getExerciseMuscles(ex)];
-  const categoryTag = getCategoryTag(ex);
-  if (categoryTag) tags.push(categoryTag);
-  if (!tags.length) tags.push('Other');
-  const seen = new Set();
-  return tags.filter((tag) => {
-    const key = String(tag || '').toLowerCase();
-    if (!key || seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
 }
 const DAY_COLORS = ['#FF4500', '#0080FF', '#00C170', '#A020F0', '#FFD700', '#FF6B35', '#00BCD4'];
 const GROUP_COLORS = { A: '#FF4500', B: '#0080FF', C: '#00C170' };
@@ -124,26 +54,7 @@ export default function PlanEditorScreen({ route, navigation }) {
     getExerciseIndex().then(idx => {
       if (!idx) return;
       setAllExercises(idx);
-      const muscleMap = new Map();
-      idx.forEach(ex => {
-        getExerciseFilterTags(ex).forEach(tag => {
-          const k = tag.trim().toLowerCase();
-          if (!k) return;
-          if (!muscleMap.has(k)) muscleMap.set(k, tag);
-        });
-      });
-      ['Strength', 'Cardio'].forEach((tag) => {
-        const key = tag.toLowerCase();
-        if (!muscleMap.has(key)) muscleMap.set(key, tag);
-      });
-      const ordered = [...muscleMap.values()].sort((a, b) => {
-        const priority = { strength: 0, cardio: 1 };
-        const pa = priority[a.toLowerCase()];
-        const pb = priority[b.toLowerCase()];
-        if (pa !== undefined || pb !== undefined) return (pa ?? 99) - (pb ?? 99);
-        return a.localeCompare(b);
-      });
-      setLibMuscles(ordered);
+      setLibMuscles(buildFilterChipOptions(idx, { includeCategory: true, includeEquipment: false }));
     });
   }, []);
 
@@ -202,7 +113,7 @@ export default function PlanEditorScreen({ route, navigation }) {
       exs[replaceExIdx] = {
         ...exs[replaceExIdx],
         name: ex.name,
-        primary: getExerciseMuscles(ex)[0] || 'Other',
+        primary: getExercisePrimaryFocus(ex),
         exerciseId: ex.id,
       };
       days[editDayIdx] = { ...days[editDayIdx], exercises: exs };
@@ -213,7 +124,7 @@ export default function PlanEditorScreen({ route, navigation }) {
           name: ex.name,
           sets: 3,
           reps: '10',
-          primary: getExerciseMuscles(ex)[0] || 'Other',
+          primary: getExercisePrimaryFocus(ex),
           note: '',
           exerciseId: ex.id,
           supersetGroup: null,
@@ -299,8 +210,7 @@ export default function PlanEditorScreen({ route, navigation }) {
   };
 
   const filtered = allExercises.filter(e => {
-    const tags = getExerciseFilterTags(e);
-    const ms = libMuscle === 'All' || tags.includes(libMuscle);
+    const ms = matchesExerciseFilter(e, libMuscle, { includeCategory: true, includeEquipment: false });
     const sr = !libSearch || e.name.toLowerCase().includes(libSearch.toLowerCase());
     return ms && sr;
   });
@@ -312,7 +222,7 @@ export default function PlanEditorScreen({ route, navigation }) {
       <View style={{ flex: 1 }}>
         <Text style={[ls.exName, { color: colors.text }]} numberOfLines={1}>{ex.name}</Text>
         <Text style={[ls.exMeta, { color: colors.muted }]} numberOfLines={1}>
-          {getExerciseFilterTags(ex).join(', ')}{ex.equipment ? ` · ${toTitleCase(ex.equipment)}` : ''}
+          {getExerciseFilterSummary(ex).join(', ')}{ex.equipment ? ` · ${toTitleCase(ex.equipment)}` : ''}
         </Text>
       </View>
       <Ionicons name={replaceExIdx !== null ? 'swap-horizontal' : 'add'} size={20} color={colors.accent} />

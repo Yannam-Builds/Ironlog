@@ -1,7 +1,12 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { EXERCISES as BUNDLED_EXERCISES } from '../data/exerciseLibrary';
+import { EXERCISE_LIBRARY_ADDITIONS } from '../data/exerciseLibraryAdditions';
 import { EXERCISE_ID_MAP } from '../data/exerciseMapping';
+import {
+  deleteCustomExerciseFromDb,
+  upsertCustomExerciseToDb,
+} from '../domain/storage/trainingRepository';
 import { resolveExerciseYoutubeMeta } from '../utils/exerciseVideoLinks';
 
 const LIBRARY_KEY = '@ironlog/exerciseLibrary';
@@ -49,6 +54,17 @@ function normalizePrimaryMuscles(ex) {
   return cleaned;
 }
 
+function normalizeNameSignature(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .split(' ')
+    .filter(Boolean)
+    .sort()
+    .join(' ');
+}
+
 // Map free-exercise-db equipment strings to our normalized values
 function normalizeEquipment(eq) {
   const map = {
@@ -63,7 +79,7 @@ function normalizeEquipment(eq) {
 
 function buildFromBundled() {
   // Bundled exercises are already in full DB format (auto-generated from free-exercise-db)
-  return BUNDLED_EXERCISES.map(ex => {
+  const bundled = BUNDLED_EXERCISES.map(ex => {
     const primaryMuscles = normalizePrimaryMuscles(ex);
     const youtube = resolveExerciseYoutubeMeta(ex);
     return {
@@ -88,6 +104,51 @@ function buildFromBundled() {
       hasBundledYoutubeLink: youtube.hasBundledYoutubeLink,
     };
   });
+  return mergeSupplementalExercises(bundled, EXERCISE_LIBRARY_ADDITIONS);
+}
+
+function normalizeSupplementalExercise(ex) {
+  const primaryMuscles = normalizePrimaryMuscles(ex);
+  const youtube = resolveExerciseYoutubeMeta(ex);
+  return {
+    id: ex.id || ex.name.replace(/[^a-zA-Z0-9]/g, '_'),
+    name: ex.name,
+    force: ex.force || null,
+    level: ex.level || 'intermediate',
+    mechanic: ex.mechanic || null,
+    equipment: ex.equipment || null,
+    primaryMuscles,
+    primaryMuscle: primaryMuscles[0] || null,
+    secondaryMuscles: toArray(ex.secondaryMuscles),
+    instructions: ex.instructions || [],
+    category: normalizeCategory(ex.category || ex.trackingType),
+    trackingType: ex.trackingType || null,
+    images: ex.images || [],
+    isCustom: false,
+    coachingCues: ex.coachingCues || null,
+    youtubeLink: youtube.youtubeLink,
+    youtubeShortsLink: youtube.youtubeShortsLink,
+    youtubeSearchQuery: youtube.youtubeSearchQuery,
+    hasBundledYoutubeLink: youtube.hasBundledYoutubeLink,
+    source: ex.source || 'supplemental',
+  };
+}
+
+function mergeSupplementalExercises(baseExercises, supplementalExercises) {
+  const existingById = new Set(baseExercises.map((exercise) => exercise.id));
+  const existingByName = new Set(baseExercises.map((exercise) => normalizeNameSignature(exercise.name)));
+  const merged = [...baseExercises];
+
+  supplementalExercises.forEach((exercise) => {
+    const normalized = normalizeSupplementalExercise(exercise);
+    const nameKey = normalizeNameSignature(normalized.name);
+    if (existingById.has(normalized.id) || existingByName.has(nameKey)) return;
+    existingById.add(normalized.id);
+    existingByName.add(nameKey);
+    merged.push(normalized);
+  });
+
+  return merged;
 }
 
 function mergeWithDB(bundled, dbExercises) {
@@ -192,9 +253,11 @@ function shouldRebuildIndex(index) {
   const muscleCoverage = withMuscles / index.length;
   const variedCategories = withNonStrengthCategory / index.length;
   const youtubeCoverage = withYoutubeFields / index.length;
+  const indexIds = new Set(index.map((entry) => entry.id));
+  const supplementalCoverage = EXERCISE_LIBRARY_ADDITIONS.filter((entry) => indexIds.has(entry.id)).length;
 
   // Rebuild stale index generated from old schema where muscles were lost.
-  return muscleCoverage < 0.5 || variedCategories < 0.02 || youtubeCoverage < 0.95;
+  return muscleCoverage < 0.5 || variedCategories < 0.02 || youtubeCoverage < 0.95 || supplementalCoverage < Math.max(8, Math.floor(EXERCISE_LIBRARY_ADDITIONS.length * 0.5));
 }
 
 async function rebuildLibraryAndIndexFromBundled() {
@@ -213,7 +276,11 @@ async function rebuildLibraryAndIndexFromBundled() {
 export async function initExerciseLibrary(onStatus) {
   // Already bootstrapped — instant return
   const existing = await AsyncStorage.getItem(INDEX_KEY);
-  if (existing) return JSON.parse(existing);
+  if (existing) {
+    const parsed = JSON.parse(existing);
+    if (!shouldRebuildIndex(parsed)) return parsed;
+    return rebuildLibraryAndIndexFromBundled();
+  }
 
   onStatus && onStatus('setting_up');
   const bundled = buildFromBundled();
@@ -296,6 +363,9 @@ export async function saveCustomExercise(exercise) {
     [LIBRARY_KEY, JSON.stringify(lib)],
     [INDEX_KEY, JSON.stringify(index)],
   ]);
+  upsertCustomExerciseToDb(exercise).catch((error) => {
+    console.warn('Custom exercise SQLite upsert failed:', error);
+  });
   return index;
 }
 
@@ -314,6 +384,9 @@ export async function deleteCustomExercise(id) {
     [LIBRARY_KEY, JSON.stringify(updatedLib)],
     [INDEX_KEY, JSON.stringify(index)],
   ]);
+  deleteCustomExerciseFromDb(id).catch((error) => {
+    console.warn('Custom exercise SQLite delete failed:', error);
+  });
   return index;
 }
 

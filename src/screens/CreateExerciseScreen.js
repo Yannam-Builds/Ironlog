@@ -7,11 +7,9 @@ import {
 import CustomAlert from '../components/CustomAlert';
 import { useTheme } from '../context/ThemeContext';
 import { saveCustomExercise } from '../services/ExerciseLibraryService';
+import { MUSCLE_FILTER_OPTIONS } from '../utils/exerciseFilters';
 
-const MUSCLES = [
-  'chest','back','shoulders','biceps','triceps','quadriceps','hamstrings',
-  'glutes','calves','abdominals','obliques','lats','traps','forearms','other',
-];
+const MUSCLES = MUSCLE_FILTER_OPTIONS.map((muscle) => muscle.toLowerCase());
 const EQUIPMENT_OPTS = ['Barbell','Dumbbell','Cable','Machine','Bodyweight','Kettlebell','Band','Other'];
 const CATEGORY_OPTS = ['strength','stretching','plyometrics','cardio','olympic weightlifting','powerlifting','other'];
 const FORCE_OPTS = ['push','pull','static'];

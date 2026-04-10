@@ -2,7 +2,7 @@
   "expo": {
     "name": "IRONLOG",
     "slug": "ironlog",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "scheme": "ironlog",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -18,7 +18,7 @@
         "backgroundColor": "#080808"
       },
       "package": "com.ironlog.app",
-      "allowBackup": false,
+      "allowBackup": true,
       "permissions": [
         "RECEIVE_BOOT_COMPLETED",
         "VIBRATE"

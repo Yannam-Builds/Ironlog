@@ -11,6 +11,8 @@ import { runMigrations } from './src/services/migrations';
 import { initExerciseLibrary } from './src/services/ExerciseLibraryService';
 import MigrationScreen from './src/screens/MigrationScreen';
 import LibrarySetupScreen from './src/screens/LibrarySetupScreen';
+import { ensureTrainingDatabase } from './src/domain/storage/trainingDatabase';
+import { migrateLegacyAsyncStorageToSQLite, seedExerciseIntelligence } from './src/domain/storage/trainingRepository';
 
 enableScreens(true);
 enableFreeze(true);
@@ -31,7 +33,10 @@ export default function App() {
     try {
       await runMigrations((step, total) => setMigrationStep({ step, total }));
       setMigrationStep(null);
-      await initExerciseLibrary((status) => setLibraryStatus(status));
+      const libraryIndex = await initExerciseLibrary((status) => setLibraryStatus(status));
+      await ensureTrainingDatabase();
+      await migrateLegacyAsyncStorageToSQLite();
+      await seedExerciseIntelligence(libraryIndex || []);
     } catch (e) {
       console.warn('Startup error:', e);
       setStartupError(e);

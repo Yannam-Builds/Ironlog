@@ -51,13 +51,14 @@ function StatusCard({ label, value, hint, colors }) {
   );
 }
 
-function ActionButton({ label, hint, icon, colors, onPress, tone = 'normal' }) {
+function ActionButton({ label, hint, icon, colors, onPress, tone = 'normal', disabled = false }) {
   const accent = tone === 'danger' ? '#CC3333' : colors.accent;
   return (
     <TouchableOpacity
       activeOpacity={0.82}
-      style={[s.actionBtn, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}
-      onPress={onPress}
+      style={[s.actionBtn, { backgroundColor: colors.card, borderColor: colors.cardBorder, opacity: disabled ? 0.55 : 1 }]}
+      onPress={disabled ? undefined : onPress}
+      disabled={disabled}
     >
       <View style={[s.iconWrap, { backgroundColor: `${accent}22`, borderColor: `${accent}44` }]}>
         <Ionicons name={icon} size={18} color={accent} />
@@ -226,6 +227,14 @@ export default function BackupCenterScreen({ navigation }) {
   };
 
   const handleConnectDrive = async () => {
+    if (backupStatus.driveConfigured === false) {
+      setAlertConfig({
+        title: 'Drive unavailable',
+        message: 'Google Drive backup is not configured on this alpha build.',
+        buttons: [{ text: 'OK', style: 'default' }],
+      });
+      return;
+    }
     if (!ensurePassphraseConfigured('set')) return;
     setBusy(true);
     try {
@@ -396,12 +405,19 @@ export default function BackupCenterScreen({ navigation }) {
           onPress={() => openPassphraseModal('set')}
         />
         <ActionButton
-          label={backupStatus.driveLinked ? 'Disconnect Google Drive' : 'Connect Google Drive'}
-          hint={backupStatus.driveLinked ? 'Drive sync is available for hidden app backups.' : 'Required for appDataFolder cloud backup.'}
+          label={backupStatus.driveLinked ? 'Disconnect Google Drive' : backupStatus.driveConfigured === false ? 'Google Drive unavailable in this build' : 'Connect Google Drive'}
+          hint={
+            backupStatus.driveConfigured === false
+              ? 'Drive OAuth client is not configured for this alpha build.'
+              : backupStatus.driveLinked
+                ? 'Drive sync is available for hidden app backups.'
+                : 'Required for appDataFolder cloud backup.'
+          }
           icon={backupStatus.driveLinked ? 'cloud-done-outline' : 'cloud-outline'}
           colors={colors}
           onPress={backupStatus.driveLinked ? handleDisconnectDrive : handleConnectDrive}
           tone={backupStatus.driveLinked ? 'danger' : 'normal'}
+          disabled={!backupStatus.driveLinked && backupStatus.driveConfigured === false}
         />
       </Section>
 

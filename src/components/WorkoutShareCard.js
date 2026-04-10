@@ -19,7 +19,7 @@ function getStreak(history) {
   return streak;
 }
 
-const WorkoutShareCard = forwardRef(function WorkoutShareCard({ workout, history, funComp }, ref) {
+const WorkoutShareCard = forwardRef(function WorkoutShareCard({ workout, history, summaryText }, ref) {
   if (!workout) return null;
   const { dayName, duration, totalVolume, exercises, prs } = workout;
   const streak = getStreak(history);
@@ -50,13 +50,11 @@ const WorkoutShareCard = forwardRef(function WorkoutShareCard({ workout, history
         ))}
       </View>
 
-      {/* Fun comparison */}
-      {funComp && (
+      {summaryText ? (
         <View style={s.funRow}>
-          <Text style={s.funIcon}>{funComp.icon}</Text>
-          <Text style={s.funText}>You lifted like {funComp.text}!</Text>
+          <Text style={s.funText}>{summaryText}</Text>
         </View>
-      )}
+      ) : null}
 
       {/* Exercises */}
       <View style={s.divider} />
@@ -102,8 +100,7 @@ const s = StyleSheet.create({
   statBox: { flex: 1, alignItems: 'center' },
   statVal: { fontSize: 20, fontWeight: '900', color: '#FF4500' },
   statLabel: { fontSize: 8, letterSpacing: 2, color: '#444', marginTop: 2 },
-  funRow: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#FF450011', borderWidth: 1, borderColor: '#FF450033', padding: 10, marginBottom: 14 },
-  funIcon: { fontSize: 18 },
+  funRow: { backgroundColor: '#FF450011', borderWidth: 1, borderColor: '#FF450033', padding: 10, marginBottom: 14 },
   funText: { fontSize: 12, color: '#FF4500', fontWeight: '600', flex: 1 },
   divider: { height: 1, backgroundColor: '#1a1a1a', marginBottom: 10 },
   exRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 7, borderBottomWidth: 1, borderBottomColor: '#111' },

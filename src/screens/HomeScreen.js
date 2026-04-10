@@ -8,6 +8,15 @@ import { useTheme } from '../context/ThemeContext';
 import RecoveryHeatmap from '../components/RecoveryHeatmap';
 import { computeStimulusFatigue, analyzeVolume, buildHomeProgramIntelligence } from '../utils/intelligenceEngine';
 import { decayFatigueHourly, computeReadiness, getGroupReadiness } from '../utils/recoveryModel';
+import { getExerciseIndex } from '../services/ExerciseLibraryService';
+import { computeMuscleAnalytics } from '../domain/intelligence/trainingAnalyticsEngine';
+import {
+  computeConsistencyMetrics,
+} from '../domain/intelligence/performanceEngine';
+import {
+  buildAdaptiveDayTargets,
+  buildProgramInsights,
+} from '../domain/intelligence/programIntelligenceEngine';
 
 const ONBOARDING_KEY = '@ironlog/onboardingComplete';
 
@@ -108,6 +117,12 @@ function getWorkingSetCount(exercise) {
   return 0;
 }
 
+function parseRepTarget(value, fallback = 8) {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  const match = String(value || '').match(/\d+/);
+  return match ? Number(match[0]) : fallback;
+}
+
 function computeSetBasedGroupReadiness(history) {
   const stress = {};
   HOME_GROUP_KEYS.forEach((group) => { stress[group] = 0; });
@@ -143,6 +158,20 @@ export default function HomeScreen({ navigation }) {
   const { plans, history, bodyWeight, pb, exerciseMap, onboardingComplete, completeOnboarding } = useContext(AppContext);
   const colors = useTheme();
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [libraryIndex, setLibraryIndex] = useState([]);
+
+  useEffect(() => {
+    let mounted = true;
+    getExerciseIndex()
+      .then((index) => {
+        if (!mounted) return;
+        if (Array.isArray(index) && index.length > 0) setLibraryIndex(index);
+      })
+      .catch(() => {});
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     // Show onboarding if not complete AND user has no workout history (fresh start)
@@ -166,8 +195,8 @@ export default function HomeScreen({ navigation }) {
 
   const activePlan = plans[0];
 
-  const { recommendation, volumeStatus, groupReadiness, readiness } = useMemo(() => {
-    if (!history || history.length === 0) return { recommendation: null, volumeStatus: {}, groupReadiness: {}, readiness: {} };
+  const { recommendation, volumeStatus, groupReadiness, readiness, muscleAnalytics } = useMemo(() => {
+    if (!history || history.length === 0) return { recommendation: null, volumeStatus: {}, groupReadiness: {}, readiness: {}, muscleAnalytics: null };
     
     const totalFatigue = {};
     const totalStimulus = {};
@@ -227,8 +256,64 @@ export default function HomeScreen({ navigation }) {
       volumeStatus: vs,
     });
 
-    return { recommendation: rec, volumeStatus: vs, groupReadiness: mergedGroupReadiness, readiness: r };
-  }, [activePlan, bodyWeight, history, exerciseMap]);
+    const analytics = computeMuscleAnalytics({
+      history,
+      exerciseIndex: libraryIndex,
+      activePlan,
+      window: '7d',
+    });
+    HOME_GROUP_KEYS.forEach((group) => {
+      if (typeof analytics.readiness?.[group] === 'number') {
+        mergedGroupReadiness[group] = analytics.readiness[group];
+      }
+    });
+
+    return {
+      recommendation: rec,
+      volumeStatus: vs,
+      groupReadiness: mergedGroupReadiness,
+      readiness: r,
+      muscleAnalytics: analytics,
+    };
+  }, [activePlan, bodyWeight, history, exerciseMap, libraryIndex]);
+
+  const nextDay = useMemo(() => {
+    if (!activePlan?.days?.length) return null;
+    return activePlan.days.find((day) => !hitDays.has(day.id)) || activePlan.days[0];
+  }, [activePlan, hitDays]);
+
+  const nextTargets = useMemo(() => {
+    if (!nextDay) return [];
+    return buildAdaptiveDayTargets({
+      day: nextDay,
+      history,
+      goalMode: activePlan?.goalMode || 'hypertrophy',
+    })
+      .map((suggestion) => ({ exercise: { name: suggestion.exerciseName }, suggestion }))
+      .slice(0, 3);
+  }, [activePlan?.goalMode, history, nextDay]);
+
+  const programInsights = useMemo(() => buildProgramInsights({
+    activePlan,
+    history,
+    goalMode: activePlan?.goalMode || 'hypertrophy',
+  }), [activePlan, history]);
+
+  const consistencyMetrics = useMemo(() => computeConsistencyMetrics({
+    history,
+    activePlan,
+    bodyWeight,
+  }), [activePlan, bodyWeight, history]);
+
+  const plateauCallout = useMemo(
+    () => nextTargets.find((item) => item.suggestion?.plateauSignal)?.suggestion?.plateauSignal || null,
+    [nextTargets]
+  );
+
+  const deloadCallout = useMemo(
+    () => nextTargets.find((item) => item.suggestion?.deloadSignal)?.suggestion?.deloadSignal || null,
+    [nextTargets]
+  );
 
   const openRecommendedTemplate = () => {
     if (!recommendation?.recommendedTemplateId) return;
@@ -252,22 +337,63 @@ export default function HomeScreen({ navigation }) {
         </Text>
       </View>
 
-      {/* PROGRAM INTELLIGENCE */}
-      {recommendation && (
+      {/* TRAINING INTELLIGENCE */}
+      {(recommendation || nextTargets.length > 0 || muscleAnalytics?.focusInsight) && (
         <TouchableOpacity
           activeOpacity={recommendation?.recommendedTemplateId ? 0.82 : 1}
           disabled={!recommendation?.recommendedTemplateId}
           onPress={openRecommendedTemplate}
           style={[s.intelCard, { backgroundColor: colors.accent + '15', borderColor: colors.accent + '40' }]}>
-          <Text style={[s.intelSup, { color: colors.accent }]}>PROGRAM INTELLIGENCE</Text>
-          <Text style={[s.intelMain, { color: colors.text }]}>{recommendation.headline}</Text>
-          <Text style={[s.intelSub, { color: colors.muted }]}>
-            Suggested Intensity: <Text style={{ color: colors.accent, fontWeight: '700' }}>{recommendation.intensity}</Text>
+          <Text style={[s.intelSup, { color: colors.accent }]}>TRAINING INTELLIGENCE</Text>
+          <Text style={[s.intelMain, { color: colors.text }]}>
+            {nextDay ? `${nextDay.name} is lined up with live next-session targets.` : recommendation?.headline}
           </Text>
-          {!!recommendation.reason && (
+          {nextTargets.length > 0 ? (
+            <View style={{ marginTop: 12, gap: 8 }}>
+              {nextTargets.map(({ exercise, suggestion }) => (
+                <View key={exercise.id || exercise.name} style={[s.targetPreviewRow, { borderColor: colors.accent + '33' }]}>
+                  <Text style={[s.targetPreviewName, { color: colors.text }]} numberOfLines={1}>{exercise.name}</Text>
+                  <Text style={[s.targetPreviewVal, { color: suggestion.action === 'reduce' ? '#FF8E8E' : colors.accent }]}>
+                    {suggestion.targetWeight}kg x {suggestion.targetReps}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          ) : null}
+          {plateauCallout ? (
+            <Text style={[s.intelReason, { color: colors.subtext }]}>
+              Plateau watch: {plateauCallout.reason} - {plateauCallout.recommendation}.
+            </Text>
+          ) : null}
+          {deloadCallout ? (
+            <Text style={[s.intelReason, { color: '#FF8E8E' }]}>
+              Deload watch: {deloadCallout.reason}.
+            </Text>
+          ) : null}
+          {muscleAnalytics?.focusInsight ? (
+            <Text style={[s.intelReason, { color: colors.muted }]}>Focus: {muscleAnalytics.focusInsight}</Text>
+          ) : null}
+          {programInsights?.projectedProgress ? (
+            <Text style={[s.intelReason, { color: colors.subtext }]}>Program: {programInsights.projectedProgress}</Text>
+          ) : null}
+          {programInsights?.recommendedReschedule ? (
+            <Text style={[s.intelReason, { color: colors.muted }]}>Reschedule: {programInsights.recommendedReschedule}</Text>
+          ) : null}
+          <View style={s.metricRow}>
+            <Text style={[s.metricChip, { color: colors.text, borderColor: colors.faint }]}>
+              {consistencyMetrics.workoutsPerWeek} workouts/week
+            </Text>
+            <Text style={[s.metricChip, { color: colors.text, borderColor: colors.faint }]}>
+              {consistencyMetrics.adherenceToProgram}% adherence
+            </Text>
+            <Text style={[s.metricChip, { color: colors.text, borderColor: colors.faint }]}>
+              {consistencyMetrics.exerciseRepeatConsistency}% repeat consistency
+            </Text>
+          </View>
+          {!!recommendation?.reason && (
             <Text style={[s.intelReason, { color: colors.subtext }]}>Reason: {recommendation.reason}</Text>
           )}
-          {!!recommendation.findings?.[0] && (
+          {!!recommendation?.findings?.[0] && (
             <Text style={[s.intelReason, { color: colors.muted, marginTop: 6 }]}>
               Insight: {recommendation.findings[0]}
             </Text>
@@ -396,6 +522,11 @@ const s = StyleSheet.create({
   intelMain: { fontSize: 20, fontWeight: '900', letterSpacing: -0.5 },
   intelSub: { fontSize: 12, marginTop: 2 },
   intelReason: { fontSize: 11, marginTop: 8, lineHeight: 15 },
+  targetPreviewRow: { borderWidth: 1, padding: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10 },
+  targetPreviewName: { flex: 1, fontSize: 13, fontWeight: '700' },
+  targetPreviewVal: { fontSize: 13, fontWeight: '900' },
+  metricRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
+  metricChip: { borderWidth: 1, paddingHorizontal: 8, paddingVertical: 5, fontSize: 10, letterSpacing: 0.4 },
   statsRow: { flexDirection: 'row', borderBottomWidth: 1 },
   statBox: { flex: 1, padding: 16, alignItems: 'center' },
   statVal: { fontSize: 20, fontWeight: '900' },

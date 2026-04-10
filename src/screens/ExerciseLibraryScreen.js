@@ -9,6 +9,11 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
 import { getExerciseIndex, deleteCustomExercise } from '../services/ExerciseLibraryService';
+import {
+  buildFilterChipOptions,
+  getExerciseFilterSummary,
+  matchesExerciseFilter,
+} from '../utils/exerciseFilters';
 
 const ROW_HEIGHT = 75; // paddingV 16+16 + name ~22 + cue ~18 + mt2 + border1
 
@@ -30,14 +35,10 @@ export default function ExerciseLibraryScreen({ navigation }) {
 
   const toTitle = s => s ? s.trim().charAt(0).toUpperCase() + s.trim().slice(1).toLowerCase() : s;
 
-  const muscles = useMemo(() => {
-    const map = new Map();
-    exercises.forEach(ex => {
-      const ms = Array.isArray(ex.primaryMuscles) ? ex.primaryMuscles : (ex.primaryMuscles ? [ex.primaryMuscles] : []);
-      ms.forEach(m => { if (m) { const k = m.trim().toLowerCase(); if (!map.has(k)) map.set(k, toTitle(m)); } });
-    });
-    return [...map.values()].sort();
-  }, [exercises]);
+  const muscles = useMemo(
+    () => buildFilterChipOptions(exercises, { includeCategory: false, includeEquipment: false }),
+    [exercises]
+  );
 
   const categories = useMemo(() => {
     const map = new Map();
@@ -48,8 +49,7 @@ export default function ExerciseLibraryScreen({ navigation }) {
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
     return exercises.filter(ex => {
-      const ms = Array.isArray(ex.primaryMuscles) ? ex.primaryMuscles : (ex.primaryMuscles ? [ex.primaryMuscles] : []);
-      const muscleMatch = muscle === 'All' || ms.some(m => m && m.trim().toLowerCase() === muscle.trim().toLowerCase());
+      const muscleMatch = matchesExerciseFilter(ex, muscle, { includeCategory: false, includeEquipment: false });
       const catMatch = cat === 'All' || (ex.category && ex.category.trim().toLowerCase() === cat.trim().toLowerCase());
       return muscleMatch && catMatch && (!q || ex.name.toLowerCase().includes(q));
     });
@@ -100,7 +100,7 @@ export default function ExerciseLibraryScreen({ navigation }) {
           )}
         </View>
         <Text style={[s.sub, { color: colors.muted }]} numberOfLines={1}>
-          {(ex.primaryMuscles || []).join(', ') || '—'}
+          {getExerciseFilterSummary(ex).join(', ') || '—'}
         </Text>
       </View>
       <View style={{ alignItems: 'flex-end', gap: 4 }}>

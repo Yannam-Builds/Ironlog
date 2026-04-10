@@ -69,6 +69,24 @@ Download the latest Android APK from [GitHub Releases](https://github.com/Yannam
 
 _Requires Android 7.0 or higher._
 
+## Pre-Release: Alpha 1.1.0
+
+This pre-release focuses on stability and workout-flow quality before the full 2.0 rollout.
+
+### Included in Alpha 1.1.0
+
+- Fixed Google Drive backup UX for builds without Drive OAuth configuration.
+- Fixed `Program`-mode crash paths in Volume Analytics and Muscle Recovery.
+- Cleaned analytics number formatting for effective sets, push/pull/legs balance, and muscle breakdown.
+- Added inline edit and delete controls for logged sets during active workouts.
+- Added `Add Exercise` support at the bottom of an ongoing workout.
+
+### Next planned changes
+
+- Finish Phase C + D: complete PR/trend dashboards, stronger performance scoring surfaces, and full Program Insights screen.
+- Finish Phase E + F: readiness score inputs, streaks, milestones, weekly summaries, and notification cooldown controls.
+- Finish Phase G + H: stronger export/import schema flow, expanded share cards, and final logging/history UX polish.
+
 ## Why IronLog
 
 IronLog is designed to feel fast in the gym and useful after the session. You can log quickly, see recovery and volume clearly, and keep your data on-device instead of depending on a cloud-first backend.

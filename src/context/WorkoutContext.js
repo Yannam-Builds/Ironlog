@@ -88,6 +88,26 @@ function reducer(state, action) {
       return { ...state, setLog: { ...state.setLog, [exIndex]: sets } };
     }
 
+    case 'UPDATE_SET': {
+      const { exIndex, setIndex, weight, reps } = action;
+      const sets = [...(state.setLog[exIndex] || [])];
+      if (!sets[setIndex]) return state;
+      const current = sets[setIndex];
+      const nextWeight = Number.isFinite(Number(weight)) ? Number(weight) : Number(current.weight || 0);
+      const nextReps = Number.isFinite(Number(reps)) ? Number(reps) : Number(current.reps || 0);
+      const orm = nextWeight > 0 && nextReps > 0 ? epley(nextWeight, nextReps) : 0;
+      sets[setIndex] = { ...current, weight: nextWeight, reps: nextReps, orm };
+      return { ...state, setLog: { ...state.setLog, [exIndex]: sets } };
+    }
+
+    case 'DELETE_SET': {
+      const { exIndex, setIndex } = action;
+      const sets = [...(state.setLog[exIndex] || [])];
+      if (!sets[setIndex]) return state;
+      sets.splice(setIndex, 1);
+      return { ...state, setLog: { ...state.setLog, [exIndex]: sets } };
+    }
+
     case 'LOAD_GHOST':
       return { ...state, ghostData: action.ghostData };
 

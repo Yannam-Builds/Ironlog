@@ -1,6 +1,7 @@
 
 import React, { useState, useCallback } from 'react';
 import { View, Text, TouchableOpacity, TextInput, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { triggerHaptic } from '../services/hapticsEngine';
 
 const SET_TYPES = ['normal', 'warmup', 'drop', 'failure', 'amrap'];
@@ -23,6 +24,9 @@ const TYPE_COLOR = {
 
 function SetRow({ set, setIndex, exIndex, dispatch, effortTracking, hapticFeedback }) {
   const [noteOpen, setNoteOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editWeight, setEditWeight] = useState(String(set.weight ?? ''));
+  const [editReps, setEditReps] = useState(String(set.reps ?? ''));
 
   const cycleType = useCallback(() => {
     const next = SET_TYPES[(SET_TYPES.indexOf(set.type || 'normal') + 1) % SET_TYPES.length];
@@ -47,6 +51,32 @@ function SetRow({ set, setIndex, exIndex, dispatch, effortTracking, hapticFeedba
     const val = parseInt(text);
     dispatch({ type: 'SET_RIR', exIndex, setIndex, rir: isNaN(val) ? null : val });
   }, [exIndex, setIndex, dispatch]);
+
+  const toggleEdit = useCallback(() => {
+    setEditWeight(String(set.weight ?? ''));
+    setEditReps(String(set.reps ?? ''));
+    setEditOpen((prev) => !prev);
+    triggerHaptic('selection', { enabled: hapticFeedback }).catch(() => {});
+  }, [set.weight, set.reps, hapticFeedback]);
+
+  const saveEdit = useCallback(() => {
+    const weight = parseFloat(editWeight);
+    const reps = parseInt(editReps, 10);
+    dispatch({
+      type: 'UPDATE_SET',
+      exIndex,
+      setIndex,
+      weight: Number.isFinite(weight) ? weight : 0,
+      reps: Number.isFinite(reps) ? reps : 0,
+    });
+    setEditOpen(false);
+    triggerHaptic('lightConfirm', { enabled: hapticFeedback }).catch(() => {});
+  }, [dispatch, exIndex, setIndex, editWeight, editReps, hapticFeedback]);
+
+  const deleteSet = useCallback(() => {
+    dispatch({ type: 'DELETE_SET', exIndex, setIndex });
+    triggerHaptic('selection', { enabled: hapticFeedback }).catch(() => {});
+  }, [dispatch, exIndex, setIndex, hapticFeedback]);
 
   const typeKey = set.type || 'normal';
   const color = TYPE_COLOR[typeKey] || TYPE_COLOR.normal;
@@ -111,9 +141,45 @@ function SetRow({ set, setIndex, exIndex, dispatch, effortTracking, hapticFeedba
           }}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
-          <Text style={[s.noteIcon, set.note ? s.noteIconActive : null]}>✎</Text>
+          <Ionicons name="chatbox-ellipses-outline" size={14} style={[s.noteIcon, set.note ? s.noteIconActive : null]} />
+        </TouchableOpacity>
+        <TouchableOpacity onPress={toggleEdit} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <Ionicons name="create-outline" size={14} style={[s.noteIcon, editOpen ? s.noteIconActive : null]} />
+        </TouchableOpacity>
+        <TouchableOpacity onPress={deleteSet} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <Ionicons name="trash-outline" size={14} color="#993333" />
         </TouchableOpacity>
       </View>
+
+      {editOpen ? (
+        <View style={s.editRow}>
+          <View style={s.editGroup}>
+            <Text style={s.editLabel}>KG</Text>
+            <TextInput
+              style={s.editInput}
+              value={editWeight}
+              onChangeText={setEditWeight}
+              keyboardType="decimal-pad"
+              placeholder="0"
+              placeholderTextColor="#2a2a2a"
+            />
+          </View>
+          <View style={s.editGroup}>
+            <Text style={s.editLabel}>REPS</Text>
+            <TextInput
+              style={s.editInput}
+              value={editReps}
+              onChangeText={setEditReps}
+              keyboardType="number-pad"
+              placeholder="0"
+              placeholderTextColor="#2a2a2a"
+            />
+          </View>
+          <TouchableOpacity style={s.editSaveBtn} onPress={saveEdit}>
+            <Text style={s.editSaveText}>SAVE</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
 
       {noteOpen ? (
         <TextInput
@@ -232,5 +298,43 @@ const s = StyleSheet.create({
     fontStyle: 'italic',
     marginTop: 2,
     paddingHorizontal: 2,
+  },
+  editRow: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 8,
+    marginTop: 4,
+  },
+  editGroup: {
+    flex: 1,
+  },
+  editLabel: {
+    fontSize: 8,
+    letterSpacing: 1.2,
+    color: '#3a3a3a',
+    marginBottom: 3,
+  },
+  editInput: {
+    borderWidth: 1,
+    borderColor: '#222',
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    color: '#f0f0f0',
+    fontSize: 13,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  editSaveBtn: {
+    borderWidth: 1,
+    borderColor: '#333',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  editSaveText: {
+    color: '#FF4500',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.3,
   },
 });

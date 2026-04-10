@@ -26,8 +26,26 @@ import { epley } from '../utils/oneRM';
 import { getExerciseIndex } from '../services/ExerciseLibraryService';
 import { EXERCISES } from '../data/exerciseLibrary';
 import { EXERCISE_ID_MAP } from '../data/exerciseMapping';
+import { buildProgressionSuggestion } from '../domain/intelligence/progressionEngine';
+import { buildWorkoutCompletionSummary } from '../domain/intelligence/trainingAnalyticsEngine';
+import { rankSubstitutionCandidates } from '../domain/intelligence/substitutionEngine';
+import { buildVolumeInterpretation } from '../domain/intelligence/volumeInterpretationEngine';
+import {
+  computeWorkoutPerformanceScore,
+  detectPREvents,
+} from '../domain/intelligence/performanceEngine';
+import {
+  getRecentComparisonUsage,
+  recordComparisonUsage,
+} from '../domain/storage/trainingRepository';
 import { triggerHaptic } from '../services/hapticsEngine';
 import { resolveExerciseYoutubeMeta } from '../utils/exerciseVideoLinks';
+import {
+  buildFilterChipOptions,
+  getExerciseFilterSummary,
+  matchesExerciseFilter,
+} from '../utils/exerciseFilters';
+import { resolveExerciseProfile } from '../domain/intelligence/exerciseProfileEngine';
 
 function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
 
@@ -43,90 +61,8 @@ function toTitleCase(value) {
     .join(' ');
 }
 
-const FILTER_ALIAS = [
-  { tokens: ['upper chest', 'lower chest', 'serratus', 'pec', 'chest'], label: 'Chest' },
-  { tokens: ['upper back', 'lower back', 'middle back', 'lats', 'lat', 'rhomboid', 'trap', 'back'], label: 'Back' },
-  { tokens: ['deltoid', 'delt', 'shoulder', 'rotator cuff'], label: 'Shoulders' },
-  { tokens: ['biceps', 'bicep'], label: 'Biceps' },
-  { tokens: ['triceps', 'tricep'], label: 'Triceps' },
-  { tokens: ['forearm', 'hand', 'wrist'], label: 'Forearms' },
-  { tokens: ['abs', 'abdominal', 'oblique', 'core'], label: 'Core' },
-  { tokens: ['quad', 'quadriceps', 'inner quad', 'outer quad'], label: 'Quads' },
-  { tokens: ['hamstring', 'adductor'], label: 'Hamstrings' },
-  { tokens: ['glute', 'abductor'], label: 'Glutes' },
-  { tokens: ['calf', 'tibialis'], label: 'Calves' },
-  { tokens: ['cardio', 'conditioning', 'hiit', 'metcon', 'aerobic'], label: 'Cardio' },
-];
-
-function toFilterTag(value) {
-  const normalized = String(value || '')
-    .replace(/([a-z])([A-Z])/g, '$1 $2')
-    .replace(/[_-]+/g, ' ')
-    .toLowerCase()
-    .trim();
-  if (!normalized) return '';
-  for (const alias of FILTER_ALIAS) {
-    if (alias.tokens.some((token) => normalized.includes(token))) return alias.label;
-  }
-  if (normalized === 'strength' || normalized.includes('weight') || normalized.includes('rep')) return 'Strength';
-  if (normalized.includes('duration') || normalized.includes('distance') || normalized.includes('cardio')) return 'Cardio';
-  return toTitleCase(normalized);
-}
-
-function getCategoryTag(exercise) {
-  const raw = [
-    exercise?.category,
-    exercise?.type,
-    exercise?.movement,
-    exercise?.trackingType,
-  ]
-    .filter(Boolean)
-    .join(' ')
-    .toLowerCase();
-  if (!raw) return '';
-  if (raw.includes('duration') || raw.includes('distance') || raw.includes('cardio') || raw.includes('conditioning')) return 'Cardio';
-  if (raw.includes('weight') || raw.includes('rep') || raw.includes('strength')) return 'Strength';
-  return '';
-}
-
 function getExerciseMuscles(exercise) {
-  const values = [];
-  if (Array.isArray(exercise?.primaryMuscles)) values.push(...exercise.primaryMuscles);
-  else if (exercise?.primaryMuscles) values.push(exercise.primaryMuscles);
-  if (Array.isArray(exercise?.secondaryMuscles)) values.push(...exercise.secondaryMuscles);
-  if (exercise?.primaryMuscle) values.push(exercise.primaryMuscle);
-  if (exercise?.primary) values.push(exercise.primary);
-  if (exercise?.muscle) values.push(exercise.muscle);
-  if (exercise?.target) values.push(exercise.target);
-  if (exercise?.targetMuscle) values.push(exercise.targetMuscle);
-  if (exercise?.bodyPart) values.push(exercise.bodyPart);
-  if (exercise?.muscleGroup) values.push(exercise.muscleGroup);
-
-  const out = [];
-  const seen = new Set();
-  values.forEach((value) => {
-    const normalized = toFilterTag(value);
-    if (!normalized) return;
-    const key = normalized.toLowerCase();
-    if (seen.has(key)) return;
-    seen.add(key);
-    out.push(normalized);
-  });
-  return out;
-}
-
-function getExerciseFilterTags(exercise) {
-  const tags = [...getExerciseMuscles(exercise)];
-  const category = getCategoryTag(exercise);
-  if (category) tags.push(category);
-  if (!tags.length) tags.push('Other');
-  const seen = new Set();
-  return tags.filter((tag) => {
-    const key = String(tag || '').toLowerCase();
-    if (!key || seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+  return getExerciseFilterSummary(exercise, 6);
 }
 
 function getPlateText(targetKg, barWeight, profilePlates) {
@@ -142,6 +78,28 @@ function getPlateText(targetKg, barWeight, profilePlates) {
   }
   if (result.length === 0) return 'Bar only';
   return result.map(p => p + 'kg').join(' + ') + ' each side';
+}
+
+function parseRepTarget(value, fallback = 8) {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  const match = String(value || '').match(/\d+/);
+  return match ? Number(match[0]) : fallback;
+}
+
+function normalizeSessionExercise(exercise = {}) {
+  return {
+    ...exercise,
+    name: exercise.name || 'Custom Exercise',
+    exerciseId: exercise.exerciseId || exercise.id || exercise.name || genId(),
+    sets: Number(exercise.sets || 3),
+    reps: parseRepTarget(exercise.reps, 8),
+    isWarmup: !!exercise.isWarmup,
+  };
+}
+
+function supportsPlateBreakdown(exercise) {
+  const profile = resolveExerciseProfile(exercise || {});
+  return profile?.equipmentClass === 'barbell';
 }
 
 const RATE_THRESHOLDS = [10, 25, 50];
@@ -373,7 +331,7 @@ function SupersetModal({ visible, currentGroup, onAssign, onClose }) {
 function SwapModal({ visible, exercise, onSwap, onClose, colors }) {
   const [allExercises, setAllExercises] = useState([]);
   const [search, setSearch] = useState('');
-  const defaultMuscle = getExerciseFilterTags(exercise)[0] || 'All';
+  const defaultMuscle = getExerciseFilterSummary(exercise, 1)[0] || 'All';
   const [muscle, setMuscle] = useState(defaultMuscle);
   const [muscles, setMuscles] = useState([]);
 
@@ -384,42 +342,24 @@ function SwapModal({ visible, exercise, onSwap, onClose, colors }) {
     getExerciseIndex().then(idx => {
       if (!idx) return;
       setAllExercises(idx);
-      const map = new Map();
-      idx.forEach(ex => {
-        getExerciseFilterTags(ex).forEach((tag) => {
-          const key = tag.toLowerCase();
-          if (!key) return;
-          if (!map.has(key)) map.set(key, tag);
-        });
-      });
-      ['Strength', 'Cardio'].forEach((tag) => {
-        const key = tag.toLowerCase();
-        if (!map.has(key)) map.set(key, tag);
-      });
-      const ordered = [...map.values()].sort((a, b) => {
-        const priority = { strength: 0, cardio: 1 };
-        const pa = priority[a.toLowerCase()];
-        const pb = priority[b.toLowerCase()];
-        if (pa !== undefined || pb !== undefined) return (pa ?? 99) - (pb ?? 99);
-        return a.localeCompare(b);
-      });
-      setMuscles(ordered);
+      setMuscles(buildFilterChipOptions(idx, { includeCategory: true, includeEquipment: false }));
     });
-  }, [visible]);
+  }, [visible, defaultMuscle]);
 
   const currentEquipment = exercise?.equipment || '';
-  const filtered = allExercises
-    .filter(e => {
-      const ms = muscle === 'All' || getExerciseFilterTags(e).some(m => m.toLowerCase() === muscle.toLowerCase());
+  const filteredBase = allExercises.filter(e => {
+      const ms = matchesExerciseFilter(e, muscle, { includeCategory: true, includeEquipment: false });
       const sr = !search || e.name.toLowerCase().includes(search.toLowerCase());
       return ms && sr;
-    })
-    .sort((a, b) => {
-      const aIsDiff = a.equipment !== currentEquipment ? 0 : 1;
-      const bIsDiff = b.equipment !== currentEquipment ? 0 : 1;
-      if (aIsDiff !== bIsDiff) return aIsDiff - bIsDiff;
-      return a.name.localeCompare(b.name);
     });
+  const filtered = rankSubstitutionCandidates({
+    exercise,
+    candidates: filteredBase,
+    limit: filteredBase.length || 40,
+  }).map((candidate) => ({
+    ...candidate,
+    sameEquipment: candidate.equipment === currentEquipment,
+  }));
 
   if (!visible) return null;
 
@@ -466,8 +406,13 @@ function SwapModal({ visible, exercise, onSwap, onClose, colors }) {
                 <View style={{ flex: 1 }}>
                   <Text style={{ fontSize: 14, fontWeight: '600', color: colors.text }} numberOfLines={1}>{ex.name}</Text>
                   <Text style={{ fontSize: 11, color: colors.muted, marginTop: 2 }} numberOfLines={1}>
-                    {getExerciseFilterTags(ex).join(', ')}{ex.equipment ? ` · ${toTitleCase(ex.equipment)}` : ''}
+                    {getExerciseFilterSummary(ex).join(', ')}{ex.equipment ? ` · ${toTitleCase(ex.equipment)}` : ''}
                   </Text>
+                  {ex.substitutionReason ? (
+                    <Text style={{ fontSize: 10, color: colors.accent, marginTop: 2 }} numberOfLines={1}>
+                      {ex.substitutionReason}
+                    </Text>
+                  ) : null}
                 </View>
                 <Ionicons name="swap-horizontal" size={18} color={colors.accent} />
               </TouchableOpacity>
@@ -500,7 +445,15 @@ function WorkoutContent({ plan, day, planIndex, dayIndex, navigation }) {
   const { setBanner } = useActiveBanner();
   const haptic = settings.hapticFeedback !== false;
 
-  const workingExercises = day.exercises.filter(e => !e.isWarmup);
+  const [extraExercises, setExtraExercises] = useState([]);
+  const baseExercises = useMemo(
+    () => (Array.isArray(day?.exercises) ? day.exercises.filter((exercise) => !exercise?.isWarmup).map(normalizeSessionExercise) : []),
+    [day?.exercises]
+  );
+  const workingExercises = useMemo(
+    () => [...baseExercises, ...extraExercises.map(normalizeSessionExercise)],
+    [baseExercises, extraExercises]
+  );
 
   // Local UI state
   const [restOverride, setRestOverride] = useState({});
@@ -512,15 +465,17 @@ function WorkoutContent({ plan, day, planIndex, dayIndex, navigation }) {
   const [displaySecs, setDisplaySecs] = useState(0);
   const [supersetModalEx, setSupersetModalEx] = useState(null);
   const [swapModalEx, setSwapModalEx] = useState(null);
+  const [showAddExerciseModal, setShowAddExerciseModal] = useState(false);
   const [isDeload, setIsDeload] = useState(false);
   const [orderedIndices, setOrderedIndices] = useState(() => workingExercises.map((_, i) => i));
-  const [funComp, setFunComp] = useState(null); // { text, icon, volume }
+  const [completionSummary, setCompletionSummary] = useState(null);
   const [quitAlert, setQuitAlert] = useState(false);
   const [nextTargets, setNextTargets] = useState(null); // [{ name, weight, reps }] | null
   const [showShareModal, setShowShareModal] = useState(false);
   const [completedWorkout, setCompletedWorkout] = useState(null);
   const [ratePrompt, setRatePrompt] = useState(false);
   const [alertConfig, setAlertConfig] = useState(null);
+  const [libraryIndex, setLibraryIndex] = useState(EXERCISES);
   const shareCardRef = useRef(null);
   const sessionKey = useMemo(
     () => `${ACTIVE_WORKOUT_SESSION_PREFIX}${plan?.id || planIndex}:${day?.id || dayIndex}`,
@@ -533,6 +488,29 @@ function WorkoutContent({ plan, day, planIndex, dayIndex, navigation }) {
   const appStateRef = useRef(AppState.currentState);
   const copyModalShown = useRef(false);
   const [sessionReady, setSessionReady] = useState(false);
+
+  useEffect(() => {
+    setExtraExercises([]);
+  }, [day?.id]);
+
+  useEffect(() => {
+    getExerciseIndex()
+      .then((index) => {
+        if (Array.isArray(index) && index.length > 0) setLibraryIndex(index);
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    setOrderedIndices((prev) => {
+      const seen = new Set(prev.filter((index) => index < workingExercises.length));
+      const merged = [...seen];
+      for (let index = 0; index < workingExercises.length; index += 1) {
+        if (!seen.has(index)) merged.push(index);
+      }
+      return merged;
+    });
+  }, [workingExercises.length]);
 
   useEffect(() => { restTimerRef.current = state.restTimer; }, [state.restTimer]);
 
@@ -647,6 +625,25 @@ function WorkoutContent({ plan, day, planIndex, dayIndex, navigation }) {
       if (note) dispatch({ type: 'SET_EXERCISE_NOTE', exIndex: i, note });
     });
   }, []);
+
+  const progressionSuggestions = useMemo(() => {
+    const suggestions = {};
+    workingExercises.forEach((exercise, index) => {
+      const actual = state.swappedExercises[index] || exercise;
+      suggestions[index] = buildProgressionSuggestion({
+        exercise: {
+          ...actual,
+          exerciseId: actual.exerciseId || actual.id || exercise.exerciseId || exercise.name,
+          prescribedSets: Number(exercise.sets || 0),
+          prescribedReps: parseRepTarget(exercise.reps, 8),
+          sets: Number(exercise.sets || 0),
+          reps: parseRepTarget(exercise.reps, 8),
+        },
+        history,
+      });
+    });
+    return suggestions;
+  }, [history, state.swappedExercises, workingExercises]);
 
   const tickRest = useCallback(() => {
     const timer = restTimerRef.current;
@@ -844,12 +841,17 @@ function WorkoutContent({ plan, day, planIndex, dayIndex, navigation }) {
     } catch (_) {}
   }, [dispatch, haptic]);
 
+  const addExerciseToSession = useCallback((exercise) => {
+    const normalized = normalizeSessionExercise(exercise);
+    setExtraExercises((prev) => [...prev, normalized]);
+    triggerHaptic('selection', { enabled: haptic }).catch(() => {});
+  }, [haptic]);
+
   // ── ⋯ Exercise menu ──────────────────────────────────────────────────────
   const showExerciseMenu = useCallback((exIndex) => {
     const ex = state.swappedExercises[exIndex] || workingExercises[exIndex];
     const group = state.supersetGroups[exIndex];
-    const equipment = (state.swappedExercises[exIndex]?.equipment || ex.equipment || '');
-    const isBarOrDumb = ['Barbell', 'Dumbbell'].includes(equipment);
+    const canGenerateBarbellWarmup = supportsPlateBreakdown(ex);
     const youtubeMeta = resolveExerciseYoutubeMeta(ex);
 
     const options = [
@@ -879,7 +881,7 @@ function WorkoutContent({ plan, day, planIndex, dayIndex, navigation }) {
           }
         },
       },
-      ...(isBarOrDumb ? [{ text: 'Generate Warm-Up', onPress: () => generateWarmups(exIndex) }] : []),
+      ...(canGenerateBarbellWarmup ? [{ text: 'Generate Warm-Up', onPress: () => generateWarmups(exIndex) }] : []),
       { text: 'Cancel', style: 'cancel' },
     ];
     setAlertConfig({ title: ex.name, message: '', buttons: options });
@@ -924,6 +926,9 @@ function WorkoutContent({ plan, day, planIndex, dayIndex, navigation }) {
         exerciseId: actual.exerciseId || actual.id || ex.exerciseId,
         primaryMuscles: resolvedMuscles,
         primaryMuscle: resolvedMuscles[0] || null,
+        equipment: actual.equipment || ex.equipment || null,
+        prescribedSets: Number(ex.sets || 0),
+        prescribedReps: parseRepTarget(ex.reps, 8),
         sets: (state.setLog[i] || []).map(s => ({
           id: s.id, weight: s.weight, reps: s.reps,
           type: s.type || 'normal', rpe: s.rpe || null, rir: s.rir || null,
@@ -942,13 +947,66 @@ function WorkoutContent({ plan, day, planIndex, dayIndex, navigation }) {
         {
           text: 'FINISH', style: 'default', onPress: async () => {
             triggerHaptic('workoutCompleted', { enabled: haptic }).catch(() => {});
-            await addHistory({
-              id: Date.now().toString(),
-              date: new Date().toISOString(),
+            const sessionId = Date.now().toString();
+            const sessionDate = new Date().toISOString();
+            const baseSession = {
+              id: sessionId,
+              date: sessionDate,
               planId: plan.id, dayId: day.id, dayName: day.name,
               duration, sets: totalSets, exercises: exerciseData,
               isDeload,
+              totalVolume,
+            };
+            const analysisHistory = [baseSession, ...history];
+            const enrichedExercises = exerciseData.map((exercise) => {
+              const suggestion = buildProgressionSuggestion({
+                exercise: {
+                  ...exercise,
+                  sets: exercise.prescribedSets || exercise.sets.length,
+                  reps: exercise.prescribedReps || 8,
+                },
+                history: analysisHistory,
+              });
+              return {
+                ...exercise,
+                progressionSuggestion: suggestion,
+                plateauSignal: suggestion?.plateauSignal || null,
+                deloadSignal: suggestion?.deloadSignal || null,
+              };
             });
+            const recentUsage = await getRecentComparisonUsage().catch(() => []);
+            const comparison = buildVolumeInterpretation(totalVolume, { recentUsage });
+            const summaryText = buildWorkoutCompletionSummary({
+              session: { ...baseSession, exercises: enrichedExercises },
+              history,
+              exerciseIndex: libraryIndex,
+              recentUsage,
+            });
+            const prEvents = detectPREvents(
+              { ...baseSession, exercises: enrichedExercises },
+              history
+            );
+            const performanceScore = computeWorkoutPerformanceScore(
+              { ...baseSession, exercises: enrichedExercises },
+              history,
+              prEvents
+            );
+            const completedSession = {
+              ...baseSession,
+              exercises: enrichedExercises,
+              summaryText,
+              prEvents,
+              performanceScore,
+            };
+            await addHistory(completedSession);
+            if (comparison?.objectName) {
+              await recordComparisonUsage({
+                objectName: comparison.objectName,
+                category: comparison.category,
+                totalKg: totalVolume,
+                contextLabel: 'workout_completion',
+              }).catch(() => {});
+            }
             await AsyncStorage.removeItem(sessionKey).catch(() => {});
             setBanner(null);
             // Rate prompt check
@@ -967,37 +1025,49 @@ function WorkoutContent({ plan, day, planIndex, dayIndex, navigation }) {
               dayName: day.name,
               duration,
               totalVolume,
-              exercises: exerciseData,
+              exercises: enrichedExercises,
               prs: Object.fromEntries(Object.entries(pb).map(([k, v]) => [k.split('-').slice(1).join('-'), v])),
+              summaryText,
+              prEvents,
+              performanceScore,
             });
             // Compute + save next-session targets
             try {
               const raw = await AsyncStorage.getItem('@ironlog/nextTargets');
               const existing = raw ? JSON.parse(raw) : {};
-              exerciseData.forEach(ex => {
-                const workSets = ex.sets.filter(s => s.type !== 'warmup' && s.reps > 0 && s.weight > 0);
-                if (!workSets.length) return;
-                const best = workSets.reduce((a, s) => s.orm > a.orm ? s : a, workSets[0]);
+              enrichedExercises.forEach(ex => {
+                const suggestion = ex.progressionSuggestion;
+                if (!suggestion) return;
                 existing[ex.exerciseId || ex.name] = {
-                  weight: Math.round((best.weight + 2.5) * 10) / 10,
-                  reps: best.reps,
+                  weight: suggestion.targetWeight,
+                  reps: suggestion.targetReps,
+                  action: suggestion.action,
+                  rationale: suggestion.rationale,
                   updatedAt: new Date().toISOString(),
                 };
               });
               await AsyncStorage.setItem('@ironlog/nextTargets', JSON.stringify(existing));
-              const targets = exerciseData.map(ex => {
+              const targets = enrichedExercises.map(ex => {
                 const key = ex.exerciseId || ex.name;
-                return existing[key] ? { name: ex.name, ...existing[key] } : null;
+                return existing[key]
+                  ? {
+                      name: ex.name,
+                      ...existing[key],
+                      plateau: ex.plateauSignal?.recommendation || null,
+                      deload: ex.deloadSignal?.recommendation || null,
+                    }
+                  : null;
               }).filter(Boolean);
               if (targets.length > 0) setNextTargets(targets);
             } catch (_) {}
-            const comp = getFunComparison(totalVolume);
-            setFunComp({ ...comp, volume: Math.round(totalVolume) });
+            const completionLine = summaryText || `You lifted ${Math.round(totalVolume).toLocaleString()} kg total.`;
+            const prLine = prEvents.length ? ` ${prEvents.length} PR event${prEvents.length > 1 ? 's' : ''}.` : '';
+            setCompletionSummary(`${completionLine}${prLine} Score ${performanceScore}/100.`);
           },
         },
       ],
     });
-  }, [state, workingExercises, day, plan, exerciseNotes, saveExerciseNotes, addHistory, navigation, haptic, isDeload, setBanner, sessionKey, settings, updateSettings, pb]);
+  }, [state, workingExercises, day, plan, exerciseNotes, saveExerciseNotes, addHistory, navigation, haptic, isDeload, setBanner, sessionKey, settings, updateSettings, pb, history, libraryIndex]);
 
   // Resolve displayed exercise (may be swapped)
   const resolveEx = (exIndex) => state.swappedExercises[exIndex] || workingExercises[exIndex];
@@ -1070,13 +1140,15 @@ function WorkoutContent({ plan, day, planIndex, dayIndex, navigation }) {
           contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
           ListHeaderComponent={
             <View>
-              {day.exercises.filter(e => e.isWarmup).length > 0 && (
+                  {day.exercises.filter(e => e.isWarmup).length > 0 && (
                 <View style={s.warmupSection}>
                   <Text style={s.sectionLabel}>WARMUP / MOBILITY</Text>
                   {day.exercises.filter(e => e.isWarmup).map((ex, i) => {
                     const barW = activeGymProfile?.barWeight || settings.barWeight || 20;
                     const targetKg = ex.targetWeight || null;
-                    const plateText = targetKg ? getPlateText(targetKg, barW, activeGymProfile?.plates) : null;
+                    const plateText = (targetKg && supportsPlateBreakdown(ex))
+                      ? getPlateText(targetKg, barW, activeGymProfile?.plates)
+                      : null;
                     return (
                       <View key={i} style={s.warmupRow}>
                         <View style={{ flex: 1 }}>
@@ -1092,6 +1164,15 @@ function WorkoutContent({ plan, day, planIndex, dayIndex, navigation }) {
               <Text style={s.sectionLabel}>WORKING SETS</Text>
             </View>
           }
+          ListFooterComponent={
+            <TouchableOpacity
+              style={[s.addExerciseBtn, { borderColor: colors.faint, backgroundColor: colors.card }]}
+              onPress={() => { triggerHaptic('selection', { enabled: haptic }).catch(() => {}); setShowAddExerciseModal(true); }}
+            >
+              <Ionicons name="add-circle-outline" size={16} color={colors.accent} />
+              <Text style={[s.addExerciseBtnText, { color: colors.accent }]}>ADD EXERCISE</Text>
+            </TouchableOpacity>
+          }
           renderItem={({ item: exIndex, drag, isActive }) => {
             const ex = resolveEx(exIndex);
             const logged = state.setLog[exIndex] || [];
@@ -1103,6 +1184,8 @@ function WorkoutContent({ plan, day, planIndex, dayIndex, navigation }) {
             const group = state.supersetGroups[exIndex];
             const groupColor = group ? GROUP_COLORS[group] : null;
             const isFirstInGroup = group && supersetFirstIndex[group] === exIndex;
+            const showPlateUi = supportsPlateBreakdown(ex);
+            const suggestion = progressionSuggestions[exIndex];
             const recentH = history.filter(h => h.dayId === day.id).slice(0, 3);
             const allSameOrLess = recentH.length === 3 && recentH.every(h => {
               const e = h.exercises?.find(e => e.name === ex.name);
@@ -1128,8 +1211,25 @@ function WorkoutContent({ plan, day, planIndex, dayIndex, navigation }) {
                           {group ? <View style={[s.groupBadge, { borderColor: groupColor + '66', backgroundColor: groupColor + '22' }]}><Text style={[s.groupBadgeText, { color: groupColor }]}>{group}</Text></View> : null}
                           {heavy ? <View style={s.heavyBadge}><Text style={s.heavyText}>HEAVY</Text></View> : null}
                           {allSameOrLess ? <View style={s.overloadBadge}><Text style={s.overloadText}>↑ OVERLOAD</Text></View> : null}
+                          {suggestion ? (
+                            <View style={[s.targetChip, {
+                              borderColor: suggestion.action === 'increase' ? colors.accent : suggestion.action === 'reduce' ? '#FF6B6B55' : colors.faint,
+                              backgroundColor: suggestion.action === 'increase' ? colors.accentSoft : suggestion.action === 'reduce' ? '#FF6B6B11' : 'transparent',
+                            }]}>
+                              <Text style={[s.targetChipText, { color: suggestion.action === 'reduce' ? '#FF8E8E' : suggestion.action === 'increase' ? colors.accent : colors.muted }]}>
+                                {suggestion.action.toUpperCase()}
+                              </Text>
+                            </View>
+                          ) : null}
                         </View>
                         <Text style={s.exTarget}>{ex.primary || (ex.primaryMuscles || [])[0] || '—'} · {workingExercises[exIndex].sets}x{workingExercises[exIndex].reps}</Text>
+                        {suggestion ? (
+                          <Text style={[s.exTargetHint, { color: suggestion.action === 'reduce' ? '#FF8E8E' : colors.subtext }]}>
+                            Next target {suggestion.targetWeight}kg x {suggestion.targetReps}
+                            {suggestion.plateauSignal ? ` · Plateau: ${suggestion.plateauSignal.recommendation}` : ''}
+                            {suggestion.deloadSignal ? ` · ${suggestion.deloadSignal.recommendation}` : ''}
+                          </Text>
+                        ) : null}
                       </View>
                       <TouchableOpacity onPress={() => { triggerHaptic('selection', { enabled: haptic }).catch(() => {}); showExerciseMenu(exIndex); }} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
                         <Ionicons name="ellipsis-vertical" size={18} color={colors.muted} />
@@ -1149,7 +1249,7 @@ function WorkoutContent({ plan, day, planIndex, dayIndex, navigation }) {
                         {logged.map((ls, si) => (
                           <View key={ls.id}>
                             <SetRow set={ls} setIndex={si} exIndex={exIndex} dispatch={dispatch} effortTracking={settings.effortTracking || 'off'} hapticFeedback={haptic} />
-                            {ls.type === 'warmup' && ls.weight > 0 && (
+                            {showPlateUi && ls.type === 'warmup' && ls.weight > 0 && (
                               <Text style={s.plateHint}>
                                 {getPlateText(ls.weight, activeGymProfile?.barWeight || settings.barWeight || 20, activeGymProfile?.plates)}
                               </Text>
@@ -1163,9 +1263,11 @@ function WorkoutContent({ plan, day, planIndex, dayIndex, navigation }) {
                         <Text style={s.inputLabel}>KG</Text>
                         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                           <TextInput style={s.input} value={inp.weight} onChangeText={t => dispatch({ type: 'SET_INPUT', exIndex, weight: t })} keyboardType="decimal-pad" placeholder="0" placeholderTextColor="#222" />
-                          <TouchableOpacity style={s.plateBtn} onPress={() => { triggerHaptic('selection', { enabled: haptic }).catch(() => {}); setPlatesTarget(parseFloat(inp.weight) || 0); setShowPlates(true); }}>
-                            <Ionicons name="barbell-outline" size={14} color="#555" />
-                          </TouchableOpacity>
+                          {showPlateUi ? (
+                            <TouchableOpacity style={s.plateBtn} onPress={() => { triggerHaptic('selection', { enabled: haptic }).catch(() => {}); setPlatesTarget(parseFloat(inp.weight) || 0); setShowPlates(true); }}>
+                              <Ionicons name="barbell-outline" size={14} color="#555" />
+                            </TouchableOpacity>
+                          ) : null}
                         </View>
                       </View>
                       <View style={s.inputGroup}>
@@ -1230,6 +1332,14 @@ function WorkoutContent({ plan, day, planIndex, dayIndex, navigation }) {
         onClose={() => setSwapModalEx(null)}
         colors={colors} />
 
+      <SwapModal
+        visible={showAddExerciseModal}
+        exercise={null}
+        onSwap={(newEx) => addExerciseToSession(newEx)}
+        onClose={() => setShowAddExerciseModal(false)}
+        colors={colors}
+      />
+
       {/* Rate prompt */}
       <CustomAlert
         visible={ratePrompt}
@@ -1254,13 +1364,13 @@ function WorkoutContent({ plan, day, planIndex, dayIndex, navigation }) {
           { text: 'Quit', style: 'destructive', onPress: async () => { await AsyncStorage.removeItem(sessionKey).catch(() => {}); setBanner(null); navigation.goBack(); } },
         ]} />
 
-      {/* F25 Fun comparison */}
+      {/* Workout completion summary */}
       <CustomAlert
-        visible={!!funComp}
-        title="WORKOUT COMPLETE 🎉"
-        message={funComp ? `You lifted ${funComp.volume.toLocaleString()} kg total — like lifting ${funComp.text}! ${funComp.icon}` : ''}
-        onDismiss={() => { setFunComp(null); if (!nextTargets) setShowShareModal(true); }}
-        buttons={[{ text: 'NICE!', style: 'default', onPress: () => { setFunComp(null); if (!nextTargets) setShowShareModal(true); } }]} />
+        visible={!!completionSummary}
+        title="WORKOUT COMPLETE"
+        message={completionSummary || ''}
+        onDismiss={() => { setCompletionSummary(null); if (!nextTargets) setShowShareModal(true); }}
+        buttons={[{ text: 'VIEW', style: 'default', onPress: () => { setCompletionSummary(null); if (!nextTargets) setShowShareModal(true); } }]} />
 
       {/* F28 Share card modal */}
       <Modal visible={showShareModal} transparent animationType="fade" onRequestClose={() => { setShowShareModal(false); navigation.goBack(); }}>
@@ -1269,7 +1379,7 @@ function WorkoutContent({ plan, day, planIndex, dayIndex, navigation }) {
             ref={shareCardRef}
             workout={completedWorkout}
             history={history}
-            funComp={completedWorkout ? getFunComparison(completedWorkout.totalVolume) : null}
+            summaryText={completedWorkout?.summaryText}
           />
           <View style={{ flexDirection: 'row', gap: 12, marginTop: 16, width: '100%', paddingHorizontal: 16 }}>
             <TouchableOpacity
@@ -1294,7 +1404,7 @@ function WorkoutContent({ plan, day, planIndex, dayIndex, navigation }) {
       </Modal>
 
       {/* F24 Next-session targets */}
-      <Modal visible={!!nextTargets && !funComp} transparent animationType="slide" onRequestClose={() => { setNextTargets(null); setShowShareModal(true); }}>
+      <Modal visible={!!nextTargets && !completionSummary} transparent animationType="slide" onRequestClose={() => { setNextTargets(null); setShowShareModal(true); }}>
         <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.6)' }}>
           <View style={[s.targetSheet, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
             <Text style={[s.targetTitle, { color: colors.text }]}>NEXT SESSION TARGETS</Text>
@@ -1302,8 +1412,13 @@ function WorkoutContent({ plan, day, planIndex, dayIndex, navigation }) {
             <ScrollView style={{ maxHeight: 280 }} contentContainerStyle={{ gap: 8, paddingVertical: 8 }}>
               {(nextTargets || []).map((t, i) => (
                 <View key={i} style={[s.targetRow, { borderColor: colors.faint }]}>
-                  <Text style={[s.targetName, { color: colors.text }]} numberOfLines={1}>{t.name}</Text>
-                  <Text style={[s.targetVal, { color: colors.accent }]}>{t.weight}kg × {t.reps}</Text>
+                  <View style={{ flex: 1, marginRight: 12 }}>
+                    <Text style={[s.targetName, { color: colors.text }]} numberOfLines={1}>{t.name}</Text>
+                    <Text style={[s.targetReason, { color: colors.muted }]} numberOfLines={2}>
+                      {t.action ? `${String(t.action).toUpperCase()} · ` : ''}{t.rationale || (t.plateau ? `Plateau: ${t.plateau}` : t.deload ? t.deload : 'Keep the trend moving')}
+                    </Text>
+                  </View>
+                  <Text style={[s.targetVal, { color: t.action === 'reduce' ? '#FF8E8E' : colors.accent }]}>{t.weight}kg × {t.reps}</Text>
                 </View>
               ))}
             </ScrollView>
@@ -1367,6 +1482,7 @@ function makeStyles(colors) {
     targetSub: { fontSize: 12, marginBottom: 12 },
     targetRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1 },
     targetName: { fontSize: 14, fontWeight: '600', flex: 1, marginRight: 12 },
+    targetReason: { fontSize: 10, marginTop: 4, lineHeight: 14 },
     targetVal: { fontSize: 15, fontWeight: '900' },
     targetBtn: { marginTop: 16, padding: 16, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6 },
     pbBanner: { backgroundColor: '#FFD70022', borderBottomWidth: 1, borderBottomColor: '#FFD70044', padding: 12, alignItems: 'center' },
@@ -1386,12 +1502,15 @@ function makeStyles(colors) {
     exHeader: { flexDirection: 'row', alignItems: 'flex-start', padding: 16, paddingBottom: 8 },
     exName: { fontSize: 20, fontWeight: '900', color: colors.text, letterSpacing: -0.5, flexShrink: 1 },
     exTarget: { fontSize: 11, color: colors.muted, marginTop: 2 },
+    exTargetHint: { fontSize: 10, marginTop: 4, lineHeight: 14 },
     groupBadge: { borderWidth: 1, paddingHorizontal: 6, paddingVertical: 2 },
     groupBadgeText: { fontSize: 10, fontWeight: '900', letterSpacing: 1 },
     heavyBadge: { backgroundColor: '#FF450022', borderWidth: 1, borderColor: '#FF450044', paddingHorizontal: 6, paddingVertical: 2 },
     heavyText: { fontSize: 8, color: '#FF4500', fontWeight: '700', letterSpacing: 1 },
     overloadBadge: { backgroundColor: '#FFD70022', borderWidth: 1, borderColor: '#FFD70044', paddingHorizontal: 6, paddingVertical: 2 },
     overloadText: { fontSize: 8, color: '#FFD700', fontWeight: '700', letterSpacing: 1 },
+    targetChip: { borderWidth: 1, paddingHorizontal: 6, paddingVertical: 2 },
+    targetChipText: { fontSize: 8, fontWeight: '800', letterSpacing: 1.2 },
     noteInput: { marginHorizontal: 16, marginBottom: 8, fontSize: 12, color: colors.subtext, borderWidth: 1, borderColor: colors.faint, padding: 8, minHeight: 36 },
     ghostContainer: { marginHorizontal: 16, marginBottom: 8, padding: 8, borderWidth: 1, borderColor: colors.faint, borderStyle: 'dashed' },
     ghostLabel: { fontSize: 8, letterSpacing: 2, color: colors.muted, marginBottom: 4 },
@@ -1406,6 +1525,8 @@ function makeStyles(colors) {
     logBtnText: { fontSize: 13, fontWeight: '800', color: '#fff', letterSpacing: 2 },
     quickAddBtn: { marginHorizontal: 16, marginBottom: 4, paddingVertical: 6, borderWidth: 1, borderColor: colors.faint, borderStyle: 'dashed', alignItems: 'center' },
     quickAddText: { fontSize: 10, color: colors.muted, letterSpacing: 2, fontWeight: '700' },
+    addExerciseBtn: { marginHorizontal: 12, marginTop: 12, marginBottom: 8, paddingVertical: 12, borderWidth: 1, borderStyle: 'dashed', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+    addExerciseBtnText: { fontSize: 11, fontWeight: '800', letterSpacing: 1.6 },
     restRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, paddingBottom: 12 },
     restRowText: { fontSize: 10, color: colors.muted, letterSpacing: 1 },
   });

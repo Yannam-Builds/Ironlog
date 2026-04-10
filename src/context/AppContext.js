@@ -2,7 +2,7 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { generateExerciseMap } from '../utils/intelligenceEngine';
+import { buildExerciseMap } from '../domain/intelligence/muscleContributionEngine';
 import { EXERCISES } from '../data/exerciseLibrary';
 import { setHapticsEnabled } from '../services/hapticsEngine';
 import {
@@ -20,6 +20,19 @@ import {
 import { DEFAULT_BACKUP_CONFIG, DEFAULT_BACKUP_STATUS, DEFAULT_NOTIFICATION_SETTINGS } from '../services/backupConstants';
 import { connectGoogleDrive, disconnectGoogleDrive, getDriveConnectionStatus } from '../services/googleDriveService';
 import { cancelBackupJob, scheduleBackupJob } from '../services/BackupScheduler';
+import {
+  SQLITE_MIGRATION_MARKER_KEY,
+} from '../domain/storage/trainingDatabase';
+import {
+  addHistorySessionToDb,
+  clearHistoryInDb,
+  loadTrainingSnapshot,
+  migrateLegacyAsyncStorageToSQLite,
+  replaceTrainingSnapshot,
+  saveBodyWeightToDb,
+  savePlansToDb,
+} from '../domain/storage/trainingRepository';
+import { getExerciseIndex } from '../services/ExerciseLibraryService';
 
 function isoWeekKey(dateStr) {
   const d = new Date(dateStr);
@@ -156,6 +169,8 @@ export function AppContextProvider({ children }) {
       ...status,
       enabled: config.enabled,
       driveLinked: drive.linked,
+      driveConfigured: drive.configured,
+      driveEmail: drive.email || null,
     };
     setBackupConfigState(config);
     setBackupStatusState(nextStatus);
@@ -190,7 +205,20 @@ export function AppContextProvider({ children }) {
 
   const init = async () => {
     try {
-      const keys = ['ironlog_plans', 'ironlog_history', 'ironlog_pb', 'ironlog_bw', 'ironlog_notes', 'ironlog_settings', '@ironlog/gymProfiles', '@ironlog/activeGymProfileId', '@ironlog/onboardingComplete', 'ironlog_exerciseMap', HAPTICS_RECOVERY_MIGRATION_KEY];
+      const keys = [
+        'ironlog_plans',
+        'ironlog_history',
+        'ironlog_pb',
+        'ironlog_bw',
+        'ironlog_notes',
+        'ironlog_settings',
+        '@ironlog/gymProfiles',
+        '@ironlog/activeGymProfileId',
+        '@ironlog/onboardingComplete',
+        'ironlog_exerciseMap',
+        HAPTICS_RECOVERY_MIGRATION_KEY,
+        SQLITE_MIGRATION_MARKER_KEY,
+      ];
       const vals = await AsyncStorage.multiGet(keys);
       const map = Object.fromEntries(vals.map(([k, v]) => [k, v ? JSON.parse(v) : null]));
       if (map.ironlog_plans) setPlans(map.ironlog_plans);
@@ -226,10 +254,29 @@ export function AppContextProvider({ children }) {
       if (map['@ironlog/onboardingComplete']) {
         setOnboardingCompleteState(true);
       }
-      
+
+      let sqliteMigrated = !!map[SQLITE_MIGRATION_MARKER_KEY];
+      if (!sqliteMigrated) {
+        try {
+          sqliteMigrated = await migrateLegacyAsyncStorageToSQLite();
+        } catch (migrationError) {
+          // Keep legacy state active if migration fails; never wipe user data.
+          console.warn('SQLite migration skipped:', migrationError);
+          sqliteMigrated = false;
+        }
+      }
+
+      if (sqliteMigrated) {
+        const snapshot = await loadTrainingSnapshot();
+        setPlans(snapshot.plans || []);
+        setHistory(snapshot.history || []);
+        setBodyWeight(snapshot.bodyWeight || []);
+      }
+
+      const libraryIndex = await getExerciseIndex().catch(() => null);
       let emap = map.ironlog_exerciseMap;
-      if (!emap || Object.keys(emap).length === 0) {
-        emap = generateExerciseMap(EXERCISES);
+      if (!emap || Object.keys(emap).length === 0 || sqliteMigrated) {
+        emap = buildExerciseMap(libraryIndex || EXERCISES);
         await AsyncStorage.setItem('ironlog_exerciseMap', JSON.stringify(emap));
       }
       setExerciseMap(emap);
@@ -266,11 +313,20 @@ export function AppContextProvider({ children }) {
     }
   };
 
-  const savePlans = async (v) => { setPlans(v); await save('ironlog_plans', v, 'plans_changed'); };
+  const savePlans = async (v) => {
+    setPlans(v);
+    try {
+      await savePlansToDb(v);
+    } catch (e) {
+      console.warn('savePlans SQLite error:', e);
+    }
+    await save('ironlog_plans', v, 'plans_changed');
+  };
   const addHistory = async (entry) => {
     const h = [entry, ...history].slice(0, 200);
     setHistory(h);
     try {
+      await addHistorySessionToDb(entry);
       const indexPairs = await buildIndexUpdatesForSession(entry);
       const storageWrite = [['ironlog_history', JSON.stringify(h)], ...(indexPairs || [])];
       await AsyncStorage.multiSet(storageWrite);
@@ -292,6 +348,11 @@ export function AppContextProvider({ children }) {
       console.warn('Rollback snapshot before clearHistory failed:', e);
     }
     setHistory([]);
+    try {
+      await clearHistoryInDb();
+    } catch (e) {
+      console.warn('clearHistory SQLite error:', e);
+    }
     await AsyncStorage.multiRemove(['ironlog_history', '@ironlog/pr_index', '@ironlog/volume_index', '@ironlog/lastPerformance']);
     await flagDirty('history_cleared');
   };
@@ -301,7 +362,13 @@ export function AppContextProvider({ children }) {
   const clearPbs = async () => { setPb({}); await AsyncStorage.removeItem('ironlog_pb'); await flagDirty('pb_cleared'); };
   const logBodyWeight = async (entry) => {
     const bw = [entry, ...bodyWeight].slice(0, 365);
-    setBodyWeight(bw); await save('ironlog_bw', bw, 'body_weight_changed');
+    setBodyWeight(bw);
+    try {
+      await saveBodyWeightToDb(bw);
+    } catch (e) {
+      console.warn('saveBodyWeight SQLite error:', e);
+    }
+    await save('ironlog_bw', bw, 'body_weight_changed');
   };
   const saveExerciseNotes = async (exName, note) => {
     const n = { ...exerciseNotes, [exName]: note };
@@ -414,6 +481,17 @@ export function AppContextProvider({ children }) {
       setOnboardingCompleteState(data.onboardingComplete);
       if (data.onboardingComplete) await AsyncStorage.setItem('@ironlog/onboardingComplete', 'true');
       else await AsyncStorage.removeItem('@ironlog/onboardingComplete');
+    }
+    try {
+      await replaceTrainingSnapshot({
+        plans: data.plans || plans,
+        history: data.history || history,
+        bodyWeight: data.bodyWeight || bodyWeight,
+        bodyMeasurements: data.bodyMeasurements || [],
+        customExercises: data.customExercises || [],
+      });
+    } catch (e) {
+      console.warn('restoreData SQLite error:', e);
     }
     await refreshBackupState();
   };

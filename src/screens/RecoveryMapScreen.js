@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
   PanResponder,
   StyleSheet,
@@ -7,8 +7,11 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { AppContext } from '../context/AppContext';
 import { useTheme } from '../context/ThemeContext';
 import BodyMapSVG from '../components/BodyMapSVG';
+import { computeMuscleAnalytics } from '../domain/intelligence/trainingAnalyticsEngine';
+import { getExerciseIndex } from '../services/ExerciseLibraryService';
 import { getMuscleAtTouch } from '../utils/muscleMapHitTest';
 
 const REGION_TO_GROUP = {
@@ -48,12 +51,47 @@ function getRegionColors(groupReadiness, colors) {
 }
 
 export default function RecoveryMapScreen({ navigation, route }) {
+  const { history, plans } = useContext(AppContext);
   const colors = useTheme();
   const [view, setView] = useState('front');
+  const [windowKey, setWindowKey] = useState('7d');
   const [mapSize, setMapSize] = useState({ width: 1, height: 1 });
   const [tooltip, setTooltip] = useState(null);
   const hideTimerRef = useRef(null);
-  const groupReadiness = route?.params?.groupReadiness || {};
+  const [libraryIndex, setLibraryIndex] = useState([]);
+  const fallbackReadiness = route?.params?.groupReadiness || {};
+  const activePlan = plans[0];
+  const programHasExercises = useMemo(() => {
+    if (!Array.isArray(activePlan?.days)) return false;
+    return activePlan.days.some((day) => Array.isArray(day?.exercises) && day.exercises.length > 0);
+  }, [activePlan]);
+
+  useEffect(() => {
+    let mounted = true;
+    getExerciseIndex()
+      .then((index) => {
+        if (!mounted) return;
+        if (Array.isArray(index) && index.length > 0) setLibraryIndex(index);
+      })
+      .catch(() => {});
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const analytics = useMemo(() => computeMuscleAnalytics({
+    history,
+    exerciseIndex: libraryIndex,
+    activePlan,
+    window: windowKey,
+  }), [activePlan, history, libraryIndex, windowKey]);
+
+  useEffect(() => {
+    if (windowKey === 'program' && !programHasExercises) {
+      setWindowKey('7d');
+    }
+  }, [programHasExercises, windowKey]);
+  const groupReadiness = Object.keys(analytics.readiness || {}).length ? analytics.readiness : fallbackReadiness;
 
   const regionColors = useMemo(
     () => getRegionColors(groupReadiness, colors),
@@ -103,6 +141,41 @@ export default function RecoveryMapScreen({ navigation, route }) {
   return (
     <View style={[s.container, { backgroundColor: colors.bg }]}>
       <View style={s.switchRow}>
+        {[
+          ['current_workout', 'Workout'],
+          ['7d', '7D'],
+          ['30d', '30D'],
+          ['program', 'Program'],
+        ].map(([key, label]) => {
+          const disabled = key === 'program' && !programHasExercises;
+          const active = key === windowKey;
+          return (
+            <TouchableOpacity
+              key={key}
+              style={[
+                s.switchBtn,
+                {
+                  opacity: disabled ? 0.45 : 1,
+                  borderColor: active ? colors.accent : colors.faint,
+                  backgroundColor: active ? colors.accentSoft : colors.card,
+                },
+              ]}
+              onPress={() => {
+                if (disabled) return;
+                setWindowKey(key);
+                setTooltip(null);
+              }}
+              disabled={disabled}
+            >
+              <Text style={[s.switchText, { color: active ? colors.accent : colors.subtext }]}>
+                {label.toUpperCase()}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
+      <View style={s.switchRow}>
         {['front', 'back'].map((side) => {
           const active = side === view;
           return (
@@ -129,7 +202,7 @@ export default function RecoveryMapScreen({ navigation, route }) {
       </View>
 
       <Text style={[s.helpText, { color: colors.muted }]}>
-        Slide your finger over the body map to inspect muscle groups
+        Slide over the body map to inspect regions. Color intensity follows real recent stimulus and recovery state.
       </Text>
 
       <View
