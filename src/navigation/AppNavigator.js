@@ -32,6 +32,7 @@ import OnboardingScreen from '../screens/OnboardingScreen';
 import BackupCenterScreen from '../screens/BackupCenterScreen';
 import PrivacyScreen from '../screens/PrivacyScreen';
 import RestoreDataScreen from '../screens/RestoreDataScreen';
+import ImportCenterScreen from '../screens/ImportCenterScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -119,6 +120,7 @@ export default function AppNavigator() {
         <Stack.Screen name="BackupCenter" component={BackupCenterScreen} options={{ ...headerOpts(colors), title: 'BACKUP CENTER' }} />
         <Stack.Screen name="Privacy" component={PrivacyScreen} options={{ ...headerOpts(colors), title: 'PRIVACY' }} />
         <Stack.Screen name="RestoreData" component={RestoreDataScreen} options={{ ...headerOpts(colors), title: 'RESTORE DATA' }} />
+        <Stack.Screen name="ImportCenter" component={ImportCenterScreen} options={{ ...headerOpts(colors), title: 'IMPORT CENTER' }} />
       </Stack.Navigator>
     </NavigationContainer>
   );

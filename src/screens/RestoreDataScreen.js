@@ -92,6 +92,20 @@ export default function RestoreDataScreen({ navigation }) {
         </TouchableOpacity>
       </View>
 
+      <View style={[s.card, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+        <Text style={[s.cardTitle, { color: colors.text }]}>Switching from another app?</Text>
+        <Text style={[s.cardBody, { color: colors.subtext }]}>
+          Open Import Center for Strong CSV, Hevy CSV, or OpenWeight JSON migration.
+        </Text>
+        <TouchableOpacity
+          disabled={busy}
+          style={[s.secondaryBtn, { borderColor: colors.accent, opacity: busy ? 0.6 : 1 }]}
+          onPress={() => navigation.navigate('ImportCenter')}
+        >
+          <Text style={[s.secondaryText, { color: colors.accent }]}>OPEN IMPORT CENTER</Text>
+        </TouchableOpacity>
+      </View>
+
       <TouchableOpacity style={[s.skipBtn, { borderColor: colors.faint }]} onPress={() => navigation.goBack()}>
         <Text style={[s.skipText, { color: colors.muted }]}>SKIP FOR NOW</Text>
       </TouchableOpacity>

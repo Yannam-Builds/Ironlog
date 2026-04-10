@@ -19,6 +19,7 @@ import {
   pickSQLiteBundleFile,
   validateSQLiteBundle,
 } from '../services/sqliteExportImport';
+import { exportOpenWeightBundleAndShare } from '../services/openweightInterop';
 import ImportPreviewModal from '../components/ImportPreviewModal';
 import { setHapticsEnabled, triggerHaptic } from '../services/hapticsEngine';
 
@@ -221,6 +222,20 @@ export default function SettingsScreen({ navigation }) {
       });
     } catch (e) {
       setAlertConfig({ title: 'SQLite export failed', message: String(e), buttons: [{ text: 'OK', style: 'default' }] });
+    }
+  };
+
+  const doExportOpenWeight = async () => {
+    try {
+      triggerHaptic('lightConfirm', { enabled: haptic }).catch(() => {});
+      const bundle = await exportOpenWeightBundleAndShare(history);
+      setAlertConfig({
+        title: 'OpenWeight export complete',
+        message: `Exported ${bundle?.workoutLogs?.length || 0} workout logs.`,
+        buttons: [{ text: 'OK', style: 'default' }],
+      });
+    } catch (e) {
+      setAlertConfig({ title: 'OpenWeight export failed', message: String(e), buttons: [{ text: 'OK', style: 'default' }] });
     }
   };
 
@@ -508,8 +523,13 @@ export default function SettingsScreen({ navigation }) {
         </TouchableOpacity>
         <Row label="Manual export backup (JSON)" onPress={doExport} />
         <Row label="Manual import backup (JSON)" onPress={doImport} />
+        <TouchableOpacity style={[s.row, { borderBottomColor: colors.faint }]} onPress={() => navigation.navigate('ImportCenter')}>
+          <Text style={[s.rowLabel, { color: colors.text }]}>Import Center (Strong / Hevy / OpenWeight)</Text>
+          <Ionicons name="chevron-forward" size={16} color={colors.muted} />
+        </TouchableOpacity>
         <Row label="Export workout history as CSV" onPress={doExportCSV} />
         <Row label="Import workout history from CSV" onPress={doImportCSV} />
+        <Row label="Export workout logs as OpenWeight JSON" onPress={doExportOpenWeight} />
         <Row label="Export full data (SQLite v2)" onPress={doExportSQLite} />
         <Row label="Import full data (SQLite v2)" onPress={doImportSQLite} />
       </View>
