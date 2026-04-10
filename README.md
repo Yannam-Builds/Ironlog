@@ -136,6 +136,25 @@ If native folders need to be generated locally first:
 npx expo prebuild
 ```
 
+### Signed Release APK (Android)
+
+For update-safe production installs, build with your own release keystore (do not use debug signing):
+
+```bash
+cd android
+./gradlew assembleRelease
+```
+
+Output:
+
+- `android/app/build/outputs/apk/release/app-release.apk`
+
+Install/update on device:
+
+```bash
+adb install -r android/app/build/outputs/apk/release/app-release.apk
+```
+
 ## Suggestions and Community Chat
 
 - Feature requests and bug reports: [Issues](https://github.com/Yannam-Builds/Ironlog/issues/new/choose)
