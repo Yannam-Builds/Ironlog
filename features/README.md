@@ -2,7 +2,11 @@
 
 This folder is the current Android UI gallery for IronLog, including the AMOLED, light, and Monet-inspired theme work.
 
-The homepage README highlights 8 screenshots. The full set of 23 current captures lives in [features/screenshots/](screenshots/).
+The homepage README highlights 8 compact screenshots. The full set of 23 current captures lives in:
+- compressed gallery images: [features/screenshots/](screenshots/)
+- full-resolution originals: [features/screenshots/full/](screenshots/full/)
+
+Every file in `features/screenshots/` has the same filename in `features/screenshots/full/`.
 
 ## Home, Themes, and Plans
 
@@ -41,4 +45,5 @@ The homepage README highlights 8 screenshots. The full set of 23 current capture
 
 ## Browse Raw Images
 
-- Open the folder directly: [features/screenshots/](screenshots/)
+- Compact gallery folder: [features/screenshots/](screenshots/)
+- Full-resolution folder: [features/screenshots/full/](screenshots/full/)

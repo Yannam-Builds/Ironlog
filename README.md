@@ -27,14 +27,18 @@
 <table>
   <tr>
     <td align="center" width="50%">
-      <img src="features/screenshots/01-home-dashboard-amoled-smart-overview.jpg" alt="IronLog AMOLED home dashboard with smart training targets, weekly summary, and recovery map." width="100%" />
+      <a href="features/screenshots/full/01-home-dashboard-amoled-smart-overview.jpg">
+        <img src="features/screenshots/01-home-dashboard-amoled-smart-overview.jpg" alt="IronLog AMOLED home dashboard with smart training targets, weekly summary, and recovery map." width="100%" />
+      </a>
       <br />
       <strong>AMOLED smart dashboard</strong>
       <br />
       Home combines next-session targets, weekly progress, bodyweight context, and recovery at a glance.
     </td>
     <td align="center" width="50%">
-      <img src="features/screenshots/02-home-dashboard-light-theme.jpg" alt="IronLog light theme home dashboard showing the same smart recommendation and weekly recovery layout." width="100%" />
+      <a href="features/screenshots/full/02-home-dashboard-light-theme.jpg">
+        <img src="features/screenshots/02-home-dashboard-light-theme.jpg" alt="IronLog light theme home dashboard showing the same smart recommendation and weekly recovery layout." width="100%" />
+      </a>
       <br />
       <strong>Theme parity</strong>
       <br />
@@ -43,14 +47,18 @@
   </tr>
   <tr>
     <td align="center" width="50%">
-      <img src="features/screenshots/03-program-insights-adaptive-targets.jpg" alt="IronLog program insights screen with adherence, goal mode, and adaptive next targets." width="100%" />
+      <a href="features/screenshots/full/03-program-insights-adaptive-targets.jpg">
+        <img src="features/screenshots/03-program-insights-adaptive-targets.jpg" alt="IronLog program insights screen with adherence, goal mode, and adaptive next targets." width="100%" />
+      </a>
       <br />
       <strong>Program intelligence</strong>
       <br />
       Goal mode, adherence, day status, and adaptive next targets stay tied to real session history.
     </td>
     <td align="center" width="50%">
-      <img src="features/screenshots/05-log-history-session-cards.jpg" alt="IronLog log screen with multiple workout cards and detailed exercise history." width="100%" />
+      <a href="features/screenshots/full/05-log-history-session-cards.jpg">
+        <img src="features/screenshots/05-log-history-session-cards.jpg" alt="IronLog log screen with multiple workout cards and detailed exercise history." width="100%" />
+      </a>
       <br />
       <strong>Fast logging, readable history</strong>
       <br />
@@ -59,14 +67,18 @@
   </tr>
   <tr>
     <td align="center" width="50%">
-      <img src="features/screenshots/07-volume-analytics-radar-overview.jpg" alt="IronLog muscle analytics overview with radar chart and weekly totals." width="100%" />
+      <a href="features/screenshots/full/07-volume-analytics-radar-overview.jpg">
+        <img src="features/screenshots/07-volume-analytics-radar-overview.jpg" alt="IronLog muscle analytics overview with radar chart and weekly totals." width="100%" />
+      </a>
       <br />
       <strong>Muscle analytics</strong>
       <br />
       Effective sets, volume interpretation, workout totals, and radar views turn raw logs into useful context.
     </td>
     <td align="center" width="50%">
-      <img src="features/screenshots/09-muscle-recovery-front-map.jpg" alt="IronLog recovery screen with front muscle map and recovery score." width="100%" />
+      <a href="features/screenshots/full/09-muscle-recovery-front-map.jpg">
+        <img src="features/screenshots/09-muscle-recovery-front-map.jpg" alt="IronLog recovery screen with front muscle map and recovery score." width="100%" />
+      </a>
       <br />
       <strong>Recovery maps</strong>
       <br />
@@ -75,14 +87,18 @@
   </tr>
   <tr>
     <td align="center" width="50%">
-      <img src="features/screenshots/11-bodyweight-tracker-30d.jpg" alt="IronLog bodyweight screen with 30-day chart and history cards." width="100%" />
+      <a href="features/screenshots/full/11-bodyweight-tracker-30d.jpg">
+        <img src="features/screenshots/11-bodyweight-tracker-30d.jpg" alt="IronLog bodyweight screen with 30-day chart and history cards." width="100%" />
+      </a>
       <br />
       <strong>Bodyweight tracking</strong>
       <br />
       Weight history, trend cards, and share flow stay integrated with the rest of the training system.
     </td>
     <td align="center" width="50%">
-      <img src="features/screenshots/12-backup-center-drive-and-encrypted-backups.jpg" alt="IronLog backup center with encrypted snapshots, Google Drive options, and restore tools." width="100%" />
+      <a href="features/screenshots/full/12-backup-center-drive-and-encrypted-backups.jpg">
+        <img src="features/screenshots/12-backup-center-drive-and-encrypted-backups.jpg" alt="IronLog backup center with encrypted snapshots, Google Drive options, and restore tools." width="100%" />
+      </a>
       <br />
       <strong>Backup and ownership</strong>
       <br />
@@ -91,7 +107,7 @@
   </tr>
 </table>
 
-See the full 23-shot gallery in [features/README.md](features/README.md) or browse the raw screenshot folder in [features/screenshots/](features/screenshots/).
+See the full 23-shot gallery in [features/README.md](features/README.md), browse compact thumbs in [features/screenshots/](features/screenshots/), or open full-resolution images in [features/screenshots/full/](features/screenshots/full/).
 
 ## Current Android Feature Set
 

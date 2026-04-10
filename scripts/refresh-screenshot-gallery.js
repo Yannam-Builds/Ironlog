@@ -6,6 +6,7 @@ const repoRoot = path.resolve(__dirname, '..');
 const sourceRoot = path.resolve('C:/Users/prana/Downloads/Phone Link');
 const featuresRoot = path.join(repoRoot, 'features');
 const screenshotsRoot = path.join(featuresRoot, 'screenshots');
+const fullRoot = path.join(screenshotsRoot, 'full');
 
 const manifest = [
   ['Screenshot_20260410_224033_IRONLOG.jpg', '01-home-dashboard-amoled-smart-overview.jpg'],
@@ -39,6 +40,7 @@ async function ensureDir(dir) {
 
 async function cleanOldAssets() {
   await ensureDir(screenshotsRoot);
+  await ensureDir(fullRoot);
   const featureEntries = await fs.promises.readdir(featuresRoot, { withFileTypes: true });
   await Promise.all(
     featureEntries
@@ -52,6 +54,13 @@ async function cleanOldAssets() {
       .filter((entry) => entry.isFile() && /\.(jpe?g|png|webp)$/i.test(entry.name))
       .map((entry) => fs.promises.unlink(path.join(screenshotsRoot, entry.name)))
   );
+
+  const fullEntries = await fs.promises.readdir(fullRoot, { withFileTypes: true });
+  await Promise.all(
+    fullEntries
+      .filter((entry) => entry.isFile() && /\.(jpe?g|png|webp)$/i.test(entry.name))
+      .map((entry) => fs.promises.unlink(path.join(fullRoot, entry.name)))
+  );
 }
 
 async function buildGallery() {
@@ -60,10 +69,13 @@ async function buildGallery() {
   for (const [sourceName, outputName] of manifest) {
     const sourcePath = path.join(sourceRoot, sourceName);
     const outputPath = path.join(screenshotsRoot, outputName);
+    const fullOutputPath = path.join(fullRoot, outputName);
 
     if (!fs.existsSync(sourcePath)) {
       throw new Error(`Missing source screenshot: ${sourcePath}`);
     }
+
+    await fs.promises.copyFile(sourcePath, fullOutputPath);
 
     await sharp(sourcePath)
       .rotate()
