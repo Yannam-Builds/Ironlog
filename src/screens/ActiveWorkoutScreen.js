@@ -998,7 +998,7 @@ function WorkoutContent({ plan, day, planIndex, dayIndex, navigation }) {
               prEvents,
               performanceScore,
             };
-            await addHistory(completedSession);
+            const addResult = await addHistory(completedSession);
             if (comparison?.objectName) {
               await recordComparisonUsage({
                 objectName: comparison.objectName,
@@ -1062,7 +1062,13 @@ function WorkoutContent({ plan, day, planIndex, dayIndex, navigation }) {
             } catch (_) {}
             const completionLine = summaryText || `You lifted ${Math.round(totalVolume).toLocaleString()} kg total.`;
             const prLine = prEvents.length ? ` ${prEvents.length} PR event${prEvents.length > 1 ? 's' : ''}.` : '';
-            setCompletionSummary(`${completionLine}${prLine} Score ${performanceScore}/100.`);
+            const milestoneLine = addResult?.unlockedMilestones?.length
+              ? ` ${addResult.unlockedMilestones.length} milestone unlocked.`
+              : '';
+            if (addResult?.unlockedMilestones?.length) {
+              triggerHaptic('milestoneSuccess', { enabled: haptic }).catch(() => {});
+            }
+            setCompletionSummary(`${completionLine}${prLine}${milestoneLine} Score ${performanceScore}/100.`);
           },
         },
       ],

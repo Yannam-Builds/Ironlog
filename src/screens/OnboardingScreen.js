@@ -158,6 +158,13 @@ export default function OnboardingScreen({ navigation }) {
         </TouchableOpacity>
       )}
 
+      <TouchableOpacity
+        style={[s.restoreBtn, { borderColor: colors.faint }]}
+        onPress={() => navigation.navigate('RestoreData')}
+        activeOpacity={0.85}>
+        <Text style={[s.restoreBtnText, { color: colors.muted }]}>RESTORE PREVIOUS DATA</Text>
+      </TouchableOpacity>
+
       <View style={{ height: 32 }} />
     </View>
   );
@@ -223,4 +230,13 @@ const s = StyleSheet.create({
     borderWidth: 1,
   },
   secondaryBtnText: { fontSize: 12, fontWeight: '800', letterSpacing: 1.6 },
+  restoreBtn: {
+    marginTop: 10,
+    marginHorizontal: 24,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+  },
+  restoreBtnText: { fontSize: 11, fontWeight: '700', letterSpacing: 1.4 },
 });

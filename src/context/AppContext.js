@@ -6,6 +6,17 @@ import { buildExerciseMap } from '../domain/intelligence/muscleContributionEngin
 import { EXERCISES } from '../data/exerciseLibrary';
 import { setHapticsEnabled } from '../services/hapticsEngine';
 import {
+  buildWeeklySummary,
+  computeStreaks,
+  evaluateMilestones,
+} from '../domain/intelligence/engagementEngine';
+import { computeConsistencyMetrics } from '../domain/intelligence/performanceEngine';
+import { buildReadinessSuggestions } from '../domain/intelligence/recoveryReadinessEngine';
+import {
+  buildDefaultNotificationCandidates,
+  scheduleSmartNotification,
+} from '../services/notificationScheduler';
+import {
   configureBackupPassphrase,
   createRollbackSnapshot,
   loadBackupConfig,
@@ -131,6 +142,8 @@ const DEFAULT_GYM_PROFILE = {
   isDefault: true,
 };
 const HAPTICS_RECOVERY_MIGRATION_KEY = '@ironlog/hapticsRecoveryMigrationV1';
+const MANUAL_RECOVERY_INPUT_KEY = '@ironlog/manualRecoveryInput';
+const MILESTONE_UNLOCKS_KEY = '@ironlog/milestoneUnlocks';
 
 export function AppContextProvider({ children }) {
   const [plans, setPlans] = useState([]);
@@ -141,6 +154,7 @@ export function AppContextProvider({ children }) {
   const [settings, setSettings] = useState({
     weightUnit: 'kg', defaultRestNormal: 120, defaultRestHeavy: 180, barWeight: 20,
     effortTracking: 'off', keepAwake: true, warmupScheme: 'standard', hapticFeedback: true,
+    goalMode: 'hypertrophy',
     completedWorkoutCount: 0, lastRatePromptCount: 0, neverAskToRate: false,
   });
   const [gymProfiles, setGymProfiles] = useState([DEFAULT_GYM_PROFILE]);
@@ -148,6 +162,13 @@ export function AppContextProvider({ children }) {
   const [initialized, setInitialized] = useState(false);
   const [onboardingComplete, setOnboardingCompleteState] = useState(false);
   const [exerciseMap, setExerciseMap] = useState({});
+  const [manualRecoveryInput, setManualRecoveryInput] = useState(null);
+  const [milestoneUnlocks, setMilestoneUnlocks] = useState({});
+  const [latestMilestones, setLatestMilestones] = useState([]);
+  const [engagementSnapshot, setEngagementSnapshot] = useState({
+    streaks: { training: { current: 0, longest: 0 }, logging: { current: 0, longest: 0 }, bodyweight: { current: 0, longest: 0 } },
+    weeklySummary: null,
+  });
    const [backupConfig, setBackupConfigState] = useState(DEFAULT_BACKUP_CONFIG);
    const [backupStatus, setBackupStatusState] = useState(DEFAULT_BACKUP_STATUS);
    const [notificationSettings, setNotificationSettingsState] = useState(DEFAULT_NOTIFICATION_SETTINGS);
@@ -218,6 +239,8 @@ export function AppContextProvider({ children }) {
         'ironlog_exerciseMap',
         HAPTICS_RECOVERY_MIGRATION_KEY,
         SQLITE_MIGRATION_MARKER_KEY,
+        MANUAL_RECOVERY_INPUT_KEY,
+        MILESTONE_UNLOCKS_KEY,
       ];
       const vals = await AsyncStorage.multiGet(keys);
       const map = Object.fromEntries(vals.map(([k, v]) => [k, v ? JSON.parse(v) : null]));
@@ -254,6 +277,8 @@ export function AppContextProvider({ children }) {
       if (map['@ironlog/onboardingComplete']) {
         setOnboardingCompleteState(true);
       }
+      if (map[MANUAL_RECOVERY_INPUT_KEY]) setManualRecoveryInput(map[MANUAL_RECOVERY_INPUT_KEY]);
+      if (map[MILESTONE_UNLOCKS_KEY]) setMilestoneUnlocks(map[MILESTONE_UNLOCKS_KEY]);
 
       let sqliteMigrated = !!map[SQLITE_MIGRATION_MARKER_KEY];
       if (!sqliteMigrated) {
@@ -271,6 +296,11 @@ export function AppContextProvider({ children }) {
         setPlans(snapshot.plans || []);
         setHistory(snapshot.history || []);
         setBodyWeight(snapshot.bodyWeight || []);
+        if (!map[MILESTONE_UNLOCKS_KEY]) {
+          const computed = evaluateMilestones({ history: snapshot.history || [], milestoneState: {} });
+          setMilestoneUnlocks(computed.state);
+          await AsyncStorage.setItem(MILESTONE_UNLOCKS_KEY, JSON.stringify(computed.state));
+        }
       }
 
       const libraryIndex = await getExerciseIndex().catch(() => null);
@@ -285,6 +315,46 @@ export function AppContextProvider({ children }) {
     } catch (e) { console.warn('Init error:', e); }
     setInitialized(true);
   };
+
+  useEffect(() => {
+    const streaks = computeStreaks({ history, bodyWeight });
+    const weeklySummary = buildWeeklySummary({ history, bodyWeight });
+    setEngagementSnapshot({ streaks, weeklySummary });
+  }, [history, bodyWeight]);
+
+  useEffect(() => {
+    if (!initialized) return;
+    const run = async () => {
+      const consistency = computeConsistencyMetrics({ history, activePlan: plans?.[0], bodyWeight });
+      const recoverySuggestions = manualRecoveryInput?.soreness >= 4
+        ? ['Soreness is elevated today. Keep loading conservative and prioritize recovery.']
+        : buildReadinessSuggestions({ readiness: {} });
+      const candidates = buildDefaultNotificationCandidates({
+        settings: notificationSettings,
+        workoutsLast7d: consistency.workoutsLast7d,
+        bodyweightLoggingConsistency: consistency.bodyweightLoggingConsistency,
+        recoverySuggestions,
+        streaks: engagementSnapshot.streaks,
+        newMilestones: latestMilestones,
+        history,
+        bodyWeightEntries: bodyWeight,
+        backupStatus,
+        activePlan: plans?.[0] || null,
+      });
+      const chosen = await scheduleSmartNotification({
+        settings: notificationSettings,
+        activePlan: plans?.[0] || null,
+        updateSettings: async (nextSettings) => {
+          const next = await saveNotificationSettings(nextSettings);
+          setNotificationSettingsState(next);
+          return next;
+        },
+        candidates,
+      });
+      if (chosen && latestMilestones.length) setLatestMilestones([]);
+    };
+    run().catch(() => {});
+  }, [initialized, history.length, bodyWeight.length, manualRecoveryInput, notificationSettings, plans, engagementSnapshot.streaks, latestMilestones, backupStatus]);
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', (nextState) => {
@@ -325,10 +395,14 @@ export function AppContextProvider({ children }) {
   const addHistory = async (entry) => {
     const h = [entry, ...history].slice(0, 200);
     setHistory(h);
+    const nextMilestones = evaluateMilestones({ history: h, milestoneState: milestoneUnlocks });
+    setMilestoneUnlocks(nextMilestones.state);
+    setLatestMilestones(nextMilestones.unlocked);
     try {
       await addHistorySessionToDb(entry);
       const indexPairs = await buildIndexUpdatesForSession(entry);
       const storageWrite = [['ironlog_history', JSON.stringify(h)], ...(indexPairs || [])];
+      storageWrite.push([MILESTONE_UNLOCKS_KEY, JSON.stringify(nextMilestones.state)]);
       await AsyncStorage.multiSet(storageWrite);
       await flagDirty('workout_completion');
       if (backupConfig.enabled && backupConfig.autoBackupOnWorkoutCompletion && backupConfig.passphraseConfigured) {
@@ -338,6 +412,7 @@ export function AppContextProvider({ children }) {
       console.warn('addHistory index error:', e);
       await save('ironlog_history', h, 'workout_completion');
     }
+    return { unlockedMilestones: nextMilestones.unlocked };
   };
   const clearHistory = async () => {
     try {
@@ -375,6 +450,19 @@ export function AppContextProvider({ children }) {
     setExerciseNotes(n); await save('ironlog_notes', n, 'notes_changed');
   };
   const updateSettings = async (s) => { setSettings(s); await save('ironlog_settings', s, 'settings_changed'); };
+  const saveManualRecovery = async (entry) => {
+    const payload = {
+      soreness: Number(entry?.soreness || 0),
+      sleepQuality: Number(entry?.sleepQuality || 0),
+      energy: Number(entry?.energy || 0),
+      notes: entry?.notes || '',
+      recordedAt: entry?.recordedAt || new Date().toISOString(),
+    };
+    setManualRecoveryInput(payload);
+    await AsyncStorage.setItem(MANUAL_RECOVERY_INPUT_KEY, JSON.stringify(payload));
+    await flagDirty('manual_recovery_changed');
+    return payload;
+  };
 
   const completeOnboarding = async () => {
     setOnboardingCompleteState(true);
@@ -423,6 +511,9 @@ export function AppContextProvider({ children }) {
     backupConfig,
     backupStatus,
     notificationSettings,
+    manualRecoveryInput,
+    milestoneUnlocks,
+    engagementSnapshot,
   });
 
   const updateBackupPreferences = async (patch) => {
@@ -469,6 +560,14 @@ export function AppContextProvider({ children }) {
     if (data.bodyWeight) { setBodyWeight(data.bodyWeight); await save('ironlog_bw', data.bodyWeight); }
     if (data.exerciseNotes) { setExerciseNotes(data.exerciseNotes); await save('ironlog_notes', data.exerciseNotes); }
     if (data.settings) { setSettings(data.settings); await save('ironlog_settings', data.settings); }
+    if (data.manualRecoveryInput) {
+      setManualRecoveryInput(data.manualRecoveryInput);
+      await AsyncStorage.setItem(MANUAL_RECOVERY_INPUT_KEY, JSON.stringify(data.manualRecoveryInput));
+    }
+    if (data.milestoneUnlocks) {
+      setMilestoneUnlocks(data.milestoneUnlocks);
+      await AsyncStorage.setItem(MILESTONE_UNLOCKS_KEY, JSON.stringify(data.milestoneUnlocks));
+    }
     if (data.gymProfiles?.length) {
       setGymProfiles(data.gymProfiles);
       await AsyncStorage.setItem('@ironlog/gymProfiles', JSON.stringify(data.gymProfiles));
@@ -501,11 +600,13 @@ export function AppContextProvider({ children }) {
   return (
     <AppContext.Provider value={{
       plans, history, pb, bodyWeight, exerciseNotes, settings, initialized,
+      manualRecoveryInput, milestoneUnlocks, engagementSnapshot,
       onboardingComplete, completeOnboarding, resetOnboarding,
       gymProfiles, activeGymProfileId, activeGymProfile,
       exerciseMap, backupConfig, backupStatus, notificationSettings,
       savePlans, addHistory, clearHistory, updatePb, clearPbs,
       logBodyWeight, saveExerciseNotes, updateSettings,
+      saveManualRecovery,
       saveGymProfiles, setActiveGymProfileId,
       getAllData, restoreData, reloadFromStorage,
       refreshBackupState, updateBackupPreferences, updateNotificationPreferences,

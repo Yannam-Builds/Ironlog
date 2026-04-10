@@ -23,12 +23,14 @@ export const BACKUP_MANAGED_KEYS = {
   onboarding: ['@ironlog/onboardingComplete'],
   exerciseMap: ['ironlog_exerciseMap'],
   training: ['@ironlog/trainingMaxes', '@ironlog/nextTargets'],
+  recovery: ['@ironlog/manualRecoveryInput'],
+  milestones: ['@ironlog/milestoneUnlocks'],
   customExercises: ['@ironlog/customExercises'],
   notifications: [BACKUP_NOTIFICATION_SETTINGS_KEY],
   backupPreferences: [BACKUP_CONFIG_KEY],
 };
 
-export const BACKUP_RESTOREABLE_DOMAINS = ['plans', 'history', 'metrics', 'settings', 'customExercises'];
+export const BACKUP_RESTOREABLE_DOMAINS = ['plans', 'history', 'metrics', 'settings', 'recovery', 'milestones', 'customExercises'];
 
 export const DEFAULT_BACKUP_CONFIG = {
   enabled: false,
@@ -59,6 +61,7 @@ export const DEFAULT_BACKUP_STATUS = {
 
 export const DEFAULT_NOTIFICATION_SETTINGS = {
   enabled: false,
+  notificationProfile: 'balanced',
   trainingReminders: true,
   recoverySuggestions: true,
   planAdherenceAlerts: true,
@@ -67,8 +70,17 @@ export const DEFAULT_NOTIFICATION_SETTINGS = {
   quietHoursStart: 22,
   quietHoursEnd: 8,
   cooldownHours: 12,
+  maxNotificationsPerDayOverride: null,
+  weeklyCapMode: 'plan_based',
+  maxNotificationsPerWeekOverride: null,
+  reminderLeadMinutes: 90,
+  deliveryJitterMinutes: 12,
+  perTopicCooldownHours: {},
+  snoozeUntil: null,
+  decisionLog: [],
   lastDecisionAt: null,
   lastDecisionKey: null,
+  lastScheduledFor: null,
 };
 
 export const BACKUP_LOCAL_DIR_NAME = 'backups';

@@ -244,9 +244,9 @@ function roundMetric(value, decimals = 1) {
   return Math.round(n * factor) / factor;
 }
 
-function formatSetsValue(value) {
+function formatSetsValue(value, compact = true) {
   const rounded = roundMetric(value, 1);
-  if (Math.abs(rounded) >= 100) return String(Math.round(rounded));
+  if (compact && Math.abs(rounded) >= 100) return String(Math.round(rounded));
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
 }
 
@@ -396,7 +396,7 @@ function isWithinDays(sessionDate, days) {
 }
 
 export default function VolumeAnalyticsScreen() {
-  const { history, plans } = useContext(AppContext);
+  const { history, plans, settings } = useContext(AppContext);
   const colors = useTheme();
   const analyticsShareRef = useRef(null);
   const [windowKey, setWindowKey] = useState('current_week');
@@ -484,6 +484,7 @@ export default function VolumeAnalyticsScreen() {
     if (windowKey === '7d') return 'Last 7 days';
     return 'Current week';
   }, [activePlan?.name, windowKey]);
+  const compactNumbers = settings?.compactAnalyticsNumbers !== false;
   const shareFunLine = useMemo(() => {
     if (analytics.totalVolumeKg <= 0) return 'Log training to unlock your volume interpretation.';
     return buildVolumeInterpretationSentence({
@@ -626,7 +627,7 @@ export default function VolumeAnalyticsScreen() {
                 <React.Fragment key={muscle}>
                   <Rect x={x} y={y} width={barWidth} height={Math.max(2, barHeight)} fill={barColor} rx={3} ry={3} />
                   <SvgText x={x + barWidth / 2} y={y - 4} fontSize={10} fontWeight="bold" fill={colors.text} textAnchor="middle">
-                    {formatSetsValue(sets)}
+                    {formatSetsValue(sets, compactNumbers)}
                   </SvgText>
                   <SvgText
                     x={x + barWidth / 2}
@@ -678,7 +679,7 @@ export default function VolumeAnalyticsScreen() {
                 <View key={label} style={s.pplItem}>
                   <View style={[s.pplDot, { backgroundColor: color }]} />
                   <Text style={[s.pplLabelText, { color: colors.text }]}>{label}</Text>
-                  <Text style={[s.pplCount, { color }]}>{formatSetsValue(sets)}</Text>
+                  <Text style={[s.pplCount, { color }]}>{formatSetsValue(sets, compactNumbers)}</Text>
                   <Text style={[s.pplPct, { color: colors.muted }]}>{Math.round((sets / pplTotal) * 100)}%</Text>
                 </View>
               ))}
@@ -705,7 +706,7 @@ export default function VolumeAnalyticsScreen() {
                 <View style={[s.muscleBarBg, { backgroundColor: colors.faint }]}>
                   <View style={[s.muscleFill, { width: `${Math.round(pct * 100)}%`, backgroundColor: color + '88', borderColor: color }]} />
                 </View>
-                <Text style={[s.muscleCount, { color }]}>{formatSetsValue(sets)}</Text>
+                <Text style={[s.muscleCount, { color }]}>{formatSetsValue(sets, compactNumbers)}</Text>
               </View>
             );
           })

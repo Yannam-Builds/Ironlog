@@ -69,23 +69,34 @@ Download the latest Android APK from [GitHub Releases](https://github.com/Yannam
 
 _Requires Android 7.0 or higher._
 
-## Pre-Release: Alpha 1.1.0
+## Pre-Release: Beta 1.1.0
 
-This pre-release focuses on stability and workout-flow quality before the full 2.0 rollout.
+This beta focuses on release hardening, smarter intelligence flows, and migration-safe upgrades toward the full 2.0 rollout.
 
-### Included in Alpha 1.1.0
+### Included in Beta 1.1.0
 
 - Fixed Google Drive backup UX for builds without Drive OAuth configuration.
 - Fixed `Program`-mode crash paths in Volume Analytics and Muscle Recovery.
 - Cleaned analytics number formatting for effective sets, push/pull/legs balance, and muscle breakdown.
 - Added inline edit and delete controls for logged sets during active workouts.
 - Added `Add Exercise` support at the bottom of an ongoing workout.
+- Added Program Insights with adherence tracking, adaptive targets, and missed-day reschedule guidance.
+- Added Goal Mode control in Settings (`Hypertrophy`, `Strength`, `General Fitness`) and wired it into adaptive targets.
+- Expanded Exercise Progress into full trend dashboards: E1RM, Load, Reps, Volume, Consistency, and History.
+- Added recovery score + manual recovery check-in (soreness, sleep, energy) in Muscle Recovery.
+- Added streak and milestone engine with Home surfacing.
+- Added weekly summary card generation and Home integration.
+- Added smart notification scheduler foundation with cooldown + quiet-hour controls.
+- Upgraded smart notifications with profile-based policy (`Conservative`, `Balanced`, `Aggressive`), per-topic cooldowns, snooze controls, and decision log visibility.
+- Added restore wizard entrypoint for reinstall users with encrypted backup + SQLite import paths.
+- Added full SQLite export/import foundation with versioned schema validation.
+- Added new share cards for bodyweight progress, exercise PR trend, and weekly summary.
+- Improved history UX with actionable empty states and clearer session-to-session volume comparison.
+- Expanded settings with intelligence controls and analytics number preference.
 
 ### Next planned changes
 
-- Finish Phase C + D: complete PR/trend dashboards, stronger performance scoring surfaces, and full Program Insights screen.
-- Finish Phase E + F: readiness score inputs, streaks, milestones, weekly summaries, and notification cooldown controls.
-- Finish Phase G + H: stronger export/import schema flow, expanded share cards, and final logging/history UX polish.
+- Stabilization pass, QA hardening, and release candidate packaging.
 
 ## Why IronLog
 

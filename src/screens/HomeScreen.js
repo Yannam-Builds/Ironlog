@@ -2,6 +2,8 @@ import React, { useContext, useState, useEffect, useMemo } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal, Image } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
+import { captureRef } from 'react-native-view-shot';
+import * as Sharing from 'expo-sharing';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppContext } from '../context/AppContext';
 import { useTheme } from '../context/ThemeContext';
@@ -17,6 +19,7 @@ import {
   buildAdaptiveDayTargets,
   buildProgramInsights,
 } from '../domain/intelligence/programIntelligenceEngine';
+import { computeRecoveryScore } from '../domain/intelligence/recoveryReadinessEngine';
 
 const ONBOARDING_KEY = '@ironlog/onboardingComplete';
 
@@ -155,10 +158,15 @@ function computeSetBasedGroupReadiness(history) {
 }
 
 export default function HomeScreen({ navigation }) {
-  const { plans, history, bodyWeight, pb, exerciseMap, onboardingComplete, completeOnboarding } = useContext(AppContext);
+  const {
+    plans, history, bodyWeight, pb, exerciseMap, settings, onboardingComplete, completeOnboarding,
+    manualRecoveryInput, engagementSnapshot, milestoneUnlocks,
+  } = useContext(AppContext);
   const colors = useTheme();
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [libraryIndex, setLibraryIndex] = useState([]);
+  const [weeklyShareNode, setWeeklyShareNode] = useState(null);
+  const [weeklyShareStatus, setWeeklyShareStatus] = useState('');
 
   useEffect(() => {
     let mounted = true;
@@ -287,17 +295,17 @@ export default function HomeScreen({ navigation }) {
     return buildAdaptiveDayTargets({
       day: nextDay,
       history,
-      goalMode: activePlan?.goalMode || 'hypertrophy',
+      goalMode: activePlan?.goalMode || settings?.goalMode || 'hypertrophy',
     })
       .map((suggestion) => ({ exercise: { name: suggestion.exerciseName }, suggestion }))
       .slice(0, 3);
-  }, [activePlan?.goalMode, history, nextDay]);
+  }, [activePlan?.goalMode, history, nextDay, settings?.goalMode]);
 
   const programInsights = useMemo(() => buildProgramInsights({
     activePlan,
     history,
-    goalMode: activePlan?.goalMode || 'hypertrophy',
-  }), [activePlan, history]);
+    goalMode: activePlan?.goalMode || settings?.goalMode || 'hypertrophy',
+  }), [activePlan, history, settings?.goalMode]);
 
   const consistencyMetrics = useMemo(() => computeConsistencyMetrics({
     history,
@@ -321,6 +329,22 @@ export default function HomeScreen({ navigation }) {
       recommendedTemplateId: recommendation.recommendedTemplateId,
       autoOpenRecommended: true,
     });
+  };
+
+  const shareWeeklySummary = async () => {
+    if (!weeklyShareNode) return;
+    try {
+      setWeeklyShareStatus('');
+      const uri = await captureRef(weeklyShareNode, { format: 'png', quality: 1 });
+      const canShare = await Sharing.isAvailableAsync();
+      if (!canShare) {
+        setWeeklyShareStatus('Sharing unavailable on this device.');
+        return;
+      }
+      await Sharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: 'Share weekly summary' });
+    } catch (e) {
+      setWeeklyShareStatus(`Share failed: ${String(e?.message || e)}`);
+    }
   };
 
   return (
@@ -379,6 +403,14 @@ export default function HomeScreen({ navigation }) {
           {programInsights?.recommendedReschedule ? (
             <Text style={[s.intelReason, { color: colors.muted }]}>Reschedule: {programInsights.recommendedReschedule}</Text>
           ) : null}
+          {activePlan ? (
+            <TouchableOpacity
+              onPress={() => navigation.navigate('ProgramInsights')}
+              style={[s.programCta, { borderColor: colors.accent + '66', backgroundColor: colors.bg + '66' }]}>
+              <Text style={[s.programCtaText, { color: colors.accent }]}>OPEN PROGRAM INSIGHTS</Text>
+              <Ionicons name="arrow-forward" size={13} color={colors.accent} />
+            </TouchableOpacity>
+          ) : null}
           <View style={s.metricRow}>
             <Text style={[s.metricChip, { color: colors.text, borderColor: colors.faint }]}>
               {consistencyMetrics.workoutsPerWeek} workouts/week
@@ -408,6 +440,26 @@ export default function HomeScreen({ navigation }) {
           )}
         </TouchableOpacity>
       )}
+
+      {/* Weekly summary */}
+      {engagementSnapshot?.weeklySummary ? (
+        <View ref={setWeeklyShareNode} collapsable={false} style={[s.intelCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+          <Text style={[s.intelSup, { color: colors.muted }]}>WEEKLY SUMMARY</Text>
+          <TouchableOpacity style={[s.weeklyShareBtn, { borderColor: colors.accent }]} onPress={shareWeeklySummary}>
+            <Ionicons name="share-social-outline" size={12} color={colors.accent} />
+            <Text style={[s.weeklyShareText, { color: colors.accent }]}>SHARE</Text>
+          </TouchableOpacity>
+          <Text style={[s.intelReason, { color: colors.text, marginTop: 2 }]}>{engagementSnapshot.weeklySummary.summaryLine}</Text>
+          <View style={s.metricRow}>
+            <Text style={[s.metricChip, { color: colors.text, borderColor: colors.faint }]}>{engagementSnapshot.weeklySummary.workouts} workouts</Text>
+            <Text style={[s.metricChip, { color: colors.text, borderColor: colors.faint }]}>{engagementSnapshot.weeklySummary.totalSets} sets</Text>
+            <Text style={[s.metricChip, { color: colors.text, borderColor: colors.faint }]}>{Math.round(engagementSnapshot.weeklySummary.totalVolume / 1000 * 10) / 10}t volume</Text>
+            <Text style={[s.metricChip, { color: colors.text, borderColor: colors.faint }]}>Train streak {engagementSnapshot?.streaks?.training?.current || 0}d</Text>
+            <Text style={[s.metricChip, { color: colors.text, borderColor: colors.faint }]}>BW streak {engagementSnapshot?.streaks?.bodyweight?.current || 0}d</Text>
+          </View>
+          {weeklyShareStatus ? <Text style={[s.intelReason, { color: colors.muted }]}>{weeklyShareStatus}</Text> : null}
+        </View>
+      ) : null}
 
       {/* Stats row */}
       <View style={[s.statsRow, { borderBottomColor: colors.faint }]}>
@@ -451,6 +503,34 @@ export default function HomeScreen({ navigation }) {
 
       {/* Recovery heatmap */}
       <RecoveryHeatmap navigation={navigation} groupReadiness={groupReadiness} />
+      {(() => {
+        const recoveryScore = computeRecoveryScore({ readiness: groupReadiness, manualInput: manualRecoveryInput });
+        return (
+          <TouchableOpacity
+            style={[s.intelCard, { backgroundColor: colors.card, borderColor: colors.cardBorder, marginTop: 10 }]}
+            onPress={() => navigation.navigate('RecoveryMap')}
+          >
+            <Text style={[s.intelSup, { color: colors.muted }]}>READINESS</Text>
+            <Text style={[s.intelMain, { color: recoveryScore.state === 'fatigued' ? '#FF8E8E' : recoveryScore.state === 'recovering' ? '#FFD166' : '#6FE0A4' }]}>
+              Recovery {recoveryScore.score}
+            </Text>
+            <Text style={[s.intelReason, { color: colors.subtext }]}>{recoveryScore.explanation}</Text>
+          </TouchableOpacity>
+        );
+      })()}
+
+      {Object.keys(milestoneUnlocks || {}).length ? (
+        <View style={{ paddingHorizontal: 16, paddingTop: 6 }}>
+          <Text style={[s.chipsLabel, { color: colors.muted }]}>MILESTONES</Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+            {Object.values(milestoneUnlocks).slice(-4).reverse().map((milestone) => (
+              <View key={milestone.key} style={[s.metricChip, { borderColor: colors.accent + '66', backgroundColor: colors.accentSoft }]}>
+                <Text style={{ color: colors.accent, fontSize: 10, fontWeight: '800', letterSpacing: 0.8 }}>{milestone.label}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+      ) : null}
 
       {/* Day cards */}
       <View style={s.daysSection}>
@@ -501,6 +581,13 @@ export default function HomeScreen({ navigation }) {
               onPress={() => dismissOnboarding(true)}>
               <Text style={s.onboardBtnText}>CREATE A PLAN</Text>
             </TouchableOpacity>
+            <TouchableOpacity style={[s.restoreBtn, { borderColor: colors.faint }]}
+              onPress={() => {
+                setShowOnboarding(false);
+                navigation.navigate('RestoreData');
+              }}>
+              <Text style={[s.restoreBtnText, { color: colors.muted }]}>RESTORE PREVIOUS DATA</Text>
+            </TouchableOpacity>
             <TouchableOpacity style={s.onboardSkip} onPress={() => dismissOnboarding(false)}>
               <Text style={[s.onboardSkipText, { color: colors.muted }]}>Skip for now</Text>
             </TouchableOpacity>
@@ -527,6 +614,10 @@ const s = StyleSheet.create({
   targetPreviewVal: { fontSize: 13, fontWeight: '900' },
   metricRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
   metricChip: { borderWidth: 1, paddingHorizontal: 8, paddingVertical: 5, fontSize: 10, letterSpacing: 0.4 },
+  programCta: { marginTop: 10, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'flex-start' },
+  programCtaText: { fontSize: 10, fontWeight: '800', letterSpacing: 1.2 },
+  weeklyShareBtn: { position: 'absolute', right: 12, top: 10, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 5, flexDirection: 'row', alignItems: 'center', gap: 6 },
+  weeklyShareText: { fontSize: 9, fontWeight: '800', letterSpacing: 1 },
   statsRow: { flexDirection: 'row', borderBottomWidth: 1 },
   statBox: { flex: 1, padding: 16, alignItems: 'center' },
   statVal: { fontSize: 20, fontWeight: '900' },
@@ -556,6 +647,8 @@ const s = StyleSheet.create({
   onboardSub: { fontSize: 14, textAlign: 'center', lineHeight: 22 },
   onboardBtn: { width: '100%', padding: 18, alignItems: 'center', marginTop: 8 },
   onboardBtnText: { color: '#fff', fontWeight: '800', fontSize: 14, letterSpacing: 2 },
+  restoreBtn: { width: '100%', padding: 14, alignItems: 'center', borderWidth: 1 },
+  restoreBtnText: { fontSize: 11, fontWeight: '700', letterSpacing: 1.3 },
   onboardSkip: { paddingVertical: 8 },
   onboardSkipText: { fontSize: 13 },
 });

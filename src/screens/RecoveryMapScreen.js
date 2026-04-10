@@ -1,8 +1,10 @@
 import React, { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
   PanResponder,
+  Modal,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -11,6 +13,7 @@ import { AppContext } from '../context/AppContext';
 import { useTheme } from '../context/ThemeContext';
 import BodyMapSVG from '../components/BodyMapSVG';
 import { computeMuscleAnalytics } from '../domain/intelligence/trainingAnalyticsEngine';
+import { buildReadinessSuggestions, computeRecoveryScore } from '../domain/intelligence/recoveryReadinessEngine';
 import { getExerciseIndex } from '../services/ExerciseLibraryService';
 import { getMuscleAtTouch } from '../utils/muscleMapHitTest';
 
@@ -51,7 +54,7 @@ function getRegionColors(groupReadiness, colors) {
 }
 
 export default function RecoveryMapScreen({ navigation, route }) {
-  const { history, plans } = useContext(AppContext);
+  const { history, plans, manualRecoveryInput, saveManualRecovery } = useContext(AppContext);
   const colors = useTheme();
   const [view, setView] = useState('front');
   const [windowKey, setWindowKey] = useState('7d');
@@ -59,6 +62,13 @@ export default function RecoveryMapScreen({ navigation, route }) {
   const [tooltip, setTooltip] = useState(null);
   const hideTimerRef = useRef(null);
   const [libraryIndex, setLibraryIndex] = useState([]);
+  const [showManualModal, setShowManualModal] = useState(false);
+  const [manualDraft, setManualDraft] = useState({
+    soreness: 0,
+    sleepQuality: 0,
+    energy: 0,
+    notes: '',
+  });
   const fallbackReadiness = route?.params?.groupReadiness || {};
   const activePlan = plans[0];
   const programHasExercises = useMemo(() => {
@@ -92,6 +102,14 @@ export default function RecoveryMapScreen({ navigation, route }) {
     }
   }, [programHasExercises, windowKey]);
   const groupReadiness = Object.keys(analytics.readiness || {}).length ? analytics.readiness : fallbackReadiness;
+  const recoveryScore = useMemo(
+    () => computeRecoveryScore({ readiness: groupReadiness, manualInput: manualRecoveryInput }),
+    [groupReadiness, manualRecoveryInput]
+  );
+  const readinessSuggestions = useMemo(
+    () => buildReadinessSuggestions({ readiness: groupReadiness }),
+    [groupReadiness]
+  );
 
   const regionColors = useMemo(
     () => getRegionColors(groupReadiness, colors),
@@ -138,8 +156,32 @@ export default function RecoveryMapScreen({ navigation, route }) {
     [mapSize, view]
   );
 
+  useEffect(() => {
+    if (!showManualModal) return;
+    setManualDraft({
+      soreness: Number(manualRecoveryInput?.soreness || 0),
+      sleepQuality: Number(manualRecoveryInput?.sleepQuality || 0),
+      energy: Number(manualRecoveryInput?.energy || 0),
+      notes: manualRecoveryInput?.notes || '',
+    });
+  }, [manualRecoveryInput, showManualModal]);
+
   return (
     <View style={[s.container, { backgroundColor: colors.bg }]}>
+      <View style={[s.scoreCard, { borderColor: colors.cardBorder, backgroundColor: colors.card }]}>
+        <Text style={[s.scoreLabel, { color: colors.muted }]}>RECOVERY SCORE</Text>
+        <Text style={[s.scoreValue, { color: recoveryScore.state === 'fatigued' ? '#FF8E8E' : recoveryScore.state === 'recovering' ? '#FFD166' : '#6FE0A4' }]}>
+          {recoveryScore.score}
+        </Text>
+        <Text style={[s.scoreHint, { color: colors.subtext }]}>{recoveryScore.explanation}</Text>
+        {readinessSuggestions[0] ? (
+          <Text style={[s.scoreHint, { color: colors.muted }]}>{readinessSuggestions[0]}</Text>
+        ) : null}
+        <TouchableOpacity style={[s.manualBtn, { borderColor: colors.accent }]} onPress={() => setShowManualModal(true)}>
+          <Text style={[s.manualBtnText, { color: colors.accent }]}>UPDATE MANUAL CHECK-IN</Text>
+        </TouchableOpacity>
+      </View>
+
       <View style={s.switchRow}>
         {[
           ['current_workout', 'Workout'],
@@ -245,12 +287,74 @@ export default function RecoveryMapScreen({ navigation, route }) {
         <Ionicons name="analytics-outline" size={15} color="#fff" />
         <Text style={s.analyticsBtnText}>OPEN VOLUME ANALYTICS</Text>
       </TouchableOpacity>
+
+      <Modal visible={showManualModal} transparent animationType="fade" onRequestClose={() => setShowManualModal(false)}>
+        <View style={s.overlay}>
+          <View style={[s.modalCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+            <Text style={[s.modalTitle, { color: colors.text }]}>Manual Recovery Input</Text>
+            {[
+              ['soreness', 'Soreness (1-5)'],
+              ['sleepQuality', 'Sleep (1-5)'],
+              ['energy', 'Energy (1-5)'],
+            ].map(([key, label]) => (
+              <View key={key} style={{ marginBottom: 10 }}>
+                <Text style={[s.inputLabel, { color: colors.subtext }]}>{label}</Text>
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  {[1, 2, 3, 4, 5].map((value) => {
+                    const active = Number(manualDraft[key] || 0) === value;
+                    return (
+                      <TouchableOpacity
+                        key={`${key}:${value}`}
+                        style={[
+                          s.rateBtn,
+                          { borderColor: active ? colors.accent : colors.faint, backgroundColor: active ? colors.accentSoft : 'transparent' },
+                        ]}
+                        onPress={() => setManualDraft((prev) => ({ ...prev, [key]: value }))}
+                      >
+                        <Text style={{ color: active ? colors.accent : colors.muted, fontSize: 12, fontWeight: '800' }}>{value}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            ))}
+            <TextInput
+              style={[s.notesInput, { color: colors.text, borderColor: colors.faint, backgroundColor: colors.bg }]}
+              value={manualDraft.notes}
+              onChangeText={(value) => setManualDraft((prev) => ({ ...prev, notes: value }))}
+              placeholder="Optional note..."
+              placeholderTextColor={colors.muted}
+              multiline
+            />
+            <View style={s.modalActions}>
+              <TouchableOpacity style={[s.modalBtn, { borderColor: colors.faint }]} onPress={() => setShowManualModal(false)}>
+                <Text style={{ color: colors.muted }}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[s.modalBtn, { borderColor: colors.accent, backgroundColor: colors.accentSoft }]}
+                onPress={async () => {
+                  await saveManualRecovery(manualDraft);
+                  setShowManualModal(false);
+                }}
+              >
+                <Text style={{ color: colors.accent, fontWeight: '800' }}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
 
 const s = StyleSheet.create({
   container: { flex: 1, padding: 16 },
+  scoreCard: { borderWidth: 1, borderRadius: 12, padding: 12, marginBottom: 10 },
+  scoreLabel: { fontSize: 9, letterSpacing: 2.3, fontWeight: '800' },
+  scoreValue: { fontSize: 30, fontWeight: '900', marginTop: 4 },
+  scoreHint: { fontSize: 11, marginTop: 4, lineHeight: 16 },
+  manualBtn: { marginTop: 10, borderWidth: 1, paddingVertical: 8, alignItems: 'center' },
+  manualBtnText: { fontSize: 10, fontWeight: '800', letterSpacing: 1.2 },
   switchRow: { flexDirection: 'row', gap: 10, marginBottom: 10 },
   switchBtn: {
     flex: 1,
@@ -294,4 +398,12 @@ const s = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 1.2,
   },
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.84)', justifyContent: 'center', padding: 24 },
+  modalCard: { borderWidth: 1, padding: 16 },
+  modalTitle: { fontSize: 16, fontWeight: '900', marginBottom: 12 },
+  inputLabel: { fontSize: 11, marginBottom: 8 },
+  rateBtn: { width: 34, height: 34, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  notesInput: { borderWidth: 1, minHeight: 70, padding: 10, textAlignVertical: 'top', marginTop: 6 },
+  modalActions: { flexDirection: 'row', gap: 8, marginTop: 12 },
+  modalBtn: { flex: 1, borderWidth: 1, paddingVertical: 10, alignItems: 'center' },
 });

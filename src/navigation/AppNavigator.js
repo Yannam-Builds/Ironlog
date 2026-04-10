@@ -24,12 +24,14 @@ import ExerciseProgressScreen from '../screens/ExerciseProgressScreen';
 import WorkoutCalendarScreen from '../screens/WorkoutCalendarScreen';
 import VolumeAnalyticsScreen from '../screens/VolumeAnalyticsScreen';
 import RecoveryMapScreen from '../screens/RecoveryMapScreen';
+import ProgramInsightsScreen from '../screens/ProgramInsightsScreen';
 import BodyMeasurementsScreen from '../screens/BodyMeasurementsScreen';
 import GymProfilesScreen from '../screens/GymProfilesScreen';
 import GymProfileEditorScreen from '../screens/GymProfileEditorScreen';
 import OnboardingScreen from '../screens/OnboardingScreen';
 import BackupCenterScreen from '../screens/BackupCenterScreen';
 import PrivacyScreen from '../screens/PrivacyScreen';
+import RestoreDataScreen from '../screens/RestoreDataScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -110,11 +112,13 @@ export default function AppNavigator() {
         <Stack.Screen name="WorkoutCalendar" component={WorkoutCalendarScreen} options={{ ...headerOpts(colors), title: 'CALENDAR' }} />
         <Stack.Screen name="VolumeAnalytics" component={VolumeAnalyticsScreen} options={{ ...headerOpts(colors), title: 'VOLUME ANALYTICS' }} />
         <Stack.Screen name="RecoveryMap" component={RecoveryMapScreen} options={{ ...headerOpts(colors), title: 'MUSCLE RECOVERY' }} />
+        <Stack.Screen name="ProgramInsights" component={ProgramInsightsScreen} options={{ ...headerOpts(colors), title: 'PROGRAM INSIGHTS' }} />
         <Stack.Screen name="BodyMeasurements" component={BodyMeasurementsScreen} options={{ ...headerOpts(colors), title: 'BODY TRACKER' }} />
         <Stack.Screen name="GymProfiles" component={GymProfilesScreen} options={{ ...headerOpts(colors), title: 'GYM PROFILES' }} />
         <Stack.Screen name="GymProfileEditor" component={GymProfileEditorScreen} options={{ ...headerOpts(colors), title: 'EDIT PROFILE' }} />
         <Stack.Screen name="BackupCenter" component={BackupCenterScreen} options={{ ...headerOpts(colors), title: 'BACKUP CENTER' }} />
         <Stack.Screen name="Privacy" component={PrivacyScreen} options={{ ...headerOpts(colors), title: 'PRIVACY' }} />
+        <Stack.Screen name="RestoreData" component={RestoreDataScreen} options={{ ...headerOpts(colors), title: 'RESTORE DATA' }} />
       </Stack.Navigator>
     </NavigationContainer>
   );

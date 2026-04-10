@@ -20,6 +20,8 @@ import Svg, {
   Text as SvgText,
 } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
+import * as Sharing from 'expo-sharing';
+import { captureRef } from 'react-native-view-shot';
 import { useApp } from '../context/AppContext';
 import { useTheme } from '../context/ThemeContext';
 import { triggerHaptic } from '../services/hapticsEngine';
@@ -240,6 +242,8 @@ export default function BodyWeightScreen() {
 
   const [weightInput, setWeightInput] = useState('');
   const [range, setRange] = useState('30D');
+  const [shareStatus, setShareStatus] = useState('');
+  const [shareNode, setShareNode] = useState(null);
 
   const unit = settings?.weightUnit || 'kg';
 
@@ -296,6 +300,23 @@ export default function BodyWeightScreen() {
     );
   };
 
+  const onShare = async () => {
+    if (!shareNode) return;
+    try {
+      setShareStatus('');
+      const uri = await captureRef(shareNode, { format: 'png', quality: 1 });
+      const canShare = await Sharing.isAvailableAsync();
+      if (!canShare) {
+        setShareStatus('Sharing unavailable on this device.');
+        return;
+      }
+      await Sharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: 'Share bodyweight progress' });
+      triggerHaptic('success', { enabled: haptic }).catch(() => {});
+    } catch (e) {
+      setShareStatus(`Share failed: ${String(e?.message || e)}`);
+    }
+  };
+
   return (
     <ScrollView
       style={[s.container, { backgroundColor: colors.bg }]}
@@ -345,6 +366,13 @@ export default function BodyWeightScreen() {
         })}
       </View>
 
+      <TouchableOpacity style={[s.shareBtn, { borderColor: colors.accent, backgroundColor: colors.accentSoft }]} onPress={onShare}>
+        <Ionicons name="share-social-outline" size={14} color={colors.accent} />
+        <Text style={[s.shareBtnText, { color: colors.accent }]}>SHARE BODYWEIGHT CARD</Text>
+      </TouchableOpacity>
+      {shareStatus ? <Text style={[s.shareStatus, { color: colors.muted }]}>{shareStatus}</Text> : null}
+
+      <View ref={setShareNode} collapsable={false}>
       <View style={s.summaryGrid}>
         {cards.map((card) => (
           <View
@@ -360,6 +388,7 @@ export default function BodyWeightScreen() {
       <View style={[s.card, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
         <Text style={[s.cardTitle, { color: colors.muted }]}>WEIGHT TREND ({range})</Text>
         <WeightChart entries={chartEntries} colors={colors} unit={unit} />
+      </View>
       </View>
 
       <View style={[s.card, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
@@ -495,4 +524,7 @@ const s = StyleSheet.create({
     fontSize: 12,
     marginTop: 1,
   },
+  shareBtn: { borderWidth: 1, borderRadius: 12, paddingVertical: 10, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8, marginBottom: 10 },
+  shareBtnText: { fontSize: 11, fontWeight: '800', letterSpacing: 1.2 },
+  shareStatus: { fontSize: 11, marginBottom: 8, textAlign: 'center' },
 });

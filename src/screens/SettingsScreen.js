@@ -13,6 +13,12 @@ import { getCacheSize, clearCache, downloadAllImages } from '../services/Exercis
 import { getExerciseIndex } from '../services/ExerciseLibraryService';
 import { exportCSV } from '../services/CSVExport';
 import { pickAndParseCSV, importParsedCSV } from '../services/CSVImport';
+import {
+  exportSQLiteBundleAndShare,
+  importSQLiteBundle,
+  pickSQLiteBundleFile,
+  validateSQLiteBundle,
+} from '../services/sqliteExportImport';
 import ImportPreviewModal from '../components/ImportPreviewModal';
 import { setHapticsEnabled, triggerHaptic } from '../services/hapticsEngine';
 
@@ -20,6 +26,21 @@ const PHOTO_INDEX_KEY = '@ironlog/progressPhotoIndex';
 const PHOTO_DIR = FileSystem.documentDirectory + 'progress-photos/';
 const EFFORT_CYCLE = ['off', 'rpe', 'rir', 'both'];
 const EFFORT_LABEL = { off: 'Off', rpe: 'RPE', rir: 'RIR', both: 'Both' };
+const GOAL_MODES = [
+  { id: 'hypertrophy', label: 'Hypertrophy' },
+  { id: 'strength', label: 'Strength' },
+  { id: 'general_fitness', label: 'General Fitness' },
+];
+const PROGRESSION_STYLES = [
+  { id: 'conservative', label: 'Conservative' },
+  { id: 'balanced', label: 'Balanced' },
+  { id: 'aggressive', label: 'Aggressive' },
+];
+const NOTIFICATION_PROFILES = [
+  { id: 'conservative', label: 'Conservative' },
+  { id: 'balanced', label: 'Balanced' },
+  { id: 'aggressive', label: 'Aggressive' },
+];
 
 function formatBytes(bytes) {
   if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
@@ -27,7 +48,19 @@ function formatBytes(bytes) {
 }
 
 export default function SettingsScreen({ navigation }) {
-  const { settings, updateSettings, getAllData, restoreData, reloadFromStorage, clearHistory, clearPbs, history, resetOnboarding } = useContext(AppContext);
+  const {
+    settings,
+    updateSettings,
+    getAllData,
+    restoreData,
+    reloadFromStorage,
+    clearHistory,
+    clearPbs,
+    history,
+    resetOnboarding,
+    notificationSettings,
+    updateNotificationPreferences,
+  } = useContext(AppContext);
   const colors = useTheme();
   const [editTimer, setEditTimer] = useState(null);
   const [timerVal, setTimerVal] = useState('');
@@ -177,6 +210,51 @@ export default function SettingsScreen({ navigation }) {
     }
   };
 
+  const doExportSQLite = async () => {
+    try {
+      triggerHaptic('lightConfirm', { enabled: haptic }).catch(() => {});
+      const bundle = await exportSQLiteBundleAndShare();
+      setAlertConfig({
+        title: 'SQLite export complete',
+        message: `Exported ${bundle.counts?.history || 0} workouts in versioned schema.`,
+        buttons: [{ text: 'OK', style: 'default' }],
+      });
+    } catch (e) {
+      setAlertConfig({ title: 'SQLite export failed', message: String(e), buttons: [{ text: 'OK', style: 'default' }] });
+    }
+  };
+
+  const doImportSQLite = async () => {
+    try {
+      const bundle = await pickSQLiteBundleFile();
+      if (!bundle) return;
+      const validation = validateSQLiteBundle(bundle);
+      if (!validation.valid) {
+        setAlertConfig({ title: 'Invalid SQLite export', message: validation.reason || 'Unsupported file.', buttons: [{ text: 'OK', style: 'default' }] });
+        return;
+      }
+      setAlertConfig({
+        title: 'Restore SQLite export?',
+        message: `This will replace current training data.\n\nWorkouts: ${validation.counts?.history || 0}\nPlans: ${validation.counts?.plans || 0}`,
+        buttons: [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Restore',
+            style: 'destructive',
+            onPress: async () => {
+              await importSQLiteBundle(bundle);
+              await reloadFromStorage();
+              triggerHaptic('restoreSucceeded', { enabled: haptic, force: true }).catch(() => {});
+              setAlertConfig({ title: 'SQLite restore complete', message: 'Data imported and migrated safely.', buttons: [{ text: 'OK', style: 'default' }] });
+            },
+          },
+        ],
+      });
+    } catch (e) {
+      setAlertConfig({ title: 'SQLite import failed', message: String(e), buttons: [{ text: 'OK', style: 'default' }] });
+    }
+  };
+
   const confirmCSVImport = async () => {
     if (!csvParsed) return;
     setCsvImporting(true);
@@ -192,6 +270,17 @@ export default function SettingsScreen({ navigation }) {
     } finally {
       setCsvImporting(false);
     }
+  };
+
+  const setNotificationSnooze = async (hours) => {
+    if (!hours || hours <= 0) {
+      await updateNotificationPreferences({ snoozeUntil: null });
+      setAlertConfig({ title: 'Notifications active', message: 'Snooze cleared.', buttons: [{ text: 'OK', style: 'default' }] });
+      return;
+    }
+    const until = new Date(Date.now() + hours * 3600000).toISOString();
+    await updateNotificationPreferences({ snoozeUntil: until });
+    setAlertConfig({ title: 'Notifications snoozed', message: `Paused for ${hours} hours.`, buttons: [{ text: 'OK', style: 'default' }] });
   };
 
   const Row = ({ label, value, onPress, danger }) => (
@@ -297,6 +386,59 @@ export default function SettingsScreen({ navigation }) {
         </TouchableOpacity>
       </View>
 
+      {/* Goal mode */}
+      <View style={[s.section, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+        <Text style={[s.sectionTitle, { color: colors.muted }]}>GOAL MODE</Text>
+        <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+          {GOAL_MODES.map((mode) => {
+            const active = (settings.goalMode || 'hypertrophy') === mode.id;
+            return (
+              <TouchableOpacity
+                key={mode.id}
+                style={[
+                  s.goalBtn,
+                  { borderColor: active ? colors.accent : colors.faint, backgroundColor: active ? colors.accentSoft : 'transparent' },
+                ]}
+                onPress={() => {
+                  if (!active) triggerHaptic('selection', { enabled: haptic }).catch(() => {});
+                  updateSettings({ ...settings, goalMode: mode.id });
+                }}>
+                <Text style={[s.goalBtnText, { color: active ? colors.accent : colors.subtext }]}>{mode.label}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </View>
+
+      {/* Intelligence preferences */}
+      <View style={[s.section, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+        <Text style={[s.sectionTitle, { color: colors.muted }]}>INTELLIGENCE</Text>
+        <Text style={[s.rowValue, { color: colors.subtext, marginBottom: 8 }]}>Progression behavior</Text>
+        <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+          {PROGRESSION_STYLES.map((style) => {
+            const active = (settings.progressionStyle || 'balanced') === style.id;
+            return (
+              <TouchableOpacity
+                key={style.id}
+                style={[s.goalBtn, { borderColor: active ? colors.accent : colors.faint, backgroundColor: active ? colors.accentSoft : 'transparent' }]}
+                onPress={() => updateSettings({ ...settings, progressionStyle: style.id })}
+              >
+                <Text style={[s.goalBtnText, { color: active ? colors.accent : colors.subtext }]}>{style.label}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+        <View style={[s.row, { borderBottomColor: 'transparent', marginTop: 8 }]}>
+          <Text style={[s.rowLabel, { color: colors.text }]}>Compact analytics numbers</Text>
+          <Switch
+            value={settings.compactAnalyticsNumbers !== false}
+            onValueChange={(value) => updateSettings({ ...settings, compactAnalyticsNumbers: value })}
+            trackColor={{ false: colors.faint, true: colors.accentSoft }}
+            thumbColor={settings.compactAnalyticsNumbers !== false ? colors.accent : colors.muted}
+          />
+        </View>
+      </View>
+
       {/* Plate calculator */}
       <View style={[s.section, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
         <Text style={[s.sectionTitle, { color: colors.muted }]}>PLATE CALCULATOR</Text>
@@ -368,6 +510,185 @@ export default function SettingsScreen({ navigation }) {
         <Row label="Manual import backup (JSON)" onPress={doImport} />
         <Row label="Export workout history as CSV" onPress={doExportCSV} />
         <Row label="Import workout history from CSV" onPress={doImportCSV} />
+        <Row label="Export full data (SQLite v2)" onPress={doExportSQLite} />
+        <Row label="Import full data (SQLite v2)" onPress={doImportSQLite} />
+      </View>
+
+      {/* Notifications */}
+      <View style={[s.section, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+        <Text style={[s.sectionTitle, { color: colors.muted }]}>NOTIFICATIONS</Text>
+        <View style={[s.row, { borderBottomColor: colors.faint }]}>
+          <Text style={[s.rowLabel, { color: colors.text }]}>Enable smart notifications</Text>
+          <Switch
+            value={notificationSettings?.enabled === true}
+            onValueChange={(value) => updateNotificationPreferences({ enabled: value })}
+            trackColor={{ false: colors.faint, true: colors.accentSoft }}
+            thumbColor={notificationSettings?.enabled ? colors.accent : colors.muted}
+          />
+        </View>
+        <View style={[s.row, { borderBottomColor: colors.faint }]}>
+          <Text style={[s.rowLabel, { color: colors.text }]}>Policy profile</Text>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            {NOTIFICATION_PROFILES.map((profile) => {
+              const active = (notificationSettings?.notificationProfile || 'balanced') === profile.id;
+              return (
+                <TouchableOpacity
+                  key={`profile:${profile.id}`}
+                  style={[s.goalBtn, { borderColor: active ? colors.accent : colors.faint, backgroundColor: active ? colors.accentSoft : 'transparent' }]}
+                  onPress={() => updateNotificationPreferences({ notificationProfile: profile.id })}
+                >
+                  <Text style={[s.goalBtnText, { color: active ? colors.accent : colors.subtext }]}>{profile.label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+        <View style={[s.row, { borderBottomColor: colors.faint }]}>
+          <Text style={[s.rowLabel, { color: colors.text }]}>Training reminders</Text>
+          <Switch
+            value={notificationSettings?.trainingReminders !== false}
+            onValueChange={(value) => updateNotificationPreferences({ trainingReminders: value })}
+            trackColor={{ false: colors.faint, true: colors.accentSoft }}
+            thumbColor={notificationSettings?.trainingReminders !== false ? colors.accent : colors.muted}
+          />
+        </View>
+        <View style={[s.row, { borderBottomColor: colors.faint }]}>
+          <Text style={[s.rowLabel, { color: colors.text }]}>Milestone alerts</Text>
+          <Switch
+            value={notificationSettings?.milestoneNotifications !== false}
+            onValueChange={(value) => updateNotificationPreferences({ milestoneNotifications: value })}
+            trackColor={{ false: colors.faint, true: colors.accentSoft }}
+            thumbColor={notificationSettings?.milestoneNotifications !== false ? colors.accent : colors.muted}
+          />
+        </View>
+        <View style={[s.row, { borderBottomColor: colors.faint }]}>
+          <Text style={[s.rowLabel, { color: colors.text }]}>Quiet hours</Text>
+          <Text style={[s.rowValue, { color: colors.subtext }]}>
+            {notificationSettings?.quietHoursStart ?? 22}:00-{notificationSettings?.quietHoursEnd ?? 8}:00
+          </Text>
+        </View>
+        <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
+          {[21, 22, 23].map((startHour) => {
+            const active = Number(notificationSettings?.quietHoursStart ?? 22) === startHour;
+            return (
+              <TouchableOpacity
+                key={`start:${startHour}`}
+                style={[s.goalBtn, { borderColor: active ? colors.accent : colors.faint, backgroundColor: active ? colors.accentSoft : 'transparent' }]}
+                onPress={() => updateNotificationPreferences({ quietHoursStart: startHour })}
+              >
+                <Text style={[s.goalBtnText, { color: active ? colors.accent : colors.subtext }]}>Start {startHour}:00</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          {[6, 7, 8].map((endHour) => {
+            const active = Number(notificationSettings?.quietHoursEnd ?? 8) === endHour;
+            return (
+              <TouchableOpacity
+                key={`end:${endHour}`}
+                style={[s.goalBtn, { borderColor: active ? colors.accent : colors.faint, backgroundColor: active ? colors.accentSoft : 'transparent' }]}
+                onPress={() => updateNotificationPreferences({ quietHoursEnd: endHour })}
+              >
+                <Text style={[s.goalBtnText, { color: active ? colors.accent : colors.subtext }]}>End {endHour}:00</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+        <View style={[s.row, { borderBottomColor: 'transparent', marginTop: 8 }]}>
+          <Text style={[s.rowLabel, { color: colors.text }]}>Cooldown window</Text>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            {[6, 12, 24].map((hours) => {
+              const active = Number(notificationSettings?.cooldownHours ?? 12) === hours;
+              return (
+                <TouchableOpacity
+                  key={`cooldown:${hours}`}
+                  style={[s.goalBtn, { borderColor: active ? colors.accent : colors.faint, backgroundColor: active ? colors.accentSoft : 'transparent' }]}
+                  onPress={() => updateNotificationPreferences({ cooldownHours: hours })}
+                >
+                  <Text style={[s.goalBtnText, { color: active ? colors.accent : colors.subtext }]}>{hours}h</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+        <View style={[s.row, { borderBottomColor: colors.faint, marginTop: 6 }]}>
+          <Text style={[s.rowLabel, { color: colors.text }]}>Weekly cap mode</Text>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            {[
+              { id: 'plan_based', label: 'Plan' },
+              { id: 'fixed_7', label: '7/wk' },
+            ].map((mode) => {
+              const active = (notificationSettings?.weeklyCapMode || 'plan_based') === mode.id;
+              return (
+                <TouchableOpacity
+                  key={`cap:${mode.id}`}
+                  style={[s.goalBtn, { borderColor: active ? colors.accent : colors.faint, backgroundColor: active ? colors.accentSoft : 'transparent' }]}
+                  onPress={() => updateNotificationPreferences({ weeklyCapMode: mode.id })}
+                >
+                  <Text style={[s.goalBtnText, { color: active ? colors.accent : colors.subtext }]}>{mode.label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+        <View style={[s.row, { borderBottomColor: 'transparent' }]}>
+          <Text style={[s.rowLabel, { color: colors.text }]}>Reminder lead time</Text>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            {[60, 90, 120].map((mins) => {
+              const active = Number(notificationSettings?.reminderLeadMinutes ?? 90) === mins;
+              return (
+                <TouchableOpacity
+                  key={`lead:${mins}`}
+                  style={[s.goalBtn, { borderColor: active ? colors.accent : colors.faint, backgroundColor: active ? colors.accentSoft : 'transparent' }]}
+                  onPress={() => updateNotificationPreferences({ reminderLeadMinutes: mins })}
+                >
+                  <Text style={[s.goalBtnText, { color: active ? colors.accent : colors.subtext }]}>{mins}m</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+        <View style={[s.row, { borderBottomColor: colors.faint }]}>
+          <Text style={[s.rowLabel, { color: colors.text }]}>Temporary snooze</Text>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            {[
+              { label: 'Off', hours: 0 },
+              { label: '24h', hours: 24 },
+              { label: '72h', hours: 72 },
+            ].map((option) => {
+              const until = new Date(notificationSettings?.snoozeUntil || 0).getTime();
+              const active = option.hours === 0
+                ? !Number.isFinite(until) || until <= Date.now()
+                : Number.isFinite(until) && until > Date.now() && Math.abs(until - (Date.now() + option.hours * 3600000)) < 3 * 3600000;
+              return (
+                <TouchableOpacity
+                  key={`snooze:${option.label}`}
+                  style={[s.goalBtn, { borderColor: active ? colors.accent : colors.faint, backgroundColor: active ? colors.accentSoft : 'transparent' }]}
+                  onPress={() => setNotificationSnooze(option.hours)}
+                >
+                  <Text style={[s.goalBtnText, { color: active ? colors.accent : colors.subtext }]}>{option.label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+        <View style={{ marginTop: 8, gap: 6 }}>
+          <Text style={[s.sectionTitle, { color: colors.muted, marginBottom: 0 }]}>NOTIFICATION LOG</Text>
+          {(notificationSettings?.decisionLog || []).slice(0, 5).map((entry, idx) => (
+            <View key={`${entry?.at || ''}:${idx}`} style={[s.row, { borderBottomColor: colors.faint, paddingVertical: 8 }]}>
+              <Text style={[s.rowLabel, { color: colors.subtext, fontSize: 12 }]} numberOfLines={1}>
+                {(entry?.outcome || 'event').toUpperCase()} · {entry?.topic || entry?.key || 'system'}
+              </Text>
+              <Text style={[s.rowValue, { color: colors.muted, fontSize: 11 }]} numberOfLines={1}>
+                {String(entry?.at || '').replace('T', ' ').slice(0, 16)}
+              </Text>
+            </View>
+          ))}
+          {(!notificationSettings?.decisionLog || notificationSettings.decisionLog.length === 0) ? (
+            <Text style={[s.rowValue, { color: colors.muted, fontSize: 12 }]}>No notification decisions yet.</Text>
+          ) : null}
+        </View>
       </View>
 
       {/* App */}
@@ -434,6 +755,8 @@ const s = StyleSheet.create({
   modalTitle: { color: '#f0f0f0', fontSize: 16, fontWeight: '900', letterSpacing: 2, marginBottom: 16 },
   input: { backgroundColor: '#0f0f0f', borderWidth: 1, borderColor: '#2a2a2a', color: '#f0f0f0', padding: 14, fontSize: 24, fontWeight: '900', textAlign: 'center' },
   themeBtn: { paddingHorizontal: 14, paddingVertical: 10, borderWidth: 2, borderRadius: 2 },
+  goalBtn: { borderWidth: 1, paddingHorizontal: 12, paddingVertical: 8 },
+  goalBtnText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.6 },
   cancelBtn: { flex: 1, padding: 14, alignItems: 'center', borderWidth: 1, borderColor: '#1e1e1e' },
   confirmBtn: { flex: 1, backgroundColor: '#FF4500', padding: 14, alignItems: 'center' },
 });

@@ -73,17 +73,18 @@ const ACCESSORY_POOL = {
 
 function detectDayFocus(dayName, dayTag) {
   const text = `${dayName || ''} ${dayTag || ''}`.toUpperCase();
+  if (/CALI|BODYWEIGHT/.test(text)) return 'CALI';
+  if (/BAND/.test(text)) return 'BAND';
+  if (/CONDITION|CARDIO|ENGINE/.test(text)) return 'CONDITIONING';
   if (/PUSH|CHEST|SHOULDER/.test(text)) return 'PUSH';
   if (/PULL|BACK/.test(text)) return 'PULL';
   if (/ARM/.test(text)) return 'ARMS';
   if (/LEG|LOWER|GLUTE|QUAD|HAM/.test(text)) return 'LEGS';
   if (/UPPER/.test(text)) return 'UPPER';
-  if (/CONDITION|CARDIO|ENGINE/.test(text)) return 'CONDITIONING';
-  if (/CALI|BODYWEIGHT/.test(text)) return 'CALI';
   return 'UPPER';
 }
 
-function enrichDayVolume(dayDefinition) {
+function enrichDayVolume(dayDefinition, allowedEquipment = []) {
   const clonedExercises = dayDefinition.exercises.map((exercise) => ({ ...exercise }));
   const minExercises = 6;
   if (clonedExercises.length >= minExercises) {
@@ -91,11 +92,14 @@ function enrichDayVolume(dayDefinition) {
   }
 
   const pool = ACCESSORY_POOL[detectDayFocus(dayDefinition.name, dayDefinition.tag)] || [];
+  const allowed = new Set((allowedEquipment || []).map((item) => String(item).toLowerCase()));
   const existingNames = new Set(clonedExercises.map((exercise) => exercise.name.toLowerCase()));
 
   for (const candidate of pool) {
     if (clonedExercises.length >= minExercises) break;
     if (existingNames.has(candidate.name.toLowerCase())) continue;
+    const candidateEquipment = String(candidate.equipment || '').toLowerCase();
+    if (candidateEquipment !== 'bodyweight' && allowed.size > 0 && !allowed.has(candidateEquipment)) continue;
     clonedExercises.push({ ...candidate });
     existingNames.add(candidate.name.toLowerCase());
   }
@@ -103,12 +107,12 @@ function enrichDayVolume(dayDefinition) {
   return { ...dayDefinition, exercises: clonedExercises };
 }
 
-const cloneDays = (days) =>
+const cloneDays = (days, allowedEquipment = []) =>
   days.map((d) =>
     enrichDayVolume({
       ...d,
       exercises: d.exercises.map((e) => ({ ...e })),
-    })
+    }, allowedEquipment)
   );
 
 export const PROGRAM_TEMPLATE_CATEGORIES = [
@@ -336,7 +340,18 @@ const BLUEPRINTS = {
   ATHLETIC_CONDITIONING_5: ['LOWER_POWER', 'CONDITIONING_DAY', 'UPPER_POWER', 'CONDITIONING_DAY', 'UPPER_B'],
 };
 
-const buildDays = (blueprintKey) => cloneDays((BLUEPRINTS[blueprintKey] || []).map((key) => DAY_LIBRARY[key]).filter(Boolean));
+const buildDays = (blueprintKey, allowedEquipment = []) => cloneDays((BLUEPRINTS[blueprintKey] || []).map((key) => DAY_LIBRARY[key]).filter(Boolean), allowedEquipment);
+
+function deriveTemplateEquipment(template, days = []) {
+  const declared = Array.isArray(template.equipment) ? template.equipment : [];
+  const set = new Set(declared);
+  for (const dayItem of days) {
+    for (const exercise of dayItem.exercises || []) {
+      if (exercise?.equipment) set.add(exercise.equipment);
+    }
+  }
+  return Array.from(set);
+}
 
 function deriveGoalBias(template) {
   const category = String(template.category || '').toUpperCase();
@@ -443,7 +458,10 @@ export const PROGRAM_TEMPLATE_CATALOG = DEFINITIONS.map((definition) => ({
   recoveryDemand: deriveRecoveryDemand(definition),
   adherenceFloor: deriveAdherenceFloor(definition),
   specializationType: deriveSpecializationType(definition),
-  days: buildDays(definition.blueprint),
+  days: buildDays(definition.blueprint, definition.equipment),
+})).map((template) => ({
+  ...template,
+  equipment: deriveTemplateEquipment(template, template.days),
 })).sort((a, b) => a.sortOrder - b.sortOrder);
 
 export const PROGRAM_TEMPLATES = PROGRAM_TEMPLATE_CATALOG;
