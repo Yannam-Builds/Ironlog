@@ -22,6 +22,8 @@ import {
 import { exportOpenWeightBundleAndShare } from '../services/openweightInterop';
 import ImportPreviewModal from '../components/ImportPreviewModal';
 import { setHapticsEnabled, triggerHaptic } from '../services/hapticsEngine';
+import { ensureNotificationPermissions, getNotificationPermissionStatus } from '../services/notificationScheduler';
+import { convertUnitToKg, formatWeightFromKg } from '../utils/weightUnits';
 
 const PHOTO_INDEX_KEY = '@ironlog/progressPhotoIndex';
 const PHOTO_DIR = FileSystem.documentDirectory + 'progress-photos/';
@@ -48,6 +50,58 @@ function formatBytes(bytes) {
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
 }
 
+function formatQuietTime(totalMinutes) {
+  const minutes = Math.max(0, Math.min(1439, Math.round(Number(totalMinutes || 0))));
+  const hoursPart = String(Math.floor(minutes / 60)).padStart(2, '0');
+  const minutesPart = String(minutes % 60).padStart(2, '0');
+  return `${hoursPart}:${minutesPart}`;
+}
+
+function parseQuietTimeInput(value) {
+  const raw = String(value || '').trim();
+  const match = raw.match(/^(\d{1,2})(?::?(\d{1,2}))?$/);
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2] || 0);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
+  return hours * 60 + minutes;
+}
+
+function getQuietMinutes(settings = {}, key = 'quietHoursStartMinutes', fallbackHour = 22) {
+  const direct = Number(settings?.[key]);
+  if (Number.isFinite(direct)) return Math.max(0, Math.min(1439, Math.round(direct)));
+  const fallbackKey = key === 'quietHoursStartMinutes' ? 'quietHoursStart' : 'quietHoursEnd';
+  const hour = Number(settings?.[fallbackKey]);
+  return Math.max(0, Math.min(1439, Math.round((Number.isFinite(hour) ? hour : fallbackHour) * 60)));
+}
+
+function formatDecisionLabel(entry = {}) {
+  const topic = String(entry?.topic || entry?.key || 'system')
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+  const suppressedReasonMap = {
+    disabled_or_no_candidates: 'Nothing worth sending right now',
+    snoozed: 'Notifications are snoozed',
+    daily_cap: 'Daily cap reached',
+    weekly_cap: 'Weekly cap reached',
+    cooldown_or_topic_gate: 'Cooldown is active',
+    permission_denied: 'Notification permission is off',
+  };
+  if (entry?.outcome === 'suppressed') {
+    return `SUPPRESSED · ${suppressedReasonMap[entry?.reason] || topic}`;
+  }
+  if (entry?.outcome === 'sent') {
+    return `SCHEDULED · ${topic}`;
+  }
+  return `${String(entry?.outcome || 'event').toUpperCase()} · ${topic}`;
+}
+
+function formatDecisionTime(entry = {}) {
+  const stamp = entry?.outcome === 'sent' && entry?.scheduledFor ? entry.scheduledFor : entry?.at;
+  return String(stamp || '').replace('T', ' ').slice(0, 16);
+}
+
 export default function SettingsScreen({ navigation }) {
   const {
     settings,
@@ -72,8 +126,12 @@ export default function SettingsScreen({ navigation }) {
   const [csvParsed, setCsvParsed] = useState(null);
   const [csvImporting, setCsvImporting] = useState(false);
   const [alertConfig, setAlertConfig] = useState(null);
+  const [quietStartInput, setQuietStartInput] = useState('22:00');
+  const [quietEndInput, setQuietEndInput] = useState('08:00');
+  const [notificationPermissionGranted, setNotificationPermissionGranted] = useState(null);
 
   const haptic = settings?.hapticFeedback !== false;
+  const weightUnit = settings?.weightUnit || 'kg';
 
   useEffect(() => {
     getCacheSize().then(bytes => setCacheSize(bytes));
@@ -83,6 +141,22 @@ export default function SettingsScreen({ navigation }) {
       const total = idx.reduce((a, p) => a + (p.sizeBytes || 0), 0);
       setPhotoSize(total);
     }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    setQuietStartInput(formatQuietTime(getQuietMinutes(notificationSettings, 'quietHoursStartMinutes', 22)));
+    setQuietEndInput(formatQuietTime(getQuietMinutes(notificationSettings, 'quietHoursEndMinutes', 8)));
+  }, [
+    notificationSettings?.quietHoursStartMinutes,
+    notificationSettings?.quietHoursEndMinutes,
+    notificationSettings?.quietHoursStart,
+    notificationSettings?.quietHoursEnd,
+  ]);
+
+  useEffect(() => {
+    getNotificationPermissionStatus()
+      .then((status) => setNotificationPermissionGranted(status.granted))
+      .catch(() => {});
   }, []);
 
   const doDownloadAll = async () => {
@@ -143,11 +217,16 @@ export default function SettingsScreen({ navigation }) {
   };
 
   const saveTimer = () => {
-    const val = parseInt(timerVal);
+    const val = parseFloat(timerVal);
     if (editTimer === 'barWeight') {
-      if (!val || val < 1 || val > 100) {
+      const barWeightKg = convertUnitToKg(val, weightUnit, 1);
+      if (!val || barWeightKg < 1 || barWeightKg > 100) {
         triggerHaptic('invalidAction', { enabled: haptic }).catch(() => {});
-        setAlertConfig({ title: 'Invalid value', message: 'Enter a bar weight between 1–100 kg.', buttons: [{ text: 'OK', style: 'default' }] });
+        setAlertConfig({
+          title: 'Invalid value',
+          message: `Enter a bar weight between ${formatWeightFromKg(1, weightUnit)} and ${formatWeightFromKg(100, weightUnit)}.`,
+          buttons: [{ text: 'OK', style: 'default' }],
+        });
         return;
       }
     } else if (!val || val < 10 || val > 600) {
@@ -156,7 +235,10 @@ export default function SettingsScreen({ navigation }) {
       return;
     }
     triggerHaptic('lightConfirm', { enabled: haptic }).catch(() => {});
-    updateSettings({ ...settings, [editTimer]: val });
+    updateSettings({
+      ...settings,
+      [editTimer]: editTimer === 'barWeight' ? convertUnitToKg(val, weightUnit, 1) : Math.round(val),
+    });
     setEditTimer(null);
   };
 
@@ -298,6 +380,57 @@ export default function SettingsScreen({ navigation }) {
     setAlertConfig({ title: 'Notifications snoozed', message: `Paused for ${hours} hours.`, buttons: [{ text: 'OK', style: 'default' }] });
   };
 
+  const requestNotificationAccess = async () => {
+    const granted = await ensureNotificationPermissions();
+    setNotificationPermissionGranted(granted);
+    if (!granted) {
+      setAlertConfig({
+        title: 'Notifications blocked',
+        message: 'IRONLOG could not get notification permission. You can enable it later from Android app settings.',
+        buttons: [{ text: 'OK', style: 'default' }],
+      });
+      return false;
+    }
+    await updateNotificationPreferences({ enabled: true });
+    setAlertConfig({
+      title: 'Notifications enabled',
+      message: 'Smart reminders can now use your quiet hours and cooldown rules.',
+      buttons: [{ text: 'OK', style: 'default' }],
+    });
+    return true;
+  };
+
+  const handleNotificationToggle = async (value) => {
+    if (!value) {
+      await updateNotificationPreferences({ enabled: false });
+      return;
+    }
+    const granted = await requestNotificationAccess();
+    if (!granted) {
+      await updateNotificationPreferences({ enabled: false });
+    }
+  };
+
+  const applyQuietHours = async () => {
+    const startMinutes = parseQuietTimeInput(quietStartInput);
+    const endMinutes = parseQuietTimeInput(quietEndInput);
+    if (startMinutes == null || endMinutes == null) {
+      setAlertConfig({
+        title: 'Invalid quiet hours',
+        message: 'Use 24-hour time like 22:30 or 07:15.',
+        buttons: [{ text: 'OK', style: 'default' }],
+      });
+      return;
+    }
+    await updateNotificationPreferences({
+      quietHoursStartMinutes: startMinutes,
+      quietHoursEndMinutes: endMinutes,
+      quietHoursStart: Math.floor(startMinutes / 60),
+      quietHoursEnd: Math.floor(endMinutes / 60),
+    });
+    triggerHaptic('lightConfirm', { enabled: haptic }).catch(() => {});
+  };
+
   const Row = ({ label, value, onPress, danger }) => (
     <TouchableOpacity
       style={[s.row, { borderBottomColor: colors.faint }]}
@@ -308,6 +441,14 @@ export default function SettingsScreen({ navigation }) {
       <Text style={[s.rowLabel, { color: colors.text }, danger && { color: '#CC3333' }]}>{label}</Text>
       {value ? <Text style={[s.rowValue, { color: colors.subtext }]}>{value}</Text> : <Ionicons name="chevron-forward" size={16} color={colors.muted} />}
     </TouchableOpacity>
+  );
+
+  const OptionRow = ({ label, hint, children, noBorder = false }) => (
+    <View style={[s.stackRow, { borderBottomColor: noBorder ? 'transparent' : colors.faint }]}>
+      <Text style={[s.rowLabel, { color: colors.text }]}>{label}</Text>
+      {hint ? <Text style={[s.optionHint, { color: colors.muted }]}>{hint}</Text> : null}
+      <View style={s.optionControlWrap}>{children}</View>
+    </View>
   );
 
   return (
@@ -457,7 +598,11 @@ export default function SettingsScreen({ navigation }) {
       {/* Plate calculator */}
       <View style={[s.section, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
         <Text style={[s.sectionTitle, { color: colors.muted }]}>PLATE CALCULATOR</Text>
-        <Row label="Bar weight" value={settings.barWeight + ' kg'} onPress={() => { setTimerVal(String(settings.barWeight)); setEditTimer('barWeight'); }} />
+        <Row
+          label="Bar weight"
+          value={formatWeightFromKg(settings.barWeight, weightUnit)}
+          onPress={() => { setTimerVal(String(formatWeightFromKg(settings.barWeight, weightUnit, { showUnit: false }))); setEditTimer('barWeight'); }}
+        />
         <TouchableOpacity style={[s.row, { borderBottomColor: colors.faint }]} onPress={() => { triggerHaptic('selection', { enabled: haptic }).catch(() => {}); navigation.navigate('GymProfiles'); }}>
           <Text style={[s.rowLabel, { color: colors.text }]}>Gym Profiles</Text>
           <Ionicons name="chevron-forward" size={16} color={colors.muted} />
@@ -541,14 +686,23 @@ export default function SettingsScreen({ navigation }) {
           <Text style={[s.rowLabel, { color: colors.text }]}>Enable smart notifications</Text>
           <Switch
             value={notificationSettings?.enabled === true}
-            onValueChange={(value) => updateNotificationPreferences({ enabled: value })}
+            onValueChange={handleNotificationToggle}
             trackColor={{ false: colors.faint, true: colors.accentSoft }}
             thumbColor={notificationSettings?.enabled ? colors.accent : colors.muted}
           />
         </View>
-        <View style={[s.row, { borderBottomColor: colors.faint }]}>
-          <Text style={[s.rowLabel, { color: colors.text }]}>Policy profile</Text>
-          <View style={{ flexDirection: 'row', gap: 8 }}>
+        <OptionRow label="Notification permission">
+          <TouchableOpacity
+            style={[s.goalBtn, { borderColor: notificationPermissionGranted ? colors.accent : colors.faint, backgroundColor: notificationPermissionGranted ? colors.accentSoft : 'transparent' }]}
+            onPress={requestNotificationAccess}
+          >
+            <Text style={[s.goalBtnText, { color: notificationPermissionGranted ? colors.accent : colors.subtext }]}>
+              {notificationPermissionGranted ? 'Allowed' : 'Allow now'}
+            </Text>
+          </TouchableOpacity>
+        </OptionRow>
+        <OptionRow label="Policy profile">
+          <View style={s.optionChips}>
             {NOTIFICATION_PROFILES.map((profile) => {
               const active = (notificationSettings?.notificationProfile || 'balanced') === profile.id;
               return (
@@ -562,7 +716,7 @@ export default function SettingsScreen({ navigation }) {
               );
             })}
           </View>
-        </View>
+        </OptionRow>
         <View style={[s.row, { borderBottomColor: colors.faint }]}>
           <Text style={[s.rowLabel, { color: colors.text }]}>Training reminders</Text>
           <Switch
@@ -584,40 +738,50 @@ export default function SettingsScreen({ navigation }) {
         <View style={[s.row, { borderBottomColor: colors.faint }]}>
           <Text style={[s.rowLabel, { color: colors.text }]}>Quiet hours</Text>
           <Text style={[s.rowValue, { color: colors.subtext }]}>
-            {notificationSettings?.quietHoursStart ?? 22}:00-{notificationSettings?.quietHoursEnd ?? 8}:00
+            {formatQuietTime(getQuietMinutes(notificationSettings, 'quietHoursStartMinutes', 22))}-{formatQuietTime(getQuietMinutes(notificationSettings, 'quietHoursEndMinutes', 8))}
           </Text>
         </View>
-        <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
-          {[21, 22, 23].map((startHour) => {
-            const active = Number(notificationSettings?.quietHoursStart ?? 22) === startHour;
-            return (
-              <TouchableOpacity
-                key={`start:${startHour}`}
-                style={[s.goalBtn, { borderColor: active ? colors.accent : colors.faint, backgroundColor: active ? colors.accentSoft : 'transparent' }]}
-                onPress={() => updateNotificationPreferences({ quietHoursStart: startHour })}
-              >
-                <Text style={[s.goalBtnText, { color: active ? colors.accent : colors.subtext }]}>Start {startHour}:00</Text>
-              </TouchableOpacity>
-            );
-          })}
+        <Text style={[s.rowValue, { color: colors.muted, fontSize: 12, marginTop: 6, marginBottom: 8 }]}>
+          Use 24-hour time. Example: `22:30` to `07:15`.
+        </Text>
+        <View style={s.timeInputRow}>
+          <View style={s.timeInputGroup}>
+            <Text style={[s.inputLabel, { color: colors.subtext }]}>START</Text>
+            <TextInput
+              style={[s.timeInput, { color: colors.text, borderColor: colors.faint, backgroundColor: colors.bg }]}
+              value={quietStartInput}
+              onChangeText={setQuietStartInput}
+              placeholder="22:00"
+              placeholderTextColor={colors.muted}
+              keyboardType="numbers-and-punctuation"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+          </View>
+          <View style={s.timeInputGroup}>
+            <Text style={[s.inputLabel, { color: colors.subtext }]}>END</Text>
+            <TextInput
+              style={[s.timeInput, { color: colors.text, borderColor: colors.faint, backgroundColor: colors.bg }]}
+              value={quietEndInput}
+              onChangeText={setQuietEndInput}
+              placeholder="08:00"
+              placeholderTextColor={colors.muted}
+              keyboardType="numbers-and-punctuation"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+          </View>
         </View>
-        <View style={{ flexDirection: 'row', gap: 8 }}>
-          {[6, 7, 8].map((endHour) => {
-            const active = Number(notificationSettings?.quietHoursEnd ?? 8) === endHour;
-            return (
-              <TouchableOpacity
-                key={`end:${endHour}`}
-                style={[s.goalBtn, { borderColor: active ? colors.accent : colors.faint, backgroundColor: active ? colors.accentSoft : 'transparent' }]}
-                onPress={() => updateNotificationPreferences({ quietHoursEnd: endHour })}
-              >
-                <Text style={[s.goalBtnText, { color: active ? colors.accent : colors.subtext }]}>End {endHour}:00</Text>
-              </TouchableOpacity>
-            );
-          })}
+        <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+          <TouchableOpacity
+            style={[s.goalBtn, { borderColor: colors.accent, backgroundColor: colors.accentSoft }]}
+            onPress={applyQuietHours}
+          >
+            <Text style={[s.goalBtnText, { color: colors.accent }]}>Apply quiet hours</Text>
+          </TouchableOpacity>
         </View>
-        <View style={[s.row, { borderBottomColor: 'transparent', marginTop: 8 }]}>
-          <Text style={[s.rowLabel, { color: colors.text }]}>Cooldown window</Text>
-          <View style={{ flexDirection: 'row', gap: 8 }}>
+        <OptionRow label="Cooldown window">
+          <View style={s.optionChips}>
             {[6, 12, 24].map((hours) => {
               const active = Number(notificationSettings?.cooldownHours ?? 12) === hours;
               return (
@@ -631,10 +795,9 @@ export default function SettingsScreen({ navigation }) {
               );
             })}
           </View>
-        </View>
-        <View style={[s.row, { borderBottomColor: colors.faint, marginTop: 6 }]}>
-          <Text style={[s.rowLabel, { color: colors.text }]}>Weekly cap mode</Text>
-          <View style={{ flexDirection: 'row', gap: 8 }}>
+        </OptionRow>
+        <OptionRow label="Weekly cap mode">
+          <View style={s.optionChips}>
             {[
               { id: 'plan_based', label: 'Plan' },
               { id: 'fixed_7', label: '7/wk' },
@@ -651,10 +814,9 @@ export default function SettingsScreen({ navigation }) {
               );
             })}
           </View>
-        </View>
-        <View style={[s.row, { borderBottomColor: 'transparent' }]}>
-          <Text style={[s.rowLabel, { color: colors.text }]}>Reminder lead time</Text>
-          <View style={{ flexDirection: 'row', gap: 8 }}>
+        </OptionRow>
+        <OptionRow label="Reminder lead time">
+          <View style={s.optionChips}>
             {[60, 90, 120].map((mins) => {
               const active = Number(notificationSettings?.reminderLeadMinutes ?? 90) === mins;
               return (
@@ -668,10 +830,9 @@ export default function SettingsScreen({ navigation }) {
               );
             })}
           </View>
-        </View>
-        <View style={[s.row, { borderBottomColor: colors.faint }]}>
-          <Text style={[s.rowLabel, { color: colors.text }]}>Temporary snooze</Text>
-          <View style={{ flexDirection: 'row', gap: 8 }}>
+        </OptionRow>
+        <OptionRow label="Temporary snooze">
+          <View style={s.optionChips}>
             {[
               { label: 'Off', hours: 0 },
               { label: '24h', hours: 24 },
@@ -692,16 +853,16 @@ export default function SettingsScreen({ navigation }) {
               );
             })}
           </View>
-        </View>
+        </OptionRow>
         <View style={{ marginTop: 8, gap: 6 }}>
           <Text style={[s.sectionTitle, { color: colors.muted, marginBottom: 0 }]}>NOTIFICATION LOG</Text>
           {(notificationSettings?.decisionLog || []).slice(0, 5).map((entry, idx) => (
-            <View key={`${entry?.at || ''}:${idx}`} style={[s.row, { borderBottomColor: colors.faint, paddingVertical: 8 }]}>
-              <Text style={[s.rowLabel, { color: colors.subtext, fontSize: 12 }]} numberOfLines={1}>
-                {(entry?.outcome || 'event').toUpperCase()} · {entry?.topic || entry?.key || 'system'}
+            <View key={`${entry?.at || ''}:${idx}`} style={[s.row, s.logRow, { borderBottomColor: colors.faint, paddingVertical: 8 }]}>
+              <Text style={[s.rowLabel, s.logLabel, { color: colors.subtext, fontSize: 12 }]} numberOfLines={1}>
+                {formatDecisionLabel(entry)}
               </Text>
-              <Text style={[s.rowValue, { color: colors.muted, fontSize: 11 }]} numberOfLines={1}>
-                {String(entry?.at || '').replace('T', ' ').slice(0, 16)}
+              <Text style={[s.rowValue, s.logTime, { color: colors.muted, fontSize: 11 }]} numberOfLines={1}>
+                {formatDecisionTime(entry)}
               </Text>
             </View>
           ))}
@@ -747,7 +908,7 @@ export default function SettingsScreen({ navigation }) {
           <View style={s.modal}>
             <Text style={s.modalTitle}>{editTimer === 'defaultRestNormal' ? 'NORMAL REST' : editTimer === 'defaultRestHeavy' ? 'HEAVY REST' : 'BAR WEIGHT'}</Text>
             <TextInput style={s.input} keyboardType="numeric" value={timerVal} onChangeText={setTimerVal} autoFocus
-              placeholder={editTimer === 'barWeight' ? 'kg' : 'seconds'} placeholderTextColor="#444" />
+              placeholder={editTimer === 'barWeight' ? weightUnit : 'seconds'} placeholderTextColor="#444" />
             <View style={{ flexDirection: 'row', gap: 10, marginTop: 16 }}>
               <TouchableOpacity style={s.cancelBtn} onPress={() => { triggerHaptic('selection', { enabled: haptic }).catch(() => {}); setEditTimer(null); }}><Text style={{ color: '#666' }}>Cancel</Text></TouchableOpacity>
               <TouchableOpacity style={s.confirmBtn} onPress={saveTimer}><Text style={{ color: '#fff', fontWeight: '800' }}>SAVE</Text></TouchableOpacity>
@@ -773,10 +934,21 @@ const s = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', alignItems: 'center', padding: 24 },
   modal: { backgroundColor: '#141414', borderRadius: 12, padding: 24, width: '100%', borderWidth: 1, borderColor: '#1e1e1e' },
   modalTitle: { color: '#f0f0f0', fontSize: 16, fontWeight: '900', letterSpacing: 2, marginBottom: 16 },
+  inputLabel: { fontSize: 9, fontWeight: '700', letterSpacing: 2, marginBottom: 6 },
   input: { backgroundColor: '#0f0f0f', borderWidth: 1, borderColor: '#2a2a2a', color: '#f0f0f0', padding: 14, fontSize: 24, fontWeight: '900', textAlign: 'center' },
   themeBtn: { paddingHorizontal: 14, paddingVertical: 10, borderWidth: 2, borderRadius: 2 },
   goalBtn: { borderWidth: 1, paddingHorizontal: 12, paddingVertical: 8 },
   goalBtnText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.6 },
+  stackRow: { paddingVertical: 10, borderBottomWidth: 1 },
+  optionHint: { fontSize: 11, marginTop: 4 },
+  optionControlWrap: { marginTop: 10, alignItems: 'flex-start' },
+  optionChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  timeInputRow: { flexDirection: 'row', gap: 10 },
+  timeInputGroup: { flex: 1 },
+  timeInput: { borderWidth: 1, paddingHorizontal: 12, paddingVertical: 10, fontSize: 15, fontWeight: '700', letterSpacing: 0.8 },
+  logRow: { alignItems: 'flex-start' },
+  logLabel: { flex: 1, paddingRight: 8 },
+  logTime: { minWidth: 106, textAlign: 'right', marginTop: 1 },
   cancelBtn: { flex: 1, padding: 14, alignItems: 'center', borderWidth: 1, borderColor: '#1e1e1e' },
   confirmBtn: { flex: 1, backgroundColor: '#FF4500', padding: 14, alignItems: 'center' },
 });

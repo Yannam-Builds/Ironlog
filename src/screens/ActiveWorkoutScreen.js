@@ -47,6 +47,7 @@ import {
   matchesExerciseFilter,
 } from '../utils/exerciseFilters';
 import { resolveExerciseProfile } from '../domain/intelligence/exerciseProfileEngine';
+import { formatVolumeFromKg, formatWeightFromKg } from '../utils/weightUnits';
 
 function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
 
@@ -66,7 +67,7 @@ function getExerciseMuscles(exercise) {
   return getExerciseFilterSummary(exercise, 6);
 }
 
-function getPlateText(targetKg, barWeight, profilePlates) {
+function getPlateText(targetKg, barWeight, profilePlates, weightUnit = 'kg') {
   const perSide = (targetKg - barWeight) / 2;
   if (perSide <= 0) return 'Bar only';
   const plates = profilePlates?.length
@@ -78,7 +79,7 @@ function getPlateText(targetKg, barWeight, profilePlates) {
     while (rem >= p - 0.001) { result.push(p); rem = Math.round((rem - p) * 100) / 100; }
   }
   if (result.length === 0) return 'Bar only';
-  return result.map(p => p + 'kg').join(' + ') + ' each side';
+  return result.map(p => formatWeightFromKg(p, weightUnit)).join(' + ') + ' each side';
 }
 
 function parseRepTarget(value, fallback = 8) {
@@ -191,29 +192,29 @@ const rt = StyleSheet.create({
 
 // ─── PLATE MODAL ─────────────────────────────────────────────────────────────
 
-function PlateModal({ visible, targetKg, barWeight, onClose }) {
+function PlateModal({ visible, targetKg, barWeight, onClose, weightUnit = 'kg' }) {
   const result = calcPlates(targetKg, barWeight);
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={pm.overlay}>
         <View style={pm.sheet}>
           <Text style={pm.title}>PLATE CALCULATOR</Text>
-          <Text style={pm.target}>{targetKg} kg total</Text>
+          <Text style={pm.target}>{formatWeightFromKg(targetKg, weightUnit)} total</Text>
           {result.valid ? (
             <>
               <Text style={pm.label}>Each side:</Text>
               {result.each.length === 0
-                ? <Text style={pm.noPlates}>Bar only ({barWeight}kg)</Text>
+                ? <Text style={pm.noPlates}>Bar only ({formatWeightFromKg(barWeight, weightUnit)})</Text>
                 : result.each.map((p, i) => (
                     <View key={i} style={pm.plateRow}>
                       <View style={[pm.plateVis, { width: 20 + p.kg * 2 }]} />
-                      <Text style={pm.plateText}>{p.kg}kg x {p.count}</Text>
+                      <Text style={pm.plateText}>{formatWeightFromKg(p.kg, weightUnit)} x {p.count}</Text>
                     </View>
                   ))}
-              <Text style={pm.sub}>Bar: {barWeight}kg · Total: {result.total}kg</Text>
+              <Text style={pm.sub}>Bar: {formatWeightFromKg(barWeight, weightUnit)} · Total: {formatWeightFromKg(result.total, weightUnit)}</Text>
             </>
           ) : (
-            <Text style={{ color: '#FF4500', textAlign: 'center' }}>Cannot load {targetKg}kg with available plates.</Text>
+            <Text style={{ color: '#FF4500', textAlign: 'center' }}>Cannot load {formatWeightFromKg(targetKg, weightUnit)} with available plates.</Text>
           )}
           <TouchableOpacity style={pm.close} onPress={() => { triggerHaptic('selection').catch(() => {}); onClose(); }}>
             <Text style={{ color: '#f0f0f0', fontWeight: '700', letterSpacing: 2 }}>CLOSE</Text>
@@ -842,7 +843,7 @@ function WorkoutContent({ plan, day, planIndex, dayIndex, navigation }) {
 
     if (weight > 0 && (!pb[key] || weight > pb[key])) {
       updatePb(key, weight);
-      dispatch({ type: 'SET_PB_NOTIF', message: 'NEW PB: ' + ex.name + ' — ' + weight + 'kg' });
+    dispatch({ type: 'SET_PB_NOTIF', message: 'NEW PB: ' + ex.name + ' — ' + formatWeightFromKg(weight, settings?.weightUnit || 'kg') });
       setTimeout(() => dispatch({ type: 'SET_PB_NOTIF', message: null }), 3000);
       primarySetEvent = 'prUnlocked';
     }
@@ -1128,7 +1129,7 @@ function WorkoutContent({ plan, day, planIndex, dayIndex, navigation }) {
               }).filter(Boolean);
               if (targets.length > 0) setNextTargets(targets);
             } catch (_) {}
-            const completionLine = summaryText || `You lifted ${Math.round(totalVolume).toLocaleString()} kg total.`;
+    const completionLine = summaryText || `You lifted ${formatVolumeFromKg(totalVolume, settings?.weightUnit || 'kg')} total.`;
             const prLine = prEvents.length ? ` ${prEvents.length} PR event${prEvents.length > 1 ? 's' : ''}.` : '';
             const milestoneLine = addResult?.unlockedMilestones?.length
               ? ` ${addResult.unlockedMilestones.length} milestone unlocked.`
@@ -1304,7 +1305,7 @@ function WorkoutContent({ plan, day, planIndex, dayIndex, navigation }) {
                         <Text style={s.exTarget}>{ex.primary || (ex.primaryMuscles || [])[0] || '—'} · {workingExercises[exIndex].sets}x{workingExercises[exIndex].reps}</Text>
                         {suggestion ? (
                           <Text style={[s.exTargetHint, { color: suggestion.action === 'reduce' ? '#FF8E8E' : colors.subtext }]}>
-                            Next target {suggestion.targetWeight}kg x {suggestion.targetReps}
+                    Next target {Number(suggestion.targetWeight || 0) > 0 ? formatWeightFromKg(suggestion.targetWeight, settings?.weightUnit || 'kg') : 'BW'} x {Math.max(1, Number(suggestion.targetReps || 0))}
                             {suggestion.plateauSignal ? ` · Plateau: ${suggestion.plateauSignal.recommendation}` : ''}
                             {suggestion.deloadSignal ? ` · ${suggestion.deloadSignal.recommendation}` : ''}
                           </Text>
@@ -1319,7 +1320,7 @@ function WorkoutContent({ plan, day, planIndex, dayIndex, navigation }) {
                       <TouchableOpacity style={s.ghostContainer} onPress={() => { triggerHaptic('selection', { enabled: haptic }).catch(() => {}); const fs = ghost.sets[0]; if (fs) dispatch({ type: 'SET_INPUT', exIndex, weight: String(fs.weight), reps: String(fs.reps) }); }}>
                         <Text style={s.ghostLabel}>LAST · {ghost.date} · tap to fill</Text>
                         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                          {ghost.sets.map((gs, gi) => <Text key={gi} style={s.ghostSet}>{gs.weight > 0 ? `${gs.weight}kg` : 'BW'}×{gs.reps}</Text>)}
+                          {ghost.sets.map((gs, gi) => <Text key={gi} style={s.ghostSet}>{gs.weight > 0 ? formatWeightFromKg(gs.weight, settings?.weightUnit || 'kg') : 'BW'}×{gs.reps}</Text>)}
                         </View>
                       </TouchableOpacity>
                     ) : null}
@@ -1327,19 +1328,30 @@ function WorkoutContent({ plan, day, planIndex, dayIndex, navigation }) {
                       <View style={s.loggedSets}>
                         {logged.map((ls, si) => (
                           <View key={ls.id}>
-                            <SetRow set={ls} setIndex={si} exIndex={exIndex} dispatch={dispatch} effortTracking={settings.effortTracking || 'off'} hapticFeedback={haptic} />
+                            <SetRow set={ls} setIndex={si} exIndex={exIndex} dispatch={dispatch} effortTracking={settings.effortTracking || 'off'} hapticFeedback={haptic} weightUnit={settings?.weightUnit || 'kg'} />
                             {showPlateUi && ls.type === 'warmup' && ls.weight > 0 && (
                               <Text style={s.plateHint}>
-                                {getPlateText(ls.weight, activeGymProfile?.barWeight || settings.barWeight || 20, activeGymProfile?.plates)}
+                                {getPlateText(ls.weight, activeGymProfile?.barWeight || settings.barWeight || 20, activeGymProfile?.plates, settings?.weightUnit || 'kg')}
                               </Text>
                             )}
                           </View>
                         ))}
                       </View>
                     )}
+                    {showPlateUi ? (
+                      <TouchableOpacity
+                        style={s.quickAddBtn}
+                        onPress={() => {
+                          triggerHaptic('selection', { enabled: haptic }).catch(() => {});
+                          generateWarmups(exIndex);
+                        }}
+                      >
+                        <Text style={s.quickAddText}>GENERATE WARM-UP SETS</Text>
+                      </TouchableOpacity>
+                    ) : null}
                     <View style={s.inputRow}>
                       <View style={s.inputGroup}>
-                        <Text style={s.inputLabel}>KG</Text>
+                        <Text style={s.inputLabel}>{String(settings?.weightUnit || 'kg').toUpperCase()}</Text>
                         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                           <TextInput style={s.input} value={inp.weight} onChangeText={t => dispatch({ type: 'SET_INPUT', exIndex, weight: t })} keyboardType="decimal-pad" placeholder="0" placeholderTextColor="#222" />
                           {showPlateUi ? (
@@ -1375,7 +1387,13 @@ function WorkoutContent({ plan, day, planIndex, dayIndex, navigation }) {
       </View>
 
       {/* Modals */}
-      <PlateModal visible={showPlates} targetKg={platesTarget} barWeight={activeGymProfile?.barWeight || settings.barWeight || 20} onClose={() => setShowPlates(false)} />
+      <PlateModal
+        visible={showPlates}
+        targetKg={platesTarget}
+        barWeight={activeGymProfile?.barWeight || settings.barWeight || 20}
+        weightUnit={settings?.weightUnit || 'kg'}
+        onClose={() => setShowPlates(false)}
+      />
 
       <RestOverrideModal
         visible={showRestOverride}
@@ -1497,7 +1515,7 @@ function WorkoutContent({ plan, day, planIndex, dayIndex, navigation }) {
                       {t.action ? `${String(t.action).toUpperCase()} · ` : ''}{t.rationale || (t.plateau ? `Plateau: ${t.plateau}` : t.deload ? t.deload : 'Keep the trend moving')}
                     </Text>
                   </View>
-                  <Text style={[s.targetVal, { color: t.action === 'reduce' ? '#FF8E8E' : colors.accent }]}>{t.weight}kg × {t.reps}</Text>
+                  <Text style={[s.targetVal, { color: t.action === 'reduce' ? '#FF8E8E' : colors.accent }]}>{Number(t.weight || 0) > 0 ? formatWeightFromKg(t.weight, settings?.weightUnit || 'kg') : 'BW'} × {Math.max(1, Number(t.reps || 0))}</Text>
                 </View>
               ))}
             </ScrollView>

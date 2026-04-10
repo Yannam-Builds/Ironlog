@@ -15,6 +15,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppContext } from '../context/AppContext';
 import { useTheme } from '../context/ThemeContext';
 import { triggerHaptic } from '../services/hapticsEngine';
+import { convertUnitToKg, formatWeightFromKg } from '../utils/weightUnits';
 
 const STORAGE_KEY = '@ironlog/bodyMeasurements';
 const SCREEN_WIDTH = Dimensions.get('window').width;
@@ -62,6 +63,7 @@ export default function BodyMeasurementsScreen() {
   const { bodyWeight, logBodyWeight, settings } = useContext(AppContext);
   const colors = useTheme();
   const haptic = settings?.hapticFeedback !== false;
+  const weightUnit = settings?.weightUnit || 'kg';
 
   const [activeTab, setActiveTab] = useState('WEIGHT');
   const [weightInput, setWeightInput] = useState('');
@@ -93,10 +95,13 @@ export default function BodyMeasurementsScreen() {
   // ── WEIGHT TAB ──────────────────────────────────────────────────────────────
 
   const logWeight = () => {
-    const w = parseFloat(weightInput);
-    if (!w || w < 20 || w > 300) {
+    const inputWeight = parseFloat(weightInput);
+    const w = convertUnitToKg(inputWeight, weightUnit, 2);
+    if (!inputWeight || w < 20 || w > 300) {
       triggerHaptic('invalidAction', { enabled: haptic }).catch(() => {});
-      setAlertConfig({ title: 'Invalid weight', message: 'Enter a value between 20–300 kg.', buttons: [{ text: 'OK', style: 'default' }] });
+      const min = formatWeightFromKg(20, weightUnit);
+      const max = formatWeightFromKg(300, weightUnit);
+      setAlertConfig({ title: 'Invalid weight', message: `Enter a value between ${min} and ${max}.`, buttons: [{ text: 'OK', style: 'default' }] });
       return;
     }
     logBodyWeight({ date: new Date().toISOString(), weight: w });
@@ -134,7 +139,7 @@ export default function BodyMeasurementsScreen() {
         <Polyline points={pts} fill="none" stroke={colors.accent} strokeWidth={2} />
         <Circle cx={lx} cy={ly} r={4} fill={colors.accent} />
         <SvgText x={lx} y={ly - 8} textAnchor="middle" fill={colors.text} fontSize={11}>
-          {last.weight}kg
+          {formatWeightFromKg(last.weight, weightUnit)}
         </SvgText>
       </Svg>
     );
@@ -258,7 +263,7 @@ export default function BodyMeasurementsScreen() {
         <ScrollView contentContainerStyle={s.tabContent}>
           {/* Input card */}
           <View style={[s.card, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
-            <Text style={[s.sectionLabel, { color: colors.muted }]}>TODAY'S WEIGHT (KG)</Text>
+            <Text style={[s.sectionLabel, { color: colors.muted }]}>{`TODAY'S WEIGHT (${String(weightUnit).toUpperCase()})`}</Text>
             <View style={s.inputRow}>
               <TextInput
                 style={[s.weightInput, { color: colors.text, borderBottomColor: colors.accent }]}
@@ -274,7 +279,7 @@ export default function BodyMeasurementsScreen() {
             </View>
             {delta !== null && (
               <Text style={[s.deltaText, { color: parseFloat(delta) <= 0 ? '#00C170' : '#FF4500' }]}>
-                {parseFloat(delta) > 0 ? '+' : ''}{delta} kg vs last week
+                {parseFloat(delta) > 0 ? '+' : ''}{formatWeightFromKg(Math.abs(Number(delta)), weightUnit)} vs last week
               </Text>
             )}
           </View>
@@ -293,7 +298,7 @@ export default function BodyMeasurementsScreen() {
               <Text style={[s.histDate, { color: colors.subtext }]}>
                 {new Date(e.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
               </Text>
-              <Text style={[s.histWeight, { color: colors.text }]}>{e.weight} kg</Text>
+              <Text style={[s.histWeight, { color: colors.text }]}>{formatWeightFromKg(e.weight, weightUnit)}</Text>
             </View>
           ))}
         </ScrollView>

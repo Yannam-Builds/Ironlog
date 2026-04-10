@@ -8,6 +8,7 @@ import { AppContext } from '../context/AppContext';
 import { useTheme } from '../context/ThemeContext';
 import TrainingMaxCalculator from '../components/TrainingMaxCalculator';
 import { buildExerciseTrend } from '../domain/intelligence/performanceEngine';
+import { convertKgToUnit, formatWeightFromKg, formatVolumeFromKg } from '../utils/weightUnits';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const CHART_WIDTH = SCREEN_WIDTH - 32;
@@ -188,8 +189,9 @@ function RangeSelector({ selected, onSelect, colors }) {
 
 export default function ExerciseProgressScreen({ route }) {
   const { exerciseName } = route.params;
-  const { history } = useContext(AppContext);
+  const { history, settings } = useContext(AppContext);
   const colors = useTheme();
+  const weightUnit = settings?.weightUnit || 'kg';
 
   const [activeTab, setActiveTab] = useState(0);
   const [range, setRange] = useState('ALL');
@@ -212,7 +214,7 @@ export default function ExerciseProgressScreen({ route }) {
           return best;
         }, null);
         const summary = workingSets.length
-          ? workingSets.map((setItem) => `${setItem.reps || 0}x${setItem.weight || 0}kg`).join(', ')
+          ? workingSets.map((setItem) => `${setItem.reps || 0}x${formatWeightFromKg(setItem.weight || 0, weightUnit)}`).join(', ')
           : '-';
         return {
           date: session.date,
@@ -223,7 +225,7 @@ export default function ExerciseProgressScreen({ route }) {
       })
       .filter(Boolean)
       .sort((a, b) => new Date(b.date) - new Date(a.date));
-  }, [exerciseName, history]);
+  }, [exerciseName, history, weightUnit]);
 
   const stats = useMemo(() => {
     if (!pointsInRange.length) {
@@ -247,23 +249,23 @@ export default function ExerciseProgressScreen({ route }) {
   }, [pointsInRange]);
 
   const metricConfig = [
-    { key: 'e1rm', label: 'BEST EST. 1RM', unit: 'kg', values: pointsInRange.map((row) => row.e1rm), chart: 'line', stat: stats.bestE1rm },
-    { key: 'load', label: 'TOP LOAD', unit: 'kg', values: pointsInRange.map((row) => row.load), chart: 'line', stat: stats.bestLoad },
+    { key: 'e1rm', label: 'BEST EST. 1RM', unit: weightUnit, values: pointsInRange.map((row) => convertKgToUnit(row.e1rm || 0, weightUnit, weightUnit === 'lbs' ? 0 : 1)), chart: 'line', stat: convertKgToUnit(stats.bestE1rm, weightUnit, weightUnit === 'lbs' ? 0 : 1) },
+    { key: 'load', label: 'TOP LOAD', unit: weightUnit, values: pointsInRange.map((row) => convertKgToUnit(row.load || 0, weightUnit, weightUnit === 'lbs' ? 0 : 1)), chart: 'line', stat: convertKgToUnit(stats.bestLoad, weightUnit, weightUnit === 'lbs' ? 0 : 1) },
     { key: 'reps', label: 'AVG REPS/SET', unit: '', values: pointsInRange.map((row) => row.reps), chart: 'line', stat: stats.avgReps },
-    { key: 'volume', label: 'SESSION VOLUME', unit: 'kg', values: pointsInRange.map((row) => row.volume), chart: 'bar', stat: stats.totalVolume },
+    { key: 'volume', label: 'SESSION VOLUME', unit: weightUnit, values: pointsInRange.map((row) => convertKgToUnit(row.volume || 0, weightUnit, 0)), chart: 'bar', stat: convertKgToUnit(stats.totalVolume, weightUnit, 0) },
     { key: 'consistency', label: 'CONSISTENCY SCORE', unit: '%', values: pointsInRange.map((_, i) => Math.min(100, Math.round(((i + 1) / Math.max(1, pointsInRange.length)) * stats.consistency))), chart: 'line', stat: stats.consistency },
   ];
 
   const activeMetric = metricConfig[Math.min(activeTab, metricConfig.length - 1)];
 
   const renderHistoryRow = ({ item }) => {
-    const bestSetStr = item.bestSet ? `${item.bestSet.reps} x ${item.bestSet.weight}kg` : null;
+    const bestSetStr = item.bestSet ? `${item.bestSet.reps} x ${formatWeightFromKg(item.bestSet.weight, weightUnit)}` : null;
     return (
       <View style={[styles.historyRow, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
         <View style={styles.historyRowLeft}>
           <Text style={[styles.historyDate, { color: colors.text }]}>{formatDateFull(item.date)}</Text>
           <Text style={[styles.historySummary, { color: colors.subtext }]}>{item.summary}</Text>
-          <Text style={[styles.historySub, { color: colors.muted }]}>Volume: {Math.round(item.volume)} kg</Text>
+          <Text style={[styles.historySub, { color: colors.muted }]}>Volume: {formatVolumeFromKg(item.volume, weightUnit)}</Text>
         </View>
         {bestSetStr ? (
           <View style={[styles.bestSetBadge, { borderColor: colors.accent }]}>
