@@ -180,8 +180,30 @@ adb install -r android/app/build/outputs/apk/release/app-release.apk
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
 
+## Business Docs
+
+Founder and commercial planning docs live in `docs/business/`.
+
+Key files:
+
+- [acquisition-memo.md](docs/business/acquisition-memo.md)
+- [buyer-outreach-templates.md](docs/business/buyer-outreach-templates.md)
+- [valuation-sheet.md](docs/business/valuation-sheet.md)
+- [sale-channels.md](docs/business/sale-channels.md)
+- [play-store-launch-and-monetization.md](docs/business/play-store-launch-and-monetization.md)
+- [kotlin-vs-ship-plan.md](docs/business/kotlin-vs-ship-plan.md)
+
 ## License
 
 IronLog is source-available, not OSI open source.
 
-It is released under the [IronLog Personal Use License](LICENSE) for personal and non-commercial use. Commercial use requires permission.
+It is released under the [IronLog Personal Use License](LICENSE) for personal and non-commercial use.
+
+Current repository legal docs:
+
+- [LICENSE](LICENSE) - the controlling license
+- [TERMS.md](TERMS.md) - repository use summary and restrictions
+- [COMMERCIAL-LICENSING.md](COMMERCIAL-LICENSING.md) - commercial licensing and acquisition path
+- [TRADEMARKS.md](TRADEMARKS.md) - brand and identity restrictions
+
+Commercial use, resale, app-store publication, white-label use, and hosted business use require separate permission.
