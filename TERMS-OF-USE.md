@@ -69,6 +69,7 @@ These terms may be updated as the app evolves.
 
 ## 13. Contact
 
-Until a dedicated support or legal contact is published, questions may be directed through the public project profile:
+Questions about these terms:
 
+- Email: `ironlogsupport@gmail.com`
 - GitHub: [Yannam-Builds](https://github.com/Yannam-Builds)

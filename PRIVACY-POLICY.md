@@ -125,6 +125,7 @@ This policy may be updated as the app evolves, especially if cloud features, pay
 
 ## 14. Contact
 
-For privacy-related questions, contact the repository owner through the public project profile until a dedicated support or business contact is published:
+For privacy-related questions:
 
+- Email: `ironlogsupport@gmail.com`
 - GitHub: [Yannam-Builds](https://github.com/Yannam-Builds)

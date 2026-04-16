@@ -45,10 +45,9 @@ Until a separate agreement is signed, the public repository remains personal-use
 
 ## Contact path
 
-Commercial inquiries should be made directly to the repository owner through the public GitHub account that owns this repository, unless and until a dedicated business email is published.
+Commercial inquiries:
 
-Repository owner:
-
+- Email: `ironlogsupport@gmail.com`
 - GitHub: [Yannam-Builds](https://github.com/Yannam-Builds)
 
 ## Important note

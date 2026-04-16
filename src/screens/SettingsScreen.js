@@ -90,12 +90,12 @@ function formatDecisionLabel(entry = {}) {
     permission_denied: 'Notification permission is off',
   };
   if (entry?.outcome === 'suppressed') {
-    return `SUPPRESSED · ${suppressedReasonMap[entry?.reason] || topic}`;
+    return `SUPPRESSED - ${suppressedReasonMap[entry?.reason] || topic}`;
   }
   if (entry?.outcome === 'sent') {
-    return `SCHEDULED · ${topic}`;
+    return `SCHEDULED - ${topic}`;
   }
-  return `${String(entry?.outcome || 'event').toUpperCase()} · ${topic}`;
+  return `${String(entry?.outcome || 'event').toUpperCase()} - ${topic}`;
 }
 
 function formatDecisionTime(entry = {}) {
@@ -232,7 +232,7 @@ export default function SettingsScreen({ navigation }) {
       }
     } else if (!val || val < 10 || val > 600) {
       triggerHaptic('invalidAction', { enabled: haptic }).catch(() => {});
-      setAlertConfig({ title: 'Invalid value', message: 'Enter a value between 10–600 seconds.', buttons: [{ text: 'OK', style: 'default' }] });
+      setAlertConfig({ title: 'Invalid value', message: 'Enter a value between 10-600 seconds.', buttons: [{ text: 'OK', style: 'default' }] });
       return;
     }
     triggerHaptic('lightConfirm', { enabled: haptic }).catch(() => {});
@@ -893,7 +893,7 @@ export default function SettingsScreen({ navigation }) {
         <Row label="Reset all PBs" danger onPress={() => setAlertConfig({ title: 'Reset PBs?', message: 'All personal bests will be cleared.', buttons: [{ text: 'Cancel', style: 'cancel' }, { text: 'Reset', style: 'destructive', onPress: clearPbs }] })} />
       </View>
 
-      <Text style={{ color: colors.faint, fontSize: 11, textAlign: 'center', letterSpacing: 2 }}>IRONLOG v2.0 · BUILT BY PRANAV</Text>
+      <Text style={{ color: colors.faint, fontSize: 11, textAlign: 'center', letterSpacing: 2 }}>IRONLOG v2.0</Text>
 
       <ImportPreviewModal
         visible={!!csvParsed}
@@ -953,3 +953,4 @@ const s = StyleSheet.create({
   cancelBtn: { flex: 1, padding: 14, alignItems: 'center', borderWidth: 1, borderColor: '#1e1e1e' },
   confirmBtn: { flex: 1, backgroundColor: '#FF4500', padding: 14, alignItems: 'center' },
 });
+

@@ -11,5 +11,4 @@ Report them privately with:
 - affected version or build
 - expected impact
 
-Contact: `security@ironlog.app`
-
+Contact: `ironlogsupport@gmail.com`

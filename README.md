@@ -175,6 +175,7 @@ adb install -r android/app/build/outputs/apk/release/app-release.apk
 
 - Feature requests and bug reports: [Issues](https://github.com/Yannam-Builds/Ironlog/issues/new/choose)
 - Optional discussion threads: [GitHub Discussions](https://github.com/Yannam-Builds/Ironlog/discussions)
+- Support contact: `ironlogsupport@gmail.com`
 
 ## Contributing
 

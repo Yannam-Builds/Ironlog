@@ -2,6 +2,10 @@
 
 Thanks for contributing.
 
+## Support Contact
+
+- Product/support email: `ironlogsupport@gmail.com`
+
 ## Guidelines
 
 - Keep changes focused.
@@ -14,4 +18,3 @@ Thanks for contributing.
 - Use a clear summary of what changed and why.
 - Include validation notes.
 - Add screenshots only when a UI change needs them.
-

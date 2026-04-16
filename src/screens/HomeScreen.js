@@ -567,7 +567,7 @@ export default function HomeScreen({ navigation }) {
         ))}
       </View>
 
-      {/* Volume chips â€” only show if active plan has days */}
+      {/* Volume chips - only show if active plan has days */}
       {activePlanDays.length > 0 && (
         <View style={[s.chipsRow, { borderBottomColor: colors.faint }]}>
           <Text style={[s.chipsLabel, { color: colors.muted }]}>THIS WEEK</Text>
