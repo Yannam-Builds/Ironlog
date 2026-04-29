@@ -1,13 +1,15 @@
 
-import React, { useContext, useRef, useState } from 'react';
+import React, { useContext, useRef, useState, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, Dimensions,
   FlatList, StatusBar,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Reanimated, { useSharedValue, withSpring, useAnimatedStyle } from 'react-native-reanimated';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { AppContext } from '../context/AppContext';
 import { useTheme } from '../context/ThemeContext';
 import { ONBOARDING_TEMPLATE_ID } from '../data/programTemplates';
+import { APP_VERSION_LABEL } from '../platform/appInfo';
 
 const { width, height } = Dimensions.get('window');
 
@@ -15,7 +17,7 @@ const SLIDES = [
   {
     id: 'welcome',
     icon: 'barbell-outline',
-    title: 'WELCOME TO\nIRONLOG',
+    title: 'WELCOME TO\nIronlogDB',
     body: 'The no-nonsense workout tracker built for lifters who mean business.',
     accent: true,
   },
@@ -41,7 +43,7 @@ const SLIDES = [
     id: 'setup',
     icon: 'shield-checkmark-outline',
     title: 'SET UP\nSMART FEATURES',
-    body: 'IRONLOG 1.1.0 adds smart notifications, encrypted local backups, and optional Google Drive backup. We\'ll guide you through the setup after onboarding.',
+    body: `IronlogDB ${APP_VERSION_LABEL} adds smart notifications, encrypted local backups, and optional Google Drive backup. We'll guide you through the setup after onboarding.`,
   },
   {
     id: 'ready',
@@ -57,9 +59,32 @@ export default function OnboardingScreen({ navigation }) {
   const colors = useTheme();
   const flatRef = useRef(null);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [goalDays, setGoalDays] = useState(4);
+
+  const dot0 = useSharedValue(20);
+  const dot1 = useSharedValue(6);
+  const dot2 = useSharedValue(6);
+  const dot3 = useSharedValue(6);
+  const dot4 = useSharedValue(6);
+  const dot5 = useSharedValue(6);
+  const dotWidths = [dot0, dot1, dot2, dot3, dot4, dot5];
+
+  const dotStyle0 = useAnimatedStyle(() => ({ width: dot0.value }));
+  const dotStyle1 = useAnimatedStyle(() => ({ width: dot1.value }));
+  const dotStyle2 = useAnimatedStyle(() => ({ width: dot2.value }));
+  const dotStyle3 = useAnimatedStyle(() => ({ width: dot3.value }));
+  const dotStyle4 = useAnimatedStyle(() => ({ width: dot4.value }));
+  const dotStyle5 = useAnimatedStyle(() => ({ width: dot5.value }));
+  const dotStyles = [dotStyle0, dotStyle1, dotStyle2, dotStyle3, dotStyle4, dotStyle5];
+
+  useEffect(() => {
+    dotWidths.forEach((sv, i) => {
+      sv.value = withSpring(i === currentIndex ? 20 : 6, { stiffness: 300, damping: 24 });
+    });
+  }, [currentIndex]);
 
   const finish = async ({ openStarterProgram = false } = {}) => {
-    await completeOnboarding();
+    await completeOnboarding({ weeklyGoalDays: goalDays });
     if (openStarterProgram) {
       navigation.reset({
         index: 1,
@@ -127,20 +152,39 @@ export default function OnboardingScreen({ navigation }) {
       {/* Dots */}
       <View style={s.dots}>
         {SLIDES.map((_, i) => (
-          <View
+          <Reanimated.View
             key={i}
-            style={[
-              s.dot,
-              {
-                backgroundColor: i === currentIndex ? colors.accent : colors.faint,
-                width: i === currentIndex ? 20 : 6,
-              },
-            ]}
+            style={[s.dot, dotStyles[i], { backgroundColor: i === currentIndex ? colors.accent : colors.faint }]}
           />
         ))}
       </View>
 
       {/* CTA Button */}
+      <View style={s.goalWrap}>
+        <Text style={[s.goalLabel, { color: colors.muted }]}>WEEKLY GOAL WORKOUT DAYS</Text>
+        <View style={s.goalRow}>
+          {[3, 4, 5, 6].map((days) => {
+            const active = goalDays === days;
+            return (
+              <TouchableOpacity
+                key={days}
+                style={[
+                  s.goalPill,
+                  {
+                    borderColor: active ? colors.accent : colors.faint,
+                    backgroundColor: active ? colors.accentSoft : 'transparent',
+                  },
+                ]}
+                onPress={() => setGoalDays(days)}
+                activeOpacity={0.85}
+              >
+                <Text style={[s.goalText, { color: active ? colors.accent : colors.muted }]}>{days}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </View>
+
       <TouchableOpacity
         style={[s.btn, { backgroundColor: colors.accent }]}
         onPress={next}
@@ -184,31 +228,31 @@ const s = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 40,
-    paddingTop: 60,
+    paddingHorizontal: 36,
+    paddingTop: 54,
   },
   iconCircle: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
+    width: 112,
+    height: 112,
+    borderRadius: 56,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    marginBottom: 40,
+    marginBottom: 34,
   },
   title: {
-    fontSize: 36,
+    fontSize: 34,
     fontWeight: '900',
-    letterSpacing: 2,
+    letterSpacing: 1.5,
     textAlign: 'center',
-    lineHeight: 42,
-    marginBottom: 20,
+    lineHeight: 40,
+    marginBottom: 16,
   },
   body: {
-    fontSize: 16,
-    lineHeight: 24,
+    fontSize: 15,
+    lineHeight: 23,
     textAlign: 'center',
-    fontWeight: '400',
+    fontWeight: '500',
   },
   dots: {
     flexDirection: 'row',
@@ -218,13 +262,19 @@ const s = StyleSheet.create({
     marginBottom: 24,
   },
   dot: { height: 6, borderRadius: 3 },
+  goalWrap: { marginHorizontal: 24, marginBottom: 14, gap: 8 },
+  goalLabel: { fontSize: 10, fontWeight: '700', letterSpacing: 1.8, textAlign: 'center' },
+  goalRow: { flexDirection: 'row', justifyContent: 'center', gap: 8 },
+  goalPill: { minWidth: 44, paddingVertical: 8, borderWidth: 1, borderRadius: 999, alignItems: 'center' },
+  goalText: { fontSize: 12, fontWeight: '800', letterSpacing: 0.8 },
   btn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
     marginHorizontal: 24,
-    paddingVertical: 18,
+    paddingVertical: 16,
+    borderRadius: 14,
   },
   btnText: { color: '#fff', fontSize: 14, fontWeight: '900', letterSpacing: 3 },
   secondaryBtn: {
@@ -234,6 +284,7 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
+    borderRadius: 10,
   },
   secondaryBtnText: { fontSize: 12, fontWeight: '800', letterSpacing: 1.6 },
   restoreBtn: {
@@ -243,6 +294,8 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
+    borderRadius: 10,
   },
   restoreBtnText: { fontSize: 11, fontWeight: '700', letterSpacing: 1.4 },
 });
+

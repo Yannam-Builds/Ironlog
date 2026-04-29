@@ -9,7 +9,7 @@ export default function LibrarySetupScreen({ status }) {
   return (
     <View style={s.container}>
       <ActivityIndicator size="large" color="#FF4500" style={{ marginBottom: 24 }} />
-      <Text style={s.title}>IRONLOG</Text>
+      <Text style={s.title}>IronlogDB</Text>
       <Text style={s.msg}>{msg}</Text>
     </View>
   );

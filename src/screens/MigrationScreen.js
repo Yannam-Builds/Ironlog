@@ -6,7 +6,7 @@ export default function MigrationScreen({ step, total, message }) {
   return (
     <View style={s.container}>
       <ActivityIndicator size="large" color="#FF4500" style={{ marginBottom: 24 }} />
-      <Text style={s.title}>IRONLOG</Text>
+      <Text style={s.title}>IronlogDB</Text>
       <Text style={s.msg}>{message || 'Updating your data...'}</Text>
       {step > 0 && (
         <Text style={s.step}>Step {step} of {total}</Text>

@@ -1,26 +1,32 @@
 <div align="center">
   <img src="assets/github-logo.png" width="140" alt="IronLog logo" />
 
-  <h1>IronLog</h1>
+  <h1>IronlogDB</h1>
 
   <p><strong>Offline-first Android workout tracker with live next-session targets, muscle analytics, premium themes, and local-first backups.</strong></p>
 
   <p>Built for lifters who want fast logging in the gym, serious feedback after the session, and full control over their data.</p>
 
   <p>
-    <a href="https://github.com/Yannam-Builds/Ironlog/releases"><img src="https://img.shields.io/github/v/release/Yannam-Builds/Ironlog?label=stable" alt="Latest release" /></a>
+    <a href="https://github.com/Yannam-Builds/Ironlog/releases"><img src="https://img.shields.io/badge/releases-Legacy_Alpha-ff6a00" alt="Legacy alpha releases" /></a>
     <a href="https://github.com/Yannam-Builds/Ironlog/releases"><img src="https://img.shields.io/github/downloads/Yannam-Builds/Ironlog/total" alt="Downloads" /></a>
     <a href="https://github.com/Yannam-Builds/Ironlog/commits"><img src="https://img.shields.io/github/last-commit/Yannam-Builds/Ironlog" alt="Last commit" /></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-source--available-orange.svg" alt="Source-available license" /></a>
   </p>
 
   <p>
-    <a href="https://github.com/Yannam-Builds/Ironlog/releases/latest"><img src="https://img.shields.io/badge/Download-Latest_APK-ff6a00?style=for-the-badge" alt="Download latest APK" /></a>
+    <a href="https://github.com/Yannam-Builds/Ironlog/releases"><img src="https://img.shields.io/badge/Download-Legacy_Alpha_APK-ff6a00?style=for-the-badge" alt="Download legacy alpha APK" /></a>
     <a href="https://github.com/Yannam-Builds/Ironlog/releases/latest"><img src="https://img.shields.io/badge/Android-Only-1b1b1b?style=for-the-badge&logo=android&logoColor=3DDC84" alt="Android only" /></a>
   </p>
 
-  <p><sub>Android 7.0+ | local-first SQLite | encrypted backup and import/export built in</sub></p>
+  <p><sub>Android 7.0+ | local-first WatermelonDB migration in progress | backup and import/export built in</sub></p>
 </div>
+
+## Legacy Release Policy
+
+- `v1.0.0`, `v1.1.0-beta`, and `v1.1.0` are now **Legacy Alpha** releases.
+- Legacy releases are **unsupported** and receive no fixes.
+- IronlogDB will be back soon with the best possible feature set: faster logging, stronger restore/import, and a cleaner WatermelonDB-first runtime.
 
 ## Featured Screens
 
@@ -115,6 +121,7 @@ See the full 23-shot gallery in [features/README.md](features/README.md), browse
 - Plans, built-in program picker, goal modes, Program Insights, adaptive targets, and practical progression rules.
 - Muscle analytics, volume radar, imbalance insights, recovery score, front/back recovery maps, and session quality summaries.
 - Bodyweight tracking, progress photos, calendar history, stats, PR surfacing, weekly summaries, and share cards.
+- 1,731-exercise v2 library with movement pattern, difficulty, bodyweight, and equipment metadata; fuzzy MiniSearch with movement, difficulty, and BW-only filters.
 - AMOLED, light, and Monet-inspired theme variants with the same dense information layout across modes.
 - Local-first SQLite storage, encrypted backup center, Drive backup targets, SQLite import/export, and notification policy controls.
 
@@ -134,6 +141,7 @@ IronLog is not locked to one visual style. The current Android build ships with 
 - Internal source of truth: local SQLite on Android.
 - Backup today: encrypted local snapshots, SQLite export/import, JSON/CSV flows, and optional Google Drive backup targets.
 - Drive supports hidden `AppData` mode and visible folder mode. It is a backup target, not a fake always-on sync layer.
+- Android OS auto-backup interaction and QA contract: [docs/android-auto-backup.md](docs/android-auto-backup.md).
 
 ## Download
 
@@ -143,13 +151,7 @@ Download the latest Android APK from [GitHub Releases](https://github.com/Yannam
 
 ```bash
 npm install
-npx expo run:android
-```
-
-If native folders need to be generated locally first:
-
-```bash
-npx expo prebuild
+npx react-native run-android
 ```
 
 ### Signed Release APK (Android)

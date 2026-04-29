@@ -1,25 +1,26 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { StatusBar } from 'expo-status-bar';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { enableFreeze, enableScreens } from 'react-native-screens';
+import ThemedToast from './src/components/ui/ThemedToast';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
+import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
+import BootSplash from 'react-native-bootsplash';
 import { AppContextProvider } from './src/context/AppContext';
 import { ThemeProvider } from './src/context/ThemeContext';
 import { ActiveWorkoutBannerProvider } from './src/context/ActiveWorkoutBannerContext';
 import AppNavigator from './src/navigation/AppNavigator';
 import { runMigrations } from './src/services/migrations';
-import { initExerciseLibrary } from './src/services/ExerciseLibraryService';
 import MigrationScreen from './src/screens/MigrationScreen';
 import LibrarySetupScreen from './src/screens/LibrarySetupScreen';
 import { ensureTrainingDatabase } from './src/domain/storage/trainingDatabase';
-import { migrateLegacyAsyncStorageToSQLite, seedExerciseIntelligence } from './src/domain/storage/trainingRepository';
 
 enableScreens(true);
 enableFreeze(true);
 
 export default function App() {
   const [migrationStep, setMigrationStep] = useState(null);
-  const [libraryStatus, setLibraryStatus] = useState(null);
   const [ready, setReady] = useState(false);
   const [startupError, setStartupError] = useState(null);
   const [bootAttempt, setBootAttempt] = useState(0);
@@ -28,15 +29,11 @@ export default function App() {
     setReady(false);
     setStartupError(null);
     setMigrationStep(null);
-    setLibraryStatus(null);
 
     try {
       await runMigrations((step, total) => setMigrationStep({ step, total }));
       setMigrationStep(null);
-      const libraryIndex = await initExerciseLibrary((status) => setLibraryStatus(status));
       await ensureTrainingDatabase();
-      await migrateLegacyAsyncStorageToSQLite();
-      await seedExerciseIntelligence(libraryIndex || []);
     } catch (e) {
       console.warn('Startup error:', e);
       setStartupError(e);
@@ -51,24 +48,28 @@ export default function App() {
     })();
   }, [bootAttempt, bootstrap]);
 
+  useEffect(() => {
+    if (ready) {
+      BootSplash.hide({ fade: true }).catch(() => {});
+    }
+  }, [ready]);
+
+  let content = null;
+
   if (migrationStep) {
-    return (
+    content = (
       <MigrationScreen
         step={migrationStep.step}
         total={migrationStep.total}
         message="Upgrading your data..."
       />
     );
-  }
-
-  if (!ready) {
-    return <LibrarySetupScreen status={libraryStatus || 'setting_up'} />;
-  }
-
-  if (startupError) {
-    return (
+  } else if (!ready) {
+    content = <LibrarySetupScreen status="setting_up" />;
+  } else if (startupError) {
+    content = (
       <View style={s.errorScreen}>
-        <Text style={s.errorTitle}>IRONLOG</Text>
+        <Text style={s.errorTitle}>IronlogDB</Text>
         <Text style={s.errorHeading}>Startup failed</Text>
         <Text style={s.errorMessage}>
           {startupError?.message || 'Something went wrong while loading your data.'}
@@ -78,18 +79,28 @@ export default function App() {
         </TouchableOpacity>
       </View>
     );
+  } else {
+    content = (
+      <KeyboardProvider>
+        <BottomSheetModalProvider>
+          <AppContextProvider>
+            <ThemeProvider>
+              <ActiveWorkoutBannerProvider>
+                <AppNavigator />
+                <ThemedToast />
+              </ActiveWorkoutBannerProvider>
+            </ThemeProvider>
+          </AppContextProvider>
+        </BottomSheetModalProvider>
+      </KeyboardProvider>
+    );
   }
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <AppContextProvider>
-        <ThemeProvider>
-          <ActiveWorkoutBannerProvider>
-            <StatusBar style="light" backgroundColor="#080808" />
-            <AppNavigator />
-          </ActiveWorkoutBannerProvider>
-        </ThemeProvider>
-      </AppContextProvider>
+      <SafeAreaProvider>
+        {content}
+      </SafeAreaProvider>
     </GestureHandlerRootView>
   );
 }
