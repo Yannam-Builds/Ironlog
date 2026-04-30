@@ -3,8 +3,11 @@ import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Platform,
+  ScrollView,
   StatusBar,
   StyleSheet,
+  Text,
+  TouchableOpacity,
   View,
 } from 'react-native';
 import PagerView from 'react-native-pager-view';
@@ -226,6 +229,40 @@ function ThemedStatusBar() {
   );
 }
 
+// ── Error boundary ────────────────────────────────────────────────────────────
+
+class AppErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, info) {
+    console.error('[AppErrorBoundary]', error, info);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <View style={{ flex: 1, backgroundColor: '#0a0a0a', justifyContent: 'center', alignItems: 'center', padding: 32 }}>
+          <Text style={{ color: '#f0f0f0', fontSize: 20, fontWeight: '900', marginBottom: 12 }}>Something went wrong</Text>
+          <ScrollView style={{ maxHeight: 200, width: '100%' }}>
+            <Text style={{ color: '#888', fontSize: 11, lineHeight: 16 }}>{String(this.state.error)}</Text>
+          </ScrollView>
+          <TouchableOpacity
+            style={{ marginTop: 28, borderWidth: 1, borderColor: '#ff6a00', borderRadius: 10, paddingHorizontal: 24, paddingVertical: 12 }}
+            onPress={() => this.setState({ hasError: false, error: null })}
+          >
+            <Text style={{ color: '#ff6a00', fontWeight: '800' }}>Try Again</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 // ── Root navigator ────────────────────────────────────────────────────────────
 
 export default function AppNavigator() {
@@ -259,6 +296,7 @@ export default function AppNavigator() {
   };
 
   return (
+    <AppErrorBoundary>
     <GlassModeProvider>
       <NavigationContainer theme={navTheme}>
         <ThemedStatusBar />
@@ -304,5 +342,6 @@ export default function AppNavigator() {
         </Stack.Navigator>
       </NavigationContainer>
     </GlassModeProvider>
+    </AppErrorBoundary>
   );
 }

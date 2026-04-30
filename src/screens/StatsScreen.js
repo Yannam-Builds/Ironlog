@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, useWindowDimensions } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { LineChart } from 'react-native-gifted-charts';
@@ -55,50 +55,53 @@ export default function StatsScreen({ navigation }) {
   });
 
   // ── aggregate stats ──────────────────────────────────────────────────────
-  const streak    = getStreak(history);
-  const totalSets = history.reduce((a, h) => a + (h.sets || 0), 0);
-  const avgDur    = history.length
-    ? Math.round(history.reduce((a, h) => a + (h.duration || 0), 0) / history.length / 60)
-    : 0;
+  const { streak, totalSets, avgDur } = useMemo(() => ({
+    streak:    getStreak(history),
+    totalSets: history.reduce((a, h) => a + (h.sets || 0), 0),
+    avgDur:    history.length
+      ? Math.round(history.reduce((a, h) => a + (h.duration || 0), 0) / history.length / 60)
+      : 0,
+  }), [history]);
 
   // ── 14-day chart ─────────────────────────────────────────────────────────
-  const dayMap = {};
-  history.forEach((h) => {
-    const d = (h.date || '').split('T')[0];
-    if (d) dayMap[d] = (dayMap[d] || 0) + 1;
-  });
-
-  const last14 = Array.from({ length: 14 }, (_, i) => {
-    const d = new Date(Date.now() - (13 - i) * 86400000);
-    return d.toISOString().split('T')[0];
-  });
-
-  // Show a label at indices 0, 4, 9, 13 — gives well-spaced anchors across 14 days.
-  const LABEL_INDICES = new Set([0, 4, 9, 13]);
-  const chartData = last14.map((day, idx) => {
-    const [, mm, dd] = day.split('-');
+  const { chartData, chartMax, pointSpacing } = useMemo(() => {
+    const dayMap = {};
+    history.forEach((h) => {
+      const d = (h.date || '').split('T')[0];
+      if (d) dayMap[d] = (dayMap[d] || 0) + 1;
+    });
+    const last14 = Array.from({ length: 14 }, (_, i) => {
+      const d = new Date(Date.now() - (13 - i) * 86400000);
+      return d.toISOString().split('T')[0];
+    });
+    const LABEL_INDICES = new Set([0, 4, 9, 13]);
+    const data = last14.map((day, idx) => {
+      const [, mm, dd] = day.split('-');
+      return { value: dayMap[day] || 0, label: LABEL_INDICES.has(idx) ? `${dd}/${mm}` : '' };
+    });
+    const sectionPad = 16;
+    const cw = Math.max(280, width - sectionPad * 2 - 4);
     return {
-      value: dayMap[day] || 0,
-      label: LABEL_INDICES.has(idx) ? `${dd}/${mm}` : '',
+      chartData:    data,
+      chartMax:     Math.max(4, ...data.map(p => p.value)),
+      pointSpacing: Math.floor((cw - 40) / (data.length - 1)),
     };
-  });
+  }, [history, width]);
 
   // Reserve enough horizontal space. Section padding is 16 each side → 32 total.
   const sectionPad = 16;
   const chartWidth = Math.max(280, width - sectionPad * 2 - 4);
-  const pointSpacing = Math.floor((chartWidth - 40) / (chartData.length - 1));
-  const chartMax = Math.max(4, ...chartData.map(p => p.value));
 
   // ── personal bests ───────────────────────────────────────────────────────
-  const pbEntries = Object.entries(pb).sort(([, a], [, b]) => b - a);
+  const pbEntries = useMemo(() => Object.entries(pb).sort(([, a], [, b]) => b - a), [pb]);
 
   // ── stat pill data ───────────────────────────────────────────────────────
-  const STATS = [
-    { label: 'SESSIONS',  val: String(history.length) },
+  const STATS = useMemo(() => [
+    { label: 'SESSIONS',   val: String(history.length) },
     { label: 'TOTAL SETS', val: String(totalSets) },
-    { label: 'AVG TIME',  val: `${avgDur}m` },
-    { label: 'STREAK',    val: `${streak}d` },
-  ];
+    { label: 'AVG TIME',   val: `${avgDur}m` },
+    { label: 'STREAK',     val: `${streak}d` },
+  ], [history.length, totalSets, avgDur, streak]);
 
   return (
     <ScrollView

@@ -114,7 +114,7 @@ export default function HistoryScreen({ navigation }) {
         {h.exercises && h.exercises.length > 0 && (
           <View style={{ marginTop: 8 }}>
             {h.exercises.map((ex, ei) => (
-              <Text key={ei} style={[s.exLine, { color: colors.muted }]}>
+              <Text key={ex.name ? `${ex.name}_${ei}` : ei} style={[s.exLine, { color: colors.muted }]}>
                 {ex.name}: {ex.sets.map(set => (set.weight > 0 ? set.weight + 'kg' : 'BW') + 'x' + set.reps).join(', ')}
               </Text>
             ))}

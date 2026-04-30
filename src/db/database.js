@@ -13,6 +13,7 @@ import WorkoutSet from './models/WorkoutSet';
 import BodyMeasurement from './models/BodyMeasurement';
 import AppSetting from './models/AppSetting';
 import ProgressPhoto from './models/ProgressPhoto';
+import SmokeTest from './models/SmokeTest';
 
 const adapter = new SQLiteAdapter({
   schema,
@@ -37,5 +38,6 @@ export const database = new Database({
     BodyMeasurement,
     AppSetting,
     ProgressPhoto,
+    SmokeTest,
   ],
 });

@@ -179,7 +179,8 @@ const ConfettiParticle = memo(function ConfettiParticle({ particle, color }) {
         easing: Easing.linear,
       })
     );
-  }, [particle.delayMs, particle.durationMs, progress]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [particle.delayMs, particle.durationMs]);
 
   const animatedStyle = useAnimatedStyle(() => {
     const p = progress.value;

@@ -294,16 +294,31 @@ export default function HomeScreen({ navigation }) {
     }
   };
 
-  const weeklyGoalDays = Math.max(1, Math.min(7, Number(settings?.weeklyGoalDays) || 4));
-  const goalStreak = getGoalStreak(history, weeklyGoalDays);
-  const thisWeek = new Date(); thisWeek.setDate(thisWeek.getDate() - 7);
-  const weekSessions = history.filter(h => new Date(h.date) > thisWeek);
-  const hitDays = new Set(weekSessions.map(h => h.dayId));
-  const avgDur = history.length ? Math.round(history.reduce((a, h) => a + (h.duration || 0), 0) / history.length / 60) : 0;
+  const weeklyGoalDays = useMemo(
+    () => Math.max(1, Math.min(7, Number(settings?.weeklyGoalDays) || 4)),
+    [settings?.weeklyGoalDays],
+  );
+  const goalStreak = useMemo(() => getGoalStreak(history, weeklyGoalDays), [history, weeklyGoalDays]);
+
+  const { weekSessions, hitDays, avgDur } = useMemo(() => {
+    const cutoff = Date.now() - 7 * 86400000;
+    const ws = history.filter(h => new Date(h.date).getTime() > cutoff);
+    return {
+      weekSessions: ws,
+      hitDays: new Set(ws.map(h => h.dayId)),
+      avgDur: history.length
+        ? Math.round(history.reduce((a, h) => a + (h.duration || 0), 0) / history.length / 60)
+        : 0,
+    };
+  }, [history]);
+
   const latestBW = bodyWeight[0];
 
   const activePlan = plans[0];
-  const activePlanDays = Array.isArray(activePlan?.days) ? activePlan.days : [];
+  const activePlanDays = useMemo(
+    () => Array.isArray(activePlan?.days) ? activePlan.days : [],
+    [activePlan],
+  );
 
   const { recommendation, volumeStatus, groupReadiness, readiness, muscleAnalytics } = useMemo(() => {
     if (!insightsReady) return { recommendation: null, volumeStatus: {}, groupReadiness: {}, readiness: {}, muscleAnalytics: null };
