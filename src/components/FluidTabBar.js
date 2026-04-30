@@ -9,12 +9,14 @@ export default function FluidTabBar({
   state,
   descriptors,
   navigation,
+  scrollX,
 }) {
   return (
     <PremiumFrostedTabBar
       state={state}
       descriptors={descriptors}
       navigation={navigation}
+      scrollX={scrollX}
     />
   );
 }

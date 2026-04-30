@@ -1,5 +1,6 @@
 
 import React, { useCallback, useMemo, useRef, useState } from 'react';
+import { useSharedValue } from 'react-native-reanimated';
 import {
   ActivityIndicator,
   Platform,
@@ -98,6 +99,7 @@ function Tabs({ navigation }) {
 
   const [tabIndex, setTabIndex] = useState(0);
   const pagerRef = useRef(null);
+  const scrollX = useSharedValue(0);
 
   const goTo = useCallback((idx) => {
     const n = Math.max(0, Math.min(TAB_COUNT - 1, idx));
@@ -158,6 +160,9 @@ function Tabs({ navigation }) {
         initialPage={0}
         overdrag={false}
         offscreenPageLimit={1}
+        onPageScroll={(e) => {
+          scrollX.value = e.nativeEvent.position + e.nativeEvent.offset;
+        }}
         onPageSelected={(e) => setTabIndex(e.nativeEvent.position)}
       >
         {TAB_SCREENS.map((screen, idx) => (
@@ -189,6 +194,7 @@ function Tabs({ navigation }) {
         state={fakeState}
         descriptors={fakeDescriptors}
         navigation={fakeTabNav}
+        scrollX={scrollX}
       />
     </View>
   );

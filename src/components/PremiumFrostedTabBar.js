@@ -4,6 +4,7 @@ import ReAnimated, {
   useSharedValue,
   withSpring,
   useAnimatedStyle,
+  useDerivedValue,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../context/ThemeContext';
@@ -31,30 +32,46 @@ function labelColor(colors, focused) {
   return focused ? (colors.accent || colors.text) : (colors.muted || colors.text);
 }
 
-export default function PremiumFrostedTabBar({ state, descriptors, navigation }) {
+export default function PremiumFrostedTabBar({ state, descriptors, navigation, scrollX }) {
   const colors = useTheme();
   const insets = useSafeAreaInsets();
   const [barWidth, setBarWidth] = useState(0);
-  const activeX = useSharedValue(0);
+  // Fallback shared value used only when scrollX prop is not provided (tap navigation)
+  const fallbackX = useSharedValue(0);
+  const tabWidthSV = useSharedValue(0);
 
   const tabWidth = useMemo(() => {
     if (!barWidth || !state.routes.length) return 0;
     return barWidth / state.routes.length;
   }, [barWidth, state.routes.length]);
 
+  // Keep tabWidthSV in sync so worklets can read it reactively
   useEffect(() => {
-    if (!tabWidth) return;
-    activeX.value = withSpring(state.index * tabWidth, {
-      stiffness: 300,
-      damping: 28,
-      mass: 0.4,
-      overshootClamping: false,
+    tabWidthSV.value = tabWidth;
+  }, [tabWidth]); // eslint-disable-line
+
+  // Fallback: spring to index when no scroll tracking (e.g. on first render or tap)
+  useEffect(() => {
+    if (!tabWidth || scrollX) return;
+    fallbackX.value = withSpring(state.index * tabWidth, {
+      stiffness: 380,
+      damping: 32,
+      mass: 0.35,
+      overshootClamping: true,
     });
   }, [state.index, tabWidth]); // eslint-disable-line
 
-  const sliderAnimStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: activeX.value }],
-  }));
+  // When scrollX is provided (swipe tracking), seed the fallback to stay in sync
+  useEffect(() => {
+    if (!scrollX || !tabWidth) return;
+    fallbackX.value = state.index * tabWidth;
+  }, [state.index, tabWidth]); // eslint-disable-line
+
+  const sliderAnimStyle = useAnimatedStyle(() => {
+    // Use live swipe position when available, else fallback spring
+    const tx = scrollX ? scrollX.value * tabWidthSV.value : fallbackX.value;
+    return { transform: [{ translateX: tx }] };
+  });
 
   const accent = colors.accent || '#FF4500';
   const glass = pillGlass(colors);
