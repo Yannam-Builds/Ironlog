@@ -1,4 +1,4 @@
-import * as SQLite from 'expo-sqlite';
+import * as SQLite from '../../platform/sqlite';
 
 export const TRAINING_DATABASE_NAME = 'ironlog_v2.db';
 export const SQLITE_MIGRATION_MARKER_KEY = '@ironlog/v2SqliteMigrated';
@@ -327,3 +327,4 @@ export async function runInTransaction(task) {
   const db = await ensureTrainingDatabase();
   return db.withTransactionAsync(() => task(db));
 }
+

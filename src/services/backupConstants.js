@@ -36,11 +36,14 @@ export const DEFAULT_BACKUP_CONFIG = {
   enabled: false,
   autoBackupOnWorkoutCompletion: true,
   autoBackupOnBackground: true,
-  driveEnabled: true,
+  driveEnabled: false,
   retentionCount: 5,
-  localRetentionCount: 8,
+  localRetentionCount: 4,
   exportIncludesPhotos: false,
   passphraseConfigured: false,
+  scheduledBackupEnabled: false,
+  scheduledBackupHour: 2,
+  scheduledBackupMinute: 0,
 };
 
 export const DEFAULT_BACKUP_STATUS = {
@@ -76,6 +79,7 @@ export const DEFAULT_NOTIFICATION_SETTINGS = {
   weeklyCapMode: 'plan_based',
   maxNotificationsPerWeekOverride: null,
   reminderLeadMinutes: 90,
+  dailyReminderTimeMinutes: null,
   deliveryJitterMinutes: 12,
   perTopicCooldownHours: {},
   snoozeUntil: null,
@@ -86,17 +90,3 @@ export const DEFAULT_NOTIFICATION_SETTINGS = {
 };
 
 export const BACKUP_LOCAL_DIR_NAME = 'backups';
-
-export const GOOGLE_DRIVE_SCOPES = [
-  'openid',
-  'profile',
-  'email',
-  'https://www.googleapis.com/auth/drive.appdata',
-  'https://www.googleapis.com/auth/drive.file',
-];
-
-export const GOOGLE_DISCOVERY = {
-  authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
-  tokenEndpoint: 'https://oauth2.googleapis.com/token',
-  revocationEndpoint: 'https://oauth2.googleapis.com/revoke',
-};

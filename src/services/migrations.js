@@ -8,7 +8,8 @@ const SCHEMA_VERSION_KEY = '@ironlog/schemaVersion';
 const MIGRATION_ERRORS_KEY = '@ironlog/migrationErrors';
 const CURRENT_VERSION = 11;
 
-// old key helpers
+// LEGACY_COMPAT: old AsyncStorage keys retained only for upgrade migration.
+// Do not use these keys for new features.
 const OLD_HISTORY_KEY = 'ironlog_history';
 const OLD_BW_KEY = 'ironlog_bw';
 
@@ -21,11 +22,11 @@ async function logError(migration, err) {
   } catch (_) {}
 }
 
-// v0→v1: initial schema setup
+// v0->1: initial schema setup
 async function migrate0to1() {
 }
 
-// v1→v2: convert warmup boolean on sets to set.type
+// v1->2: convert warmup boolean on sets to set.type
 async function migrate1to2() {
   const raw = await AsyncStorage.getItem(OLD_HISTORY_KEY);
   if (!raw) return;
@@ -44,7 +45,7 @@ async function migrate1to2() {
   await AsyncStorage.setItem(OLD_HISTORY_KEY, JSON.stringify(updated));
 }
 
-// v2→v3: add supersetGroup: null to all workout exercises
+// v2->3: add supersetGroup: null to all workout exercises
 async function migrate2to3() {
   const raw = await AsyncStorage.getItem(OLD_HISTORY_KEY);
   if (!raw) return;
@@ -59,7 +60,7 @@ async function migrate2to3() {
   await AsyncStorage.setItem(OLD_HISTORY_KEY, JSON.stringify(updated));
 }
 
-// v3→v4: migrate body weight entries to BodyMeasurements format
+// v3->4: migrate body weight entries to BodyMeasurements format
 async function migrate3to4() {
   const raw = await AsyncStorage.getItem(OLD_BW_KEY);
   if (!raw) return;
@@ -74,10 +75,10 @@ async function migrate3to4() {
     notes: '',
   }));
   await AsyncStorage.setItem('@ironlog/bodyMeasurements', JSON.stringify(measurements));
-  // keep old key for backward compat with existing BW chart
+  // LEGACY_COMPAT: keep old key for backward compatibility with existing BW chart reads.
 }
 
-// v4→v5: add previousSets, targetWeight, targetReps to all sets
+// v4->5: add previousSets, targetWeight, targetReps to all sets
 async function migrate4to5() {
   const raw = await AsyncStorage.getItem(OLD_HISTORY_KEY);
   if (!raw) return;
@@ -101,7 +102,7 @@ async function migrate4to5() {
   await AsyncStorage.setItem(OLD_HISTORY_KEY, JSON.stringify(updated));
 }
 
-// v5→v6: add isDeload to all sessions
+// v5->6: add isDeload to all sessions
 async function migrate5to6() {
   const raw = await AsyncStorage.getItem(OLD_HISTORY_KEY);
   if (!raw) return;
@@ -110,7 +111,7 @@ async function migrate5to6() {
   await AsyncStorage.setItem(OLD_HISTORY_KEY, JSON.stringify(updated));
 }
 
-// v6→v7: create empty index structures
+// v6->7: create empty index structures
 async function migrate6to7() {
   const pairs = [
     ['@ironlog/pr_index', '{}'],
@@ -123,7 +124,7 @@ async function migrate6to7() {
   if (toSet.length) await AsyncStorage.multiSet(toSet);
 }
 
-// v7→v8: rebuild all indexes from full history
+// v7->8: rebuild all indexes from full history
 // runs AFTER all schema migrations so set.type and isDeload are already correct
 async function migrate7to8() {
   const raw = await AsyncStorage.getItem(OLD_HISTORY_KEY);
@@ -147,7 +148,7 @@ async function migrate7to8() {
       const exId = ex.exerciseId || ex.name;
       const workingSets = ex.sets.filter(s => s.type !== 'warmup');
 
-      // lastPerformance — overwrite with most recent (history is newest-first)
+      // lastPerformance  overwrite with most recent (history is newest-first)
       if (!lastPerf[exId]) {
         lastPerf[exId] = {
           date: dateStr,
@@ -156,7 +157,7 @@ async function migrate7to8() {
         };
       }
 
-      // pr_index — only normal/failure/amrap sets
+      // pr_index  only normal/failure/amrap sets
       const prSets = ex.sets.filter(s => ['normal', 'failure', 'amrap'].includes(s.type || 'normal'));
       if (prSets.length && !session.isDeload) {
         if (!prIndex[exId]) prIndex[exId] = [];
@@ -167,9 +168,9 @@ async function migrate7to8() {
         }
       }
 
-      // volume_index — working sets to primary muscle, skip deload
+      // volume_index  working sets to primary muscle, skip deload
       if (!session.isDeload && workingSets.length) {
-        // primaryMuscle comes from exerciseId lookup — for migrated data use muscle field
+        // primaryMuscle comes from exerciseId lookup  for migrated data use muscle field
         const muscle = (ex.primaryMuscles && ex.primaryMuscles[0]) || ex.primary || ex.muscle || 'other';
         const normalized = muscle.toLowerCase().replace(/\s+/g, '_');
         if (!volumeIndex[weekKey]) volumeIndex[weekKey] = {};
@@ -190,7 +191,7 @@ async function migrate7to8() {
   ]);
 }
 
-// v8→v9: add note: null to all sets that lack it
+// v8->9: add note: null to all sets that lack it
 async function migrate8to9() {
   const raw = await AsyncStorage.getItem(OLD_HISTORY_KEY);
   if (!raw) return;
@@ -208,7 +209,8 @@ async function migrate8to9() {
   await AsyncStorage.setItem(OLD_HISTORY_KEY, JSON.stringify(updated));
 }
 
-// v9→v10: wipe out legacy custom exercises since they duplicate program templates
+// v9->10: wipe out legacy custom exercise keys that duplicated program templates.
+// LEGACY_COMPAT: key removal runs once during migration and must not be reused for runtime deletes.
 async function migrate9to10() {
   await AsyncStorage.multiRemove([
     '@ironlog/customExercises',
@@ -218,7 +220,7 @@ async function migrate9to10() {
   ]);
 }
 
-// v10→v11: fix empty primaryMuscles in history from past bug
+// v10->11: fix empty primaryMuscles in history from past bug
 
 async function migrate10to11() {
   const raw = await AsyncStorage.getItem(OLD_HISTORY_KEY);
@@ -277,7 +279,7 @@ export async function runMigrations(onProgress) {
       await AsyncStorage.setItem(SCHEMA_VERSION_KEY, String(v));
     } catch (e) {
       await logError(`v${v - 1}->v${v}`, e);
-      // skip and continue — never crash
+      // skip and continue  never crash
     }
   }
   return true; // migrations ran
@@ -287,3 +289,4 @@ export async function getSchemaVersion() {
   const raw = await AsyncStorage.getItem(SCHEMA_VERSION_KEY);
   return raw ? parseInt(raw, 10) : 0;
 }
+

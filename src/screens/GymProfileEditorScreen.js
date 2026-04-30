@@ -1,11 +1,13 @@
 
-import React, { useState, useContext } from 'react';
+import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
 import CustomAlert from '../components/CustomAlert';
-import { Ionicons } from '@expo/vector-icons';
-import { AppContext } from '../context/AppContext';
+import Ionicons from 'react-native-vector-icons/Ionicons';
+import useWatermelonGymProfiles from '../hooks/useWatermelonGymProfiles';
+import useWatermelonSettings from '../hooks/useWatermelonSettings';
 import { useTheme } from '../context/ThemeContext';
-import { triggerHaptic } from '../services/hapticsEngine';
+import { fireHaptic } from '../services/hapticsEngine';
+import { convertKgToUnit, convertUnitToKg } from '../utils/weightUnits';
 
 function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
 
@@ -13,22 +15,36 @@ const DEFAULT_PLATES = [20, 15, 10, 5, 2.5, 1.25].map(w => ({ weight: w, quantit
 
 export default function GymProfileEditorScreen({ route, navigation }) {
   const { profile } = route.params || {};
-  const { gymProfiles, saveGymProfiles, settings } = useContext(AppContext);
+  const { gymProfiles, saveGymProfiles } = useWatermelonGymProfiles();
+  const { settings } = useWatermelonSettings();
   const colors = useTheme();
   const haptic = settings?.hapticFeedback !== false;
+  const unit = settings?.weightUnit === 'lbs' ? 'lbs' : 'kg';
+  const unitLabel = unit === 'lbs' ? 'lb' : 'kg';
 
   const [name, setName] = useState(profile?.name || '');
-  const [barWeight, setBarWeight] = useState(String(profile?.barWeight ?? 20));
+  const [barWeight, setBarWeight] = useState(
+    String(convertKgToUnit(Number(profile?.barWeight ?? 20), unit, 2))
+  );
   const [plates, setPlates] = useState(profile?.plates || DEFAULT_PLATES);
   const [newPlate, setNewPlate] = useState('');
 
   const [alertConfig, setAlertConfig] = useState(null);
 
   const addPlate = () => {
-    const w = parseFloat(newPlate);
-    if (!w || w <= 0) { setAlertConfig({ title: 'Invalid weight', message: 'Enter a positive plate weight.', buttons: [{ text: 'OK', style: 'default' }] }); return; }
-    if (plates.some(p => p.weight === w)) { setAlertConfig({ title: 'Already exists', message: 'That plate weight is already in the list.', buttons: [{ text: 'OK', style: 'default' }] }); return; }
-    setPlates(prev => [...prev, { weight: w, quantity: 2 }].sort((a, b) => b.weight - a.weight));
+    const typedWeight = parseFloat(newPlate);
+    if (!typedWeight || typedWeight <= 0) {
+      setAlertConfig({ title: 'Invalid weight', message: `Enter a positive plate weight (${unitLabel}).`, buttons: [{ text: 'OK', style: 'default' }] });
+      return;
+    }
+    const weightKg = convertUnitToKg(typedWeight, unit);
+    if (!Number.isFinite(weightKg) || weightKg <= 0) {
+      setAlertConfig({ title: 'Invalid weight', message: `Could not convert ${unitLabel} value to kg.`, buttons: [{ text: 'OK', style: 'default' }] });
+      return;
+    }
+    const exists = plates.some((p) => Math.abs(Number(p.weight || 0) - weightKg) < 0.001);
+    if (exists) { setAlertConfig({ title: 'Already exists', message: 'That plate weight is already in the list.', buttons: [{ text: 'OK', style: 'default' }] }); return; }
+    setPlates(prev => [...prev, { weight: weightKg, quantity: 2 }].sort((a, b) => b.weight - a.weight));
     setNewPlate('');
   };
 
@@ -39,9 +55,17 @@ export default function GymProfileEditorScreen({ route, navigation }) {
 
   const save = () => {
     if (!name.trim()) { setAlertConfig({ title: 'Name required', message: 'Enter a profile name.', buttons: [{ text: 'OK', style: 'default' }] }); return; }
-    const bw = parseFloat(barWeight);
-    if (!bw || bw <= 0) { setAlertConfig({ title: 'Invalid bar weight', message: 'Enter a valid bar weight (e.g. 20).', buttons: [{ text: 'OK', style: 'default' }] }); return; }
-    triggerHaptic('mediumConfirm', { enabled: haptic }).catch(() => {});
+    const parsedBar = parseFloat(barWeight);
+    if (!parsedBar || parsedBar <= 0) {
+      setAlertConfig({ title: 'Invalid bar weight', message: `Enter a valid bar weight in ${unitLabel}.`, buttons: [{ text: 'OK', style: 'default' }] });
+      return;
+    }
+    const bw = convertUnitToKg(parsedBar, unit);
+    if (!Number.isFinite(bw) || bw <= 0) {
+      setAlertConfig({ title: 'Invalid bar weight', message: 'Could not convert the entered bar weight to kg.', buttons: [{ text: 'OK', style: 'default' }] });
+      return;
+    }
+    fireHaptic('mediumConfirm', { enabled: haptic });
     const updated = { id: profile?.id || genId(), name: name.trim(), barWeight: bw, plates, isDefault: profile?.isDefault || false };
     if (profile) {
       saveGymProfiles(gymProfiles.map(p => p.id === profile.id ? updated : p));
@@ -65,11 +89,11 @@ export default function GymProfileEditorScreen({ route, navigation }) {
       </View>
 
       <View style={[s.section, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
-        <Text style={[s.sectionTitle, { color: colors.muted }]}>BAR WEIGHT (kg)</Text>
+        <Text style={[s.sectionTitle, { color: colors.muted }]}>BAR WEIGHT ({unitLabel})</Text>
         <TextInput
           style={[s.bigInput, { color: colors.text, borderBottomColor: colors.accent }]}
           value={barWeight} onChangeText={setBarWeight}
-          keyboardType="decimal-pad" placeholder="20"
+          keyboardType="decimal-pad" placeholder={unit === 'lbs' ? '45' : '20'}
           placeholderTextColor={colors.muted}
         />
       </View>
@@ -79,7 +103,7 @@ export default function GymProfileEditorScreen({ route, navigation }) {
         <Text style={[s.hint, { color: colors.muted }]}>Quantity = pairs available per side</Text>
         {plates.map(plate => (
           <View key={plate.weight} style={[s.plateRow, { borderBottomColor: colors.faint }]}>
-            <Text style={[s.plateWeight, { color: colors.text }]}>{plate.weight}kg</Text>
+            <Text style={[s.plateWeight, { color: colors.text }]}>{convertKgToUnit(plate.weight, unit, 2)}{unitLabel}</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
               <TouchableOpacity onPress={() => adjustQty(plate.weight, -1)} style={[s.qBtn, { borderColor: colors.faint }]}>
                 <Ionicons name="remove" size={14} color={colors.muted} />
@@ -98,7 +122,7 @@ export default function GymProfileEditorScreen({ route, navigation }) {
           <TextInput
             style={[s.plateInput, { color: colors.text, borderBottomColor: colors.faint, flex: 1 }]}
             value={newPlate} onChangeText={setNewPlate}
-            keyboardType="decimal-pad" placeholder="Add plate weight (kg)"
+            keyboardType="decimal-pad" placeholder={`Add plate weight (${unitLabel})`}
             placeholderTextColor={colors.muted}
           />
           <TouchableOpacity
@@ -119,16 +143,18 @@ export default function GymProfileEditorScreen({ route, navigation }) {
 
 const s = StyleSheet.create({
   container: { flex: 1 },
-  section: { padding: 16, borderWidth: 1 },
+  section: { padding: 16, borderWidth: 1, borderRadius: 14 },
   sectionTitle: { fontSize: 10, letterSpacing: 3, marginBottom: 12 },
   bigInput: { fontSize: 22, fontWeight: '700', borderBottomWidth: 2, paddingVertical: 8 },
   hint: { fontSize: 11, marginBottom: 12 },
   plateRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1 },
   plateWeight: { fontSize: 16, fontWeight: '700' },
-  qBtn: { padding: 6, borderWidth: 1, borderRadius: 4 },
+  qBtn: { padding: 6, borderWidth: 1, borderRadius: 10 },
   qVal: { fontSize: 16, fontWeight: '700', minWidth: 22, textAlign: 'center' },
   plateInput: { fontSize: 16, borderBottomWidth: 1, paddingVertical: 8 },
-  addPlateBtn: { padding: 10, borderWidth: 1, borderRadius: 4 },
-  saveBtn: { padding: 18, alignItems: 'center' },
+  addPlateBtn: { padding: 10, borderWidth: 1, borderRadius: 10 },
+  saveBtn: { padding: 18, alignItems: 'center', borderRadius: 10 },
   saveBtnText: { color: '#fff', fontWeight: '900', fontSize: 14, letterSpacing: 3 },
 });
+
+

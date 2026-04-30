@@ -127,7 +127,7 @@ See the full 23-shot gallery in [features/README.md](features/README.md), browse
 
 ## Themes
 
-IronLog is not locked to one visual style. The current Android build ships with an AMOLED-first look, a full light theme, and Monet-inspired variants while keeping the same layout, contrast hierarchy, and training density across all of them.
+IronlogDB is not locked to one visual style. The current Android build ships with an AMOLED-first look, a full light theme, and Monet-inspired variants while keeping the same layout, contrast hierarchy, and training density across all of them.
 
 ## What Comes Next
 
@@ -145,7 +145,9 @@ IronLog is not locked to one visual style. The current Android build ships with 
 
 ## Download
 
-Download the latest Android APK from [GitHub Releases](https://github.com/Yannam-Builds/Ironlog/releases/latest).
+Public APKs on [GitHub Releases](https://github.com/Yannam-Builds/Ironlog/releases) are Legacy Alpha and unsupported.
+
+IronlogDB will return soon with the best possible feature set on the WatermelonDB line.
 
 ## Build From Source
 
@@ -199,7 +201,7 @@ Key files:
 
 ## License
 
-IronLog is source-available, not OSI open source.
+IronlogDB is source-available, not OSI open source.
 
 It is released under the [IronLog Personal Use License](LICENSE) for personal and non-commercial use.
 
@@ -213,3 +215,10 @@ Current repository legal docs:
 - [TERMS-OF-USE.md](TERMS-OF-USE.md) - app usage terms for launch preparation
 
 Commercial use, resale, app-store publication, white-label use, and hosted business use require separate permission.
+
+## Repository Hygiene
+
+- Active runtime work stays in: `src/`, `android/`, `assets/`, `docs/`, `scripts/`.
+- Historical artifacts (old screenshots, logs, temp dumps, one-off reports/prompts) are archived in `archive/`.
+- Cross-agent handoff log is in `docs/changes/`.
+- Every meaningful session should append a short entry to the current date file.

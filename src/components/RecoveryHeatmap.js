@@ -1,10 +1,9 @@
-
-import React from 'react';
+﻿import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import BodyMapSVG from './BodyMapSVG';
+const CARD_RADIUS = 14;
 
-// Mapping individual regions from SVG to macro-groups in intelligence model
 const REGION_TO_GROUP = {
   chest: 'chest',
   shoulders: 'shoulders',
@@ -18,24 +17,26 @@ const REGION_TO_GROUP = {
 };
 
 const RECOVERY_COLORS = {
-  recovering: '#FF6B6B',
-  partial:    '#FFD93D',
-  ready:      '#6BCB77',
-  untrained:  null,
+  recovering: '#E88787',
+  partial: '#E5C46A',
+  ready: '#79C98D',
+  untrained: null,
 };
+const RECOVERY_RED_THRESHOLD = 0.72;
+const RECOVERY_PARTIAL_THRESHOLD = 0.9;
 
 const LEGEND = [
-  { key: 'recovering', label: '< 60%' },
-  { key: 'partial',    label: '60–82%' },
-  { key: 'ready',      label: '> 82%' },
-  { key: 'untrained',  label: 'Unknown' },
+  { key: 'recovering', label: '< 72%' },
+  { key: 'partial', label: '72-90%' },
+  { key: 'ready', label: '> 90%' },
+  { key: 'untrained', label: 'Unknown' },
 ];
 
 export default function RecoveryHeatmap({ navigation, groupReadiness }) {
   const colors = useTheme();
 
   const regionColors = {};
-  ['chest', 'shoulders', 'rearDelts', 'arms', 'core', 'quads', 'hamstrings', 'calves', 'back'].forEach(region => {
+  ['chest', 'shoulders', 'rearDelts', 'arms', 'core', 'quads', 'hamstrings', 'calves', 'back'].forEach((region) => {
     const group = REGION_TO_GROUP[region];
     let readiness = 1.0;
     if (groupReadiness && groupReadiness[group] !== undefined) {
@@ -43,10 +44,10 @@ export default function RecoveryHeatmap({ navigation, groupReadiness }) {
     } else if (region === 'rearDelts' && groupReadiness && groupReadiness.shoulders !== undefined) {
       readiness = groupReadiness.shoulders;
     }
-    
+
     let status = 'ready';
-    if (readiness < 0.6) status = 'recovering';
-    else if (readiness < 0.82) status = 'partial';
+    if (readiness < RECOVERY_RED_THRESHOLD) status = 'recovering';
+    else if (readiness < RECOVERY_PARTIAL_THRESHOLD) status = 'partial';
 
     regionColors[region] = RECOVERY_COLORS[status] || colors.faint;
   });
@@ -55,25 +56,21 @@ export default function RecoveryHeatmap({ navigation, groupReadiness }) {
   const mapH = 180;
 
   return (
-    <View style={[s.container, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
-      <TouchableOpacity
-        activeOpacity={0.85}
-        onPress={() => navigation?.navigate('RecoveryMap', { groupReadiness })}
-      >
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+    <View style={[s.container, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}> 
+      <TouchableOpacity activeOpacity={0.85} onPress={() => navigation?.navigate('RecoveryMap', { groupReadiness })}>
+        <View style={s.headerRow}>
           <Text style={[s.title, { color: colors.muted }]}>MUSCLE RECOVERY</Text>
-          <Text style={[s.tap, { color: colors.muted }]}>TAP TO EXPAND →</Text>
+          <Text style={[s.tap, { color: colors.muted }]}>TAP TO EXPAND -></Text>
         </View>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-          <View style={{ alignItems: 'center' }}>
+
+        <View style={s.mapRow}>
+          <View style={s.mapSide}>
             <Text style={[s.sideLabel, { color: colors.muted }]}>FRONT</Text>
-            <BodyMapSVG regionColors={regionColors} defaultColor={colors.subtext}
-              width={mapW} height={mapH} view="front" />
+            <BodyMapSVG regionColors={regionColors} defaultColor={colors.subtext} width={mapW} height={mapH} view="front" />
           </View>
-          <View style={{ alignItems: 'center' }}>
+          <View style={s.mapSide}>
             <Text style={[s.sideLabel, { color: colors.muted }]}>BACK</Text>
-            <BodyMapSVG regionColors={regionColors} defaultColor={colors.subtext}
-              width={mapW} height={mapH} view="back" />
+            <BodyMapSVG regionColors={regionColors} defaultColor={colors.subtext} width={mapW} height={mapH} view="back" />
           </View>
           <View style={[s.legendCol, { borderLeftColor: colors.faint }]}>
             {LEGEND.map(({ key, label }) => (
@@ -85,6 +82,7 @@ export default function RecoveryHeatmap({ navigation, groupReadiness }) {
           </View>
         </View>
       </TouchableOpacity>
+
       <TouchableOpacity
         style={[s.analyticsBtn, { borderColor: colors.accent, backgroundColor: colors.accentSoft }]}
         onPress={() => navigation?.navigate('VolumeAnalytics')}
@@ -96,14 +94,17 @@ export default function RecoveryHeatmap({ navigation, groupReadiness }) {
 }
 
 const s = StyleSheet.create({
-  container: { margin: 16, marginBottom: 0, padding: 12, borderWidth: 1 },
+  container: { margin: 16, marginBottom: 0, padding: 12, borderWidth: 1, borderRadius: CARD_RADIUS },
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  mapRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  mapSide: { alignItems: 'center' },
   title: { fontSize: 9, letterSpacing: 3, fontWeight: '700' },
   tap: { fontSize: 9, letterSpacing: 1 },
-  sideLabel: { fontSize: 7, letterSpacing: 2, marginBottom: 2 },
+  sideLabel: { fontSize: 8, letterSpacing: 1.6, marginBottom: 2, fontWeight: '700' },
   legendCol: { paddingLeft: 10, borderLeftWidth: 1, gap: 8, justifyContent: 'center', flex: 1 },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   dot: { width: 9, height: 9, borderRadius: 5 },
-  legendLabel: { fontSize: 10, fontWeight: '600' },
-  analyticsBtn: { marginTop: 12, borderWidth: 1, paddingVertical: 10, alignItems: 'center' },
+  legendLabel: { fontSize: 10, fontWeight: '700' },
+  analyticsBtn: { marginTop: 12, borderWidth: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 10 },
   analyticsBtnText: { fontSize: 10, fontWeight: '800', letterSpacing: 1.3 },
 });

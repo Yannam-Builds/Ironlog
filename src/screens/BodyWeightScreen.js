@@ -9,7 +9,6 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import Svg, {
   Circle,
   Defs,
@@ -19,12 +18,14 @@ import Svg, {
   Stop,
   Text as SvgText,
 } from 'react-native-svg';
-import { Ionicons } from '@expo/vector-icons';
-import * as Sharing from 'expo-sharing';
+import Ionicons from 'react-native-vector-icons/Ionicons';
+import * as Sharing from '../platform/sharing';
 import { captureRef } from 'react-native-view-shot';
-import { useApp } from '../context/AppContext';
+import useWatermelonBodyMeasurements from '../hooks/useWatermelonBodyMeasurements';
+import useWatermelonSettings from '../hooks/useWatermelonSettings';
 import { useTheme } from '../context/ThemeContext';
-import { triggerHaptic } from '../services/hapticsEngine';
+import { fireHaptic } from '../services/hapticsEngine';
+import { withAlpha } from '../utils/colorUtils';
 import {
   BODY_WEIGHT_RANGES,
   calculateBodyWeightSummary,
@@ -33,10 +34,10 @@ import {
   normalizeBodyWeightEntries,
 } from '../utils/bodyWeightAnalytics';
 
-const CHART_WIDTH = Dimensions.get('window').width - 32;
+// 16 scrollview padding + 16 card padding + extra safety margins for axis labels
+const CHART_WIDTH = Dimensions.get('window').width - 76;
 const CHART_HEIGHT = 240;
-const PLOT = { top: 20, right: 16, bottom: 36, left: 40 };
-const STORAGE_KEY = 'ironlog_bw';
+const PLOT = { top: 20, right: 30, bottom: 36, left: 42 };
 
 function formatWeight(value, unit) {
   if (value == null || !Number.isFinite(value)) return '--';
@@ -85,12 +86,22 @@ function buildSmoothPath(points) {
   return path;
 }
 
+function computeMovingAverage(entries, windowDays = 7) {
+  return entries.map((entry, i) => {
+    const cutoff = entry.timestamp - windowDays * 24 * 60 * 60 * 1000;
+    const window = entries.slice(0, i + 1).filter(e => e.timestamp >= cutoff);
+    return window.reduce((sum, e) => sum + e.weight, 0) / window.length;
+  });
+}
+
 function calculateChartGeometry(entries) {
   if (!entries.length) return null;
 
+  const maValues = computeMovingAverage(entries);
   const weights = entries.map((entry) => entry.weight);
-  const minWeight = Math.min(...weights);
-  const maxWeight = Math.max(...weights);
+  const allValues = [...weights, ...maValues];
+  const minWeight = Math.min(...allValues);
+  const maxWeight = Math.max(...allValues);
   const baseRange = maxWeight - minWeight;
   const pad = baseRange < 0.6 ? 0.4 : baseRange * 0.15;
   const yMin = minWeight - pad;
@@ -101,7 +112,9 @@ function calculateChartGeometry(entries) {
   const denominator = Math.max(entries.length - 1, 1);
 
   const points = entries.map((entry, index) => {
-    const x = PLOT.left + (index / denominator) * plotWidth;
+    const x = entries.length === 1
+      ? PLOT.left + (plotWidth / 2)
+      : PLOT.left + (index / denominator) * plotWidth;
     const y = PLOT.top + ((yMax - entry.weight) / yRange) * plotHeight;
     return { ...entry, x, y };
   });
@@ -126,7 +139,10 @@ function calculateChartGeometry(entries) {
       ? `${path} L ${points[points.length - 1].x} ${CHART_HEIGHT - PLOT.bottom} L ${points[0].x} ${CHART_HEIGHT - PLOT.bottom} Z`
       : '';
 
-  return { points, yTicks, xTicks, path, areaPath };
+  const maPoints = points.map((pt, i) => ({ ...pt, y: PLOT.top + ((yMax - maValues[i]) / yRange) * plotHeight }));
+  const maPath = buildSmoothPath(maPoints);
+
+  return { points, yTicks, xTicks, path, areaPath, maPath };
 }
 
 function getValueColor(value, colors) {
@@ -159,12 +175,21 @@ function WeightChart({ entries, colors, unit }) {
 
   const labelStride = chart.points.length <= 10 ? 1 : Math.ceil(chart.points.length / 6);
 
+  // SVG props (stopColor, stroke, fill) do NOT accept PlatformColor (used by Monet theme).
+  // Resolve to a plain hex string via withAlpha, which uses processColor as fallback.
+  const accentHex = withAlpha(colors.accent, 1, '#FF4500').slice(0, 7);
+  const subtextHex = withAlpha(colors.subtext || colors.muted, 1, '#888888').slice(0, 7);
+  const faintHex = withAlpha(colors.faint, 1, '#333333').slice(0, 7);
+  const cardHex = withAlpha(colors.card, 1, '#1C1C1E').slice(0, 7);
+  const textHex = withAlpha(colors.text, 1, '#FFFFFF').slice(0, 7);
+  const MA_COLOR = '#A0C4FF';
+
   return (
     <Svg width={CHART_WIDTH} height={CHART_HEIGHT}>
       <Defs>
         <LinearGradient id="lineFill" x1="0%" y1="0%" x2="0%" y2="100%">
-          <Stop offset="0%" stopColor={colors.accent} stopOpacity="0.35" />
-          <Stop offset="100%" stopColor={colors.accent} stopOpacity="0.04" />
+          <Stop offset="0%" stopColor={accentHex} stopOpacity="0.35" />
+          <Stop offset="100%" stopColor={accentHex} stopOpacity="0.04" />
         </LinearGradient>
       </Defs>
 
@@ -175,7 +200,7 @@ function WeightChart({ entries, colors, unit }) {
             y1={tick.y}
             x2={CHART_WIDTH - PLOT.right}
             y2={tick.y}
-            stroke={colors.faint}
+            stroke={faintHex}
             strokeWidth={1}
             strokeDasharray="4,4"
           />
@@ -184,7 +209,7 @@ function WeightChart({ entries, colors, unit }) {
             y={tick.y + 4}
             fontSize={10}
             textAnchor="end"
-            fill={colors.subtext}
+            fill={subtextHex}
           >
             {tick.value.toFixed(1)}
           </SvgText>
@@ -192,20 +217,27 @@ function WeightChart({ entries, colors, unit }) {
       ))}
 
       {chart.areaPath ? <Path d={chart.areaPath} fill="url(#lineFill)" /> : null}
-      {chart.path ? <Path d={chart.path} fill="none" stroke={colors.accent} strokeWidth={3} /> : null}
+      {chart.path ? <Path d={chart.path} fill="none" stroke={accentHex} strokeWidth={3} /> : null}
+      {chart.maPath && chart.points.length >= 3 ? (
+        <Path d={chart.maPath} fill="none" stroke={MA_COLOR} strokeWidth={1.5} strokeDasharray="5,3" opacity={0.75} />
+      ) : null}
 
       {chart.points.map((point, index) => {
         const showValueLabel = index % labelStride === 0 || index === chart.points.length - 1;
+        const isFirst = index === 0;
+        const isLast = index === chart.points.length - 1;
+        const labelAnchor = isFirst ? 'start' : (isLast ? 'end' : 'middle');
+        const labelX = isFirst ? point.x + 4 : (isLast ? point.x - 4 : point.x);
         return (
           <React.Fragment key={`p-${point.id}`}>
-            <Circle cx={point.x} cy={point.y} r={4.5} fill={colors.card} stroke={colors.accent} strokeWidth={2} />
+            <Circle cx={point.x} cy={point.y} r={4.5} fill={cardHex} stroke={accentHex} strokeWidth={2} />
             {showValueLabel ? (
               <SvgText
-                x={point.x}
+                x={labelX}
                 y={point.y - 9}
                 fontSize={10}
-                textAnchor="middle"
-                fill={colors.text}
+                textAnchor={labelAnchor}
+                fill={textHex}
                 fontWeight="700"
               >
                 {point.weight.toFixed(1)}
@@ -222,21 +254,27 @@ function WeightChart({ entries, colors, unit }) {
           y={CHART_HEIGHT - 10}
           fontSize={10}
           textAnchor="middle"
-          fill={colors.subtext}
+          fill={subtextHex}
         >
           {formatDateLabel(tick.timestamp)}
         </SvgText>
       ))}
 
-      <SvgText x={CHART_WIDTH - 4} y={14} fontSize={10} textAnchor="end" fill={colors.subtext}>
+      <SvgText x={CHART_WIDTH - 4} y={14} fontSize={10} textAnchor="end" fill={subtextHex}>
         {unit}
       </SvgText>
+      {chart.points.length < 2 ? (
+        <SvgText x={CHART_WIDTH / 2} y={CHART_HEIGHT - 18} fontSize={10} textAnchor="middle" fill={subtextHex}>
+          Add more entries for a smoother trend
+        </SvgText>
+      ) : null}
     </Svg>
   );
 }
 
 export default function BodyWeightScreen() {
-  const { bodyWeight, logBodyWeight, reloadFromStorage, settings } = useApp();
+  const { bodyWeight, add: logBodyWeight, remove: deleteBodyWeightEntry } = useWatermelonBodyMeasurements();
+  const { settings } = useWatermelonSettings();
   const colors = useTheme();
   const haptic = settings?.hapticFeedback !== false;
 
@@ -269,13 +307,13 @@ export default function BodyWeightScreen() {
   const onLogWeight = async () => {
     const value = Number.parseFloat(weightInput);
     if (!Number.isFinite(value) || value < 20 || value > 400) {
-      triggerHaptic('invalidAction', { enabled: haptic }).catch(() => {});
+      fireHaptic('invalidAction', { enabled: haptic });
       Alert.alert('Invalid weight', `Please enter a value between 20 and 400 ${unit}.`);
       return;
     }
     await logBodyWeight({ date: new Date().toISOString(), weight: value });
     setWeightInput('');
-    triggerHaptic('success', { enabled: haptic }).catch(() => {});
+    fireHaptic('success', { enabled: haptic });
   };
 
   const onDeleteEntry = (entry) => {
@@ -288,12 +326,8 @@ export default function BodyWeightScreen() {
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
-            const next = (Array.isArray(bodyWeight) ? bodyWeight : []).filter(
-              (_, index) => index !== entry.sourceIndex
-            );
-            await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-            await reloadFromStorage();
-            triggerHaptic('lightConfirm', { enabled: haptic }).catch(() => {});
+            await deleteBodyWeightEntry(entry);
+            fireHaptic('lightConfirm', { enabled: haptic });
           },
         },
       ]
@@ -311,7 +345,7 @@ export default function BodyWeightScreen() {
         return;
       }
       await Sharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: 'Share bodyweight progress' });
-      triggerHaptic('success', { enabled: haptic }).catch(() => {});
+      fireHaptic('success', { enabled: haptic });
     } catch (e) {
       setShareStatus(`Share failed: ${String(e?.message || e)}`);
     }
@@ -355,7 +389,7 @@ export default function BodyWeightScreen() {
               ]}
               onPress={() => {
                 setRange(option);
-                triggerHaptic('selection', { enabled: haptic }).catch(() => {});
+                fireHaptic('selection', { enabled: haptic });
               }}
             >
               <Text style={[s.rangeText, { color: active ? colors.accent : colors.subtext }]}>
@@ -388,6 +422,12 @@ export default function BodyWeightScreen() {
       <View style={[s.card, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
         <Text style={[s.cardTitle, { color: colors.muted }]}>WEIGHT TREND ({range})</Text>
         <WeightChart entries={chartEntries} colors={colors} unit={unit} />
+        {chartEntries.length >= 3 ? (
+          <View style={s.chartLegend}>
+            <View style={s.legendItem}><View style={[s.legendDot, { backgroundColor: withAlpha(colors.accent, 1, '#FF4500').slice(0, 7) }]} /><Text style={[s.legendLabel, { color: colors.muted }]}>Daily</Text></View>
+            <View style={s.legendItem}><View style={[s.legendDash, { borderColor: '#A0C4FF' }]} /><Text style={[s.legendLabel, { color: colors.muted }]}>7-day avg</Text></View>
+          </View>
+        ) : null}
       </View>
       </View>
 
@@ -524,7 +564,13 @@ const s = StyleSheet.create({
     fontSize: 12,
     marginTop: 1,
   },
+  chartLegend: { flexDirection: 'row', gap: 16, marginTop: 8, justifyContent: 'flex-end' },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  legendDot: { width: 8, height: 8, borderRadius: 4 },
+  legendDash: { width: 16, height: 0, borderWidth: 1, borderStyle: 'dashed' },
+  legendLabel: { fontSize: 10, fontWeight: '600' },
   shareBtn: { borderWidth: 1, borderRadius: 12, paddingVertical: 10, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8, marginBottom: 10 },
   shareBtnText: { fontSize: 11, fontWeight: '800', letterSpacing: 1.2 },
   shareStatus: { fontSize: 11, marginBottom: 8, textAlign: 'center' },
 });
+

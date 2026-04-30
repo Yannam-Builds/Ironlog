@@ -1,5 +1,5 @@
 
-import * as FileSystem from 'expo-file-system/legacy';
+import * as FileSystem from '../platform/filesystem';
 
 const CACHE_DIR = FileSystem.documentDirectory + 'exercise-images/';
 const BASE_URL = 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/';
@@ -87,3 +87,4 @@ export async function clearCache() {
     await FileSystem.makeDirectoryAsync(CACHE_DIR, { intermediates: true });
   } catch (_) {}
 }
+

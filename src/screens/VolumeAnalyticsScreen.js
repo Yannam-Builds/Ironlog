@@ -1,22 +1,28 @@
-import React, { useContext, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
 import Svg, { Circle, Line, Polygon, Rect, Text as SvgText } from 'react-native-svg';
-import { Ionicons } from '@expo/vector-icons';
-import * as Sharing from 'expo-sharing';
+import { LineChart } from 'react-native-gifted-charts';
+import Ionicons from 'react-native-vector-icons/Ionicons';
+import * as Sharing from '../platform/sharing';
 import { captureRef } from 'react-native-view-shot';
-import { AppContext } from '../context/AppContext';
+import useWatermelonHome from '../hooks/useWatermelonHome';
 import { useTheme } from '../context/ThemeContext';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import useDeferredScreenReady from '../hooks/useDeferredScreenReady';
 import { EXERCISES } from '../data/exerciseLibrary';
 import { getExerciseIndex } from '../services/ExerciseLibraryService';
 import { computeMuscleAnalytics } from '../domain/intelligence/trainingAnalyticsEngine';
 import { buildVolumeInterpretationSentence } from '../domain/intelligence/volumeInterpretationEngine';
+import SegmentedTabs from '../components/ui/SegmentedTabs';
+import { getBottomOverlaySpacing } from '../utils/bottomOverlaySpacing';
+import { withAlpha } from '../utils/colorUtils';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const CHART_WIDTH = SCREEN_WIDTH - 32;
 const CHART_HEIGHT = 220;
 const BAR_AREA_HEIGHT = 160;
 const TOP_LABEL_HEIGHT = 20;
+const CARD_RADIUS = 18;
 
 const RADAR_GROUPS = ['core', 'arms', 'chest', 'legs', 'back', 'shoulders'];
 const RADAR_LABELS = {
@@ -234,6 +240,58 @@ function getSetVolumeKg(set) {
   return weight * reps;
 }
 
+function getSessionVolumeKg(session) {
+  return (session?.exercises || []).reduce((sessionTotal, exercise) => {
+    const sets = Array.isArray(exercise?.sets) ? exercise.sets : [];
+    return sessionTotal + sets.reduce((setTotal, set) => setTotal + getSetVolumeKg(set), 0);
+  }, 0);
+}
+
+function getRangeFromWindow(windowKey) {
+  const now = new Date();
+  if (windowKey === '30d') {
+    return {
+      currentStart: Date.now() - (30 * 86400000),
+      previousStart: Date.now() - (60 * 86400000),
+      previousEnd: Date.now() - (30 * 86400000),
+      label: '30d',
+    };
+  }
+  if (windowKey === '7d') {
+    return {
+      currentStart: Date.now() - (7 * 86400000),
+      previousStart: Date.now() - (14 * 86400000),
+      previousEnd: Date.now() - (7 * 86400000),
+      label: '7d',
+    };
+  }
+  const monday = getMondayOfWeek(now);
+  const spanDays = Math.max(1, Math.ceil((Date.now() - monday.getTime()) / 86400000));
+  return {
+    currentStart: monday.getTime(),
+    previousStart: monday.getTime() - (spanDays * 86400000),
+    previousEnd: monday.getTime(),
+    label: 'current_week',
+  };
+}
+
+function classifyTrend(current, previous) {
+  const safePrev = Math.max(0, Number(previous || 0));
+  const safeCurrent = Math.max(0, Number(current || 0));
+  if (safeCurrent === 0 && safePrev === 0) {
+    return { direction: 'flat', deltaPct: 0, significance: 'low', label: 'No change yet' };
+  }
+  if (safePrev === 0 && safeCurrent > 0) {
+    return { direction: 'up', deltaPct: 100, significance: 'high', label: 'Started strong' };
+  }
+  const deltaPct = ((safeCurrent - safePrev) / Math.max(1, safePrev)) * 100;
+  const absDelta = Math.abs(deltaPct);
+  const significance = absDelta >= 20 ? 'high' : absDelta >= 8 ? 'medium' : 'low';
+  if (deltaPct > 3) return { direction: 'up', deltaPct, significance, label: 'Progressing' };
+  if (deltaPct < -3) return { direction: 'down', deltaPct, significance, label: 'Regressing' };
+  return { direction: 'flat', deltaPct, significance, label: 'Stable' };
+}
+
 function getVolumeEquivalent(totalVolumeKg) {
   let match = VOLUME_EQUIVALENTS[0];
   VOLUME_EQUIVALENTS.forEach((entry) => {
@@ -340,6 +398,10 @@ function resolveExerciseMuscles(exercise, exerciseLookup, exerciseMap) {
 }
 
 function RadarChart({ data, colors }) {
+  const faint = withAlpha(colors.faint, 1, '#333333').slice(0, 7);
+  const accent = withAlpha(colors.accent, 1, '#FF4500').slice(0, 7);
+  const text = withAlpha(colors.text, 1, '#FFFFFF').slice(0, 7);
+  const muted = withAlpha(colors.muted, 1, '#888888').slice(0, 7);
   const size = Math.min(CHART_WIDTH - 24, 300);
   const center = size / 2;
   const radius = size * 0.32;
@@ -368,15 +430,15 @@ function RadarChart({ data, colors }) {
             const point = pointFor(idx, level);
             return `${point.x},${point.y}`;
           }).join(' ');
-          return <Polygon key={`grid-${level}`} points={points} fill="none" stroke={colors.faint} strokeWidth={1} />;
+          return <Polygon key={`grid-${level}`} points={points} fill="none" stroke={faint} strokeWidth={1} />;
         })}
 
         {RADAR_GROUPS.map((group, idx) => {
           const outer = pointFor(idx, 1);
-          return <Line key={`axis-${group}`} x1={center} y1={center} x2={outer.x} y2={outer.y} stroke={colors.faint} strokeWidth={1} />;
+          return <Line key={`axis-${group}`} x1={center} y1={center} x2={outer.x} y2={outer.y} stroke={faint} strokeWidth={1} />;
         })}
 
-        <Polygon points={polygonPoints} fill={colors.accent + '55'} stroke={colors.accent} strokeWidth={2} />
+        <Polygon points={polygonPoints} fill={withAlpha(accent, 0.33)} stroke={accent} strokeWidth={2} />
 
         {RADAR_GROUPS.map((group, idx) => {
           const value = data[group] || 0;
@@ -385,11 +447,11 @@ function RadarChart({ data, colors }) {
           const labelPoint = pointFor(idx, 1.18);
           return (
             <React.Fragment key={`dot-${group}`}>
-              <Circle cx={point.x} cy={point.y} r={4} fill={colors.accent} />
-              <SvgText x={labelPoint.x} y={labelPoint.y} fill={colors.text} fontSize={12} fontWeight="700" textAnchor="middle">
+              <Circle cx={point.x} cy={point.y} r={4} fill={accent} />
+              <SvgText x={labelPoint.x} y={labelPoint.y} fill={text} fontSize={12} fontWeight="700" textAnchor="middle">
                 {RADAR_LABELS[group]}
               </SvgText>
-              <SvgText x={labelPoint.x} y={labelPoint.y + 13} fill={colors.muted} fontSize={10} textAnchor="middle">
+              <SvgText x={labelPoint.x} y={labelPoint.y + 13} fill={muted} fontSize={10} textAnchor="middle">
                 {Math.round(value)}
               </SvgText>
             </React.Fragment>
@@ -406,15 +468,36 @@ function isWithinDays(sessionDate, days) {
   return stamp >= (Date.now() - (days * 86400000));
 }
 
-export default function VolumeAnalyticsScreen() {
-  const { history, plans, settings } = useContext(AppContext);
+function getWeekKeyFromDate(value) {
+  const date = new Date(value || 0);
+  if (!Number.isFinite(date.getTime())) return null;
+  const day = date.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  date.setDate(date.getDate() + diff);
+  date.setHours(0, 0, 0, 0);
+  return date.toISOString().slice(0, 10);
+}
+
+export default function VolumeAnalyticsScreen({ navigation }) {
+  const { history, plans, settings } = useWatermelonHome();
   const colors = useTheme();
+  const svgAccent = withAlpha(colors.accent, 1, '#FF4500').slice(0, 7);
+  const svgFaint = withAlpha(colors.faint, 1, '#333333').slice(0, 7);
+  const svgMuted = withAlpha(colors.muted, 1, '#888888').slice(0, 7);
+  const svgText = withAlpha(colors.text, 1, '#FFFFFF').slice(0, 7);
+  const svgSubtext = withAlpha(colors.subtext || colors.muted, 1, '#AAAAAA').slice(0, 7);
+  const insets = useSafeAreaInsets();
   const weightUnit = settings?.weightUnit || 'kg';
   const analyticsReady = useDeferredScreenReady({ minDelayMs: 24 });
   const analyticsShareRef = useRef(null);
   const [windowKey, setWindowKey] = useState('current_week');
   const [shareStatus, setShareStatus] = useState('');
   const [libraryIndex, setLibraryIndex] = useState(EXERCISES);
+  const bottomSpacing = getBottomOverlaySpacing({
+    safeAreaBottom: insets.bottom,
+    includeWorkoutPill: true,
+    extra: 8,
+  });
   const activePlan = plans[0];
   const safePlanDays = useMemo(
     () => (Array.isArray(activePlan?.days) ? activePlan.days : []),
@@ -495,8 +578,9 @@ export default function VolumeAnalyticsScreen() {
 
   const barCount = sortedMuscles.length;
   const BAR_PAD = 8;
-  const barWidth = barCount > 0 ? Math.max(18, Math.min(40, (CHART_WIDTH - BAR_PAD * 2) / barCount - BAR_PAD)) : 30;
-  const barSpacing = barCount > 0 ? (CHART_WIDTH - BAR_PAD * 2 - barWidth * barCount) / Math.max(barCount - 1, 1) : 0;
+  const BAR_GAP = 14;
+  const barWidth = barCount > 0 ? Math.max(24, Math.min(34, Math.floor((CHART_WIDTH - BAR_PAD * 2 - BAR_GAP * Math.max(barCount - 1, 0)) / Math.max(barCount, 1)))) : 30;
+  const barChartWidth = Math.max(CHART_WIDTH, BAR_PAD * 2 + barCount * barWidth + Math.max(barCount - 1, 0) * BAR_GAP + 18);
   const windowLabel = useMemo(() => {
     if (effectiveWindow === 'program') return activePlan?.name ? `${activePlan.name} · program view` : 'Program view';
     if (windowKey === '30d') return 'Last 30 days';
@@ -513,6 +597,83 @@ export default function VolumeAnalyticsScreen() {
     });
   }, [analytics.totalVolumeKg, analyticsReady, effectiveWindow]);
 
+  const trendSnapshot = useMemo(() => {
+    if (effectiveWindow === 'program') {
+      return {
+        volume: { direction: 'flat', deltaPct: 0, significance: 'low', label: 'Program baseline only' },
+        workouts: { direction: 'flat', deltaPct: 0, significance: 'low', label: 'Program baseline only' },
+        currentVolume: analytics.totalVolumeKg || 0,
+        previousVolume: 0,
+        currentWorkouts: workoutCount,
+        previousWorkouts: 0,
+      };
+    }
+    const range = getRangeFromWindow(windowKey);
+    const currentSessions = history.filter((session) => {
+      const stamp = new Date(session?.date || 0).getTime();
+      return !session?.isDeload && stamp >= range.currentStart;
+    });
+    const previousSessions = history.filter((session) => {
+      const stamp = new Date(session?.date || 0).getTime();
+      return !session?.isDeload && stamp >= range.previousStart && stamp < range.previousEnd;
+    });
+    const currentVolume = currentSessions.reduce((sum, session) => sum + getSessionVolumeKg(session), 0);
+    const previousVolume = previousSessions.reduce((sum, session) => sum + getSessionVolumeKg(session), 0);
+    return {
+      volume: classifyTrend(currentVolume, previousVolume),
+      workouts: classifyTrend(currentSessions.length, previousSessions.length),
+      currentVolume,
+      previousVolume,
+      currentWorkouts: currentSessions.length,
+      previousWorkouts: previousSessions.length,
+    };
+  }, [analytics.totalVolumeKg, effectiveWindow, history, windowKey, workoutCount]);
+
+  const weeklyVolumeTrend = useMemo(() => {
+    if (!Array.isArray(history) || history.length === 0) return [];
+    const buckets = new Map();
+    history.forEach((session) => {
+      if (session?.isDeload) return;
+      if (windowKey === '7d' && !isWithinDays(session.date, 21)) return;
+      if (windowKey === '30d' && !isWithinDays(session.date, 90)) return;
+      const key = getWeekKeyFromDate(session.date);
+      if (!key) return;
+      const current = buckets.get(key) || 0;
+      buckets.set(key, current + getSessionVolumeKg(session));
+    });
+
+    const rows = [...buckets.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .slice(-6)
+      .map(([key, volume]) => ({
+        value: Math.round(volume),
+        label: key.slice(5).replace('-', '/'),
+      }));
+    return rows;
+  }, [history, windowKey]);
+
+  const pplActionText = useMemo(() => {
+    if (pplTotal <= 0) return 'Log sessions to unlock push/pull/legs balance guidance.';
+    const pushPct = (pushSets / pplTotal) * 100;
+    const pullPct = (pullSets / pplTotal) * 100;
+    const legsPct = (legSets / pplTotal) * 100;
+    if (legsPct < 18) return 'Leg exposure is low. Add 2-4 direct leg sets next week.';
+    if (pullPct - pushPct > 18) return 'Pull is far ahead of push. Add a chest/triceps slot this week.';
+    if (pushPct - pullPct > 18) return 'Push is far ahead of pull. Add lats/upper-back work next week.';
+    return 'Balance is healthy. Keep volume distribution close to current.';
+  }, [legSets, pplTotal, pullSets, pushSets]);
+
+  const nextWeekActions = useMemo(() => {
+    const actions = [];
+    if (trendSnapshot.volume.direction === 'down' && trendSnapshot.volume.significance !== 'low') {
+      actions.push('Volume dropped materially versus the previous window - add one extra top set on priority lifts.');
+    } else if (trendSnapshot.volume.direction === 'up' && trendSnapshot.volume.significance === 'high') {
+      actions.push('Volume rose sharply - protect recovery before adding more work.');
+    }
+    actions.push(pplActionText);
+    if (analytics.imbalances?.[0]?.text) actions.push(`Imbalance focus: ${analytics.imbalances[0].text}`);
+    return actions.slice(0, 3);
+  }, [analytics.imbalances, pplActionText, trendSnapshot.volume.direction, trendSnapshot.volume.significance]);
   const handleShare = async () => {
     if (!analyticsReady) return;
     try {
@@ -533,7 +694,10 @@ export default function VolumeAnalyticsScreen() {
   };
 
   return (
-    <ScrollView style={[s.container, { backgroundColor: colors.bg }]} contentContainerStyle={s.content}>
+    <ScrollView
+      style={[s.container, { backgroundColor: colors.bg }]}
+      contentContainerStyle={[s.content, { paddingBottom: bottomSpacing }]}
+      scrollIndicatorInsets={{ bottom: bottomSpacing }}>
       <View style={s.weekRow}>
         <View style={{ alignItems: 'center', flex: 1 }}>
           <Text style={[s.weekLabel, { color: colors.text }]}>MUSCLE ANALYTICS</Text>
@@ -550,34 +714,22 @@ export default function VolumeAnalyticsScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 12 }}>
-        {[
-          ['current_week', 'Week'],
-          ['7d', '7D'],
-          ['30d', '30D'],
-          ['program', 'Program'],
-        ].map(([key, label]) => {
-          const disabled = key === 'program' && !programHasExercises;
-          return (
-            <TouchableOpacity
-              key={key}
-              onPress={disabled ? undefined : () => setWindowKey(key)}
-              disabled={disabled}
-              style={[s.windowChip, {
-                opacity: disabled ? 0.45 : 1,
-                borderColor: windowKey === key ? colors.accent : colors.faint,
-                backgroundColor: windowKey === key ? colors.accentSoft : 'transparent',
-              }]}>
-              <Text style={[s.windowChipText, { color: windowKey === key ? colors.accent : colors.muted }]}>{label}</Text>
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
+      <SegmentedTabs
+        items={[
+          { id: 'current_week', label: 'Week' },
+          { id: '7d', label: '7D' },
+          { id: '30d', label: '30D' },
+          { id: 'program', label: 'Program' },
+        ]}
+        value={windowKey}
+        disabledIds={programHasExercises ? [] : ['program']}
+        onChange={setWindowKey}
+      />
 
       {shareStatus ? <Text style={[s.shareStatus, { color: colors.muted }]}>{shareStatus}</Text> : null}
       {!analyticsReady ? <Text style={[s.shareStatus, { color: colors.muted }]}>Preparing analytics after the transition settles.</Text> : null}
 
-      <View ref={analyticsShareRef} collapsable={false}>
+      <View ref={analyticsShareRef} collapsable={false} style={s.shareWrap}>
         <View style={[s.shareHeaderCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
           <Text style={[s.shareBrand, { color: colors.text }]}>IRONLOG</Text>
           <Text style={[s.shareTitle, { color: colors.text }]}>VOLUME ANALYTICS</Text>
@@ -600,6 +752,75 @@ export default function VolumeAnalyticsScreen() {
               </View>
             </React.Fragment>
           ))}
+        </View>
+
+        <View style={[s.card, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+          <Text style={[s.cardTitle, { color: colors.text }]}>PERFORMANCE SIGNALS</Text>
+          <View style={s.signalGrid}>
+            <View style={[s.signalCard, { borderColor: colors.faint }]}>
+              <Text style={[s.signalLabel, { color: colors.muted }]}>Volume trend</Text>
+              <Text style={[s.signalValue, { color: trendSnapshot.volume.direction === 'down' ? '#FF8E8E' : trendSnapshot.volume.direction === 'up' ? '#6FE0A4' : colors.text }]}>
+                {trendSnapshot.volume.label}
+              </Text>
+              <Text style={[s.signalHint, { color: colors.subtext }]}>
+                {trendSnapshot.volume.deltaPct >= 0 ? '+' : ''}
+                {Math.round(trendSnapshot.volume.deltaPct)}% vs prior window
+              </Text>
+            </View>
+            <View style={[s.signalCard, { borderColor: colors.faint }]}>
+              <Text style={[s.signalLabel, { color: colors.muted }]}>Workout consistency</Text>
+              <Text style={[s.signalValue, { color: trendSnapshot.workouts.direction === 'down' ? '#FF8E8E' : trendSnapshot.workouts.direction === 'up' ? '#6FE0A4' : colors.text }]}>
+                {trendSnapshot.workouts.label}
+              </Text>
+              <Text style={[s.signalHint, { color: colors.subtext }]}>
+                {trendSnapshot.currentWorkouts} vs {trendSnapshot.previousWorkouts} sessions
+              </Text>
+            </View>
+          </View>
+          <Text style={[s.signalFootnote, { color: colors.muted }]}>
+            Radar is summary only. Use bars and trend signals for precision.
+          </Text>
+          <TouchableOpacity
+            style={[s.bodyCompBtn, { borderColor: colors.faint, backgroundColor: colors.bg }]}
+            onPress={() => navigation?.navigate?.('BodyWeight')}
+          >
+            <Ionicons name="body-outline" size={14} color={colors.subtext} />
+            <Text style={[s.bodyCompBtnText, { color: colors.subtext }]}>Open body composition stats</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={[s.card, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+          <Text style={[s.cardTitle, { color: colors.text }]}>VOLUME TREND (WEEKS)</Text>
+          {weeklyVolumeTrend.length < 2 ? (
+            <Text style={[s.emptyText, { color: colors.muted }]}>Need at least 2 weeks to show trend direction.</Text>
+          ) : (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 8 }}>
+              <LineChart
+                data={weeklyVolumeTrend}
+                curved
+                color={svgAccent}
+                thickness={2}
+                hideDataPoints
+                yAxisColor={svgFaint}
+                xAxisColor={svgFaint}
+                xAxisLabelTextStyle={{ color: svgMuted, fontSize: 9 }}
+                yAxisTextStyle={{ color: svgMuted, fontSize: 9 }}
+                spacing={42}
+                initialSpacing={8}
+                endSpacing={12}
+                noOfSections={4}
+                maxValue={Math.max(1000, ...weeklyVolumeTrend.map((point) => point.value))}
+                isAnimated
+                animationDuration={180}
+                disableScroll
+                width={Math.max(CHART_WIDTH - 24, weeklyVolumeTrend.length * 56)}
+                height={150}
+              />
+            </ScrollView>
+          )}
+          <Text style={[s.signalFootnote, { color: colors.muted }]}>
+            Use this with imbalance insights to decide what to increase, hold, or reduce next week.
+          </Text>
         </View>
 
       <View style={[s.card, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
@@ -632,35 +853,36 @@ export default function VolumeAnalyticsScreen() {
             <Text style={[s.emptyText, { color: colors.muted }]}>No training logged for this view</Text>
           </View>
         ) : (
-          <Svg width={CHART_WIDTH} height={CHART_HEIGHT}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 8 }}>
+          <Svg width={barChartWidth} height={CHART_HEIGHT}>
             {[0.25, 0.5, 0.75, 1].map((f) => {
               const y = TOP_LABEL_HEIGHT + BAR_AREA_HEIGHT * (1 - f);
               return (
                 <React.Fragment key={f}>
-                  <Line x1={0} y1={y} x2={CHART_WIDTH} y2={y} stroke={colors.faint} strokeWidth={1} strokeDasharray="4,4" />
-                  <SvgText x={2} y={y - 3} fontSize={9} fill={colors.muted}>{Math.round(maxSets * f)}</SvgText>
+                  <Line x1={0} y1={y} x2={barChartWidth} y2={y} stroke={svgFaint} strokeWidth={1} strokeDasharray="4,4" />
+                  <SvgText x={2} y={y - 3} fontSize={9} fill={svgMuted}>{Math.round(maxSets * f)}</SvgText>
                 </React.Fragment>
               );
             })}
 
-            <Line x1={0} y1={TOP_LABEL_HEIGHT + BAR_AREA_HEIGHT} x2={CHART_WIDTH} y2={TOP_LABEL_HEIGHT + BAR_AREA_HEIGHT} stroke={colors.faint} strokeWidth={1} />
+            <Line x1={0} y1={TOP_LABEL_HEIGHT + BAR_AREA_HEIGHT} x2={barChartWidth} y2={TOP_LABEL_HEIGHT + BAR_AREA_HEIGHT} stroke={svgFaint} strokeWidth={1} />
 
             {sortedMuscles.map(([muscle, sets], idx) => {
               const barHeight = maxSets > 0 ? (sets / maxSets) * BAR_AREA_HEIGHT : 0;
-              const x = BAR_PAD + idx * (barWidth + barSpacing);
+              const x = BAR_PAD + idx * (barWidth + BAR_GAP);
               const y = TOP_LABEL_HEIGHT + BAR_AREA_HEIGHT - barHeight;
               const barColor = getBarColor(sets);
               return (
                 <React.Fragment key={muscle}>
                   <Rect x={x} y={y} width={barWidth} height={Math.max(2, barHeight)} fill={barColor} rx={3} ry={3} />
-                  <SvgText x={x + barWidth / 2} y={y - 4} fontSize={10} fontWeight="bold" fill={colors.text} textAnchor="middle">
+                  <SvgText x={x + barWidth / 2} y={y - 4} fontSize={10} fontWeight="bold" fill={svgText} textAnchor="middle">
                     {formatSetsValue(sets, compactNumbers)}
                   </SvgText>
                   <SvgText
                     x={x + barWidth / 2}
                     y={TOP_LABEL_HEIGHT + BAR_AREA_HEIGHT + 6}
                     fontSize={9}
-                    fill={colors.subtext}
+                    fill={svgSubtext}
                     textAnchor="end"
                     transform={`rotate(-45, ${x + barWidth / 2}, ${TOP_LABEL_HEIGHT + BAR_AREA_HEIGHT + 6})`}>
                     {getShortName(muscle)}
@@ -669,13 +891,14 @@ export default function VolumeAnalyticsScreen() {
               );
             })}
           </Svg>
+          </ScrollView>
         )}
 
         <View style={s.legendRow}>
           {[
-            { color: '#FFD700', label: '0–9' },
-            { color: '#00C170', label: '10–20' },
-            { color: '#FF6B35', label: '21–25' },
+            { color: '#FFD700', label: '0-9' },
+            { color: '#00C170', label: '10-20' },
+            { color: '#FF6B35', label: '21-25' },
             { color: '#FF4444', label: '25+' },
           ].map(({ color, label }) => (
             <View key={label} style={s.legendItem}>
@@ -711,8 +934,19 @@ export default function VolumeAnalyticsScreen() {
                 </View>
               ))}
             </View>
+            <Text style={[s.pplActionText, { color: colors.subtext }]}>{pplActionText}</Text>
           </>
         )}
+      </View>
+
+      <View style={[s.card, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+        <Text style={[s.cardTitle, { color: colors.text }]}>NEXT WEEK ACTIONS</Text>
+        {nextWeekActions.map((line, idx) => (
+          <View key={`action:${idx}`} style={[s.actionRow, { borderColor: colors.faint }]}>
+            <Text style={[s.actionBullet, { color: colors.accent }]}>{idx + 1}.</Text>
+            <Text style={[s.actionText, { color: colors.text }]}>{line}</Text>
+          </View>
+        ))}
       </View>
 
       <View style={[s.card, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
@@ -731,7 +965,7 @@ export default function VolumeAnalyticsScreen() {
                   <Text style={[s.muscleName, { color: colors.text }]}>{displayName}</Text>
                 </View>
                 <View style={[s.muscleBarBg, { backgroundColor: colors.faint }]}>
-                  <View style={[s.muscleFill, { width: `${Math.round(pct * 100)}%`, backgroundColor: color + '88', borderColor: color }]} />
+                  <View style={[s.muscleFill, { width: `${Math.round(pct * 100)}%`, backgroundColor: withAlpha(color, 0.53), borderColor: color }]} />
                 </View>
                 <Text style={[s.muscleCount, { color }]}>{formatSetsValue(sets, compactNumbers)}</Text>
               </View>
@@ -746,40 +980,51 @@ export default function VolumeAnalyticsScreen() {
 const s = StyleSheet.create({
   container: { flex: 1 },
   content: { padding: 16, paddingBottom: 40 },
-  weekRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
-  weekLabel: { fontSize: 13, fontWeight: '700', letterSpacing: 1 },
+  weekRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
+  weekLabel: { fontSize: 14, fontWeight: '800', letterSpacing: 1.1 },
   currentBadge: { fontSize: 11, marginTop: 2, fontWeight: '600' },
-  windowChip: { paddingHorizontal: 14, paddingVertical: 8, borderWidth: 1, borderRadius: 16 },
-  windowChipText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
   shareStatus: { fontSize: 11, marginBottom: 8, textAlign: 'center' },
-  shareHeaderCard: { borderWidth: 1, padding: 14, marginBottom: 12, alignItems: 'center' },
+  shareWrap: { marginTop: 12 },
+  shareHeaderCard: { borderWidth: 1, borderRadius: CARD_RADIUS, padding: 14, marginBottom: 12, alignItems: 'center' },
   shareBrand: { fontSize: 20, fontWeight: '900', letterSpacing: 3 },
   shareTitle: { fontSize: 11, letterSpacing: 2, fontWeight: '800', marginTop: 2 },
   shareWeek: { fontSize: 11, marginTop: 6, letterSpacing: 1 },
   shareFun: { fontSize: 11, marginTop: 8, textAlign: 'center', lineHeight: 16, fontWeight: '700' },
-  statsRow: { flexDirection: 'row', borderWidth: 1, marginBottom: 16, overflow: 'hidden' },
+  statsRow: { flexDirection: 'row', borderWidth: 1, marginBottom: 16, overflow: 'hidden', borderRadius: CARD_RADIUS },
   statItem: { flex: 1, alignItems: 'center', paddingVertical: 12 },
-  statVal: { fontSize: 22, fontWeight: '900' },
+  statVal: { fontSize: 24, fontWeight: '900' },
   statLbl: { fontSize: 10, marginTop: 2, letterSpacing: 1 },
   statDivider: { width: 1, marginVertical: 8 },
-  card: { borderWidth: 1, padding: 16, marginBottom: 16 },
-  cardTitle: { fontSize: 10, fontWeight: '800', letterSpacing: 3, marginBottom: 14 },
-  insightRow: { borderWidth: 1, padding: 12, marginBottom: 8 },
+  card: { borderWidth: 1, padding: 16, marginBottom: 16, borderRadius: CARD_RADIUS },
+  cardTitle: { fontSize: 10, fontWeight: '800', letterSpacing: 2.1, marginBottom: 14 },
+  insightRow: { borderWidth: 1, padding: 12, marginBottom: 8, borderRadius: 16 },
   insightText: { fontSize: 12, lineHeight: 18 },
+  signalGrid: { flexDirection: 'row', gap: 10 },
+  signalCard: { flex: 1, borderWidth: 1, borderRadius: 16, padding: 12 },
+  signalLabel: { fontSize: 10, letterSpacing: 0.8, marginBottom: 5 },
+  signalValue: { fontSize: 16, fontWeight: '900', marginBottom: 3 },
+  signalHint: { fontSize: 11, lineHeight: 16 },
+  signalFootnote: { fontSize: 11, lineHeight: 16, marginTop: 10 },
+  bodyCompBtn: { marginTop: 10, borderWidth: 1, borderRadius: 16, paddingVertical: 10, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8 },
+  bodyCompBtnText: { fontSize: 12, fontWeight: '700' },
   emptyChart: { height: CHART_HEIGHT, justifyContent: 'center', alignItems: 'center' },
   emptyText: { fontSize: 13, textAlign: 'center', paddingVertical: 16 },
   legendRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 8, flexWrap: 'wrap', gap: 12 },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   legendDot: { width: 8, height: 8, borderRadius: 4 },
   legendText: { fontSize: 11 },
-  pplBar: { flexDirection: 'row', height: 20, overflow: 'hidden', marginBottom: 12 },
+  pplBar: { flexDirection: 'row', height: 20, overflow: 'hidden', marginBottom: 12, borderRadius: 14 },
   pplSeg: { height: '100%' },
   pplLabels: { flexDirection: 'row', justifyContent: 'space-around' },
   pplItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   pplDot: { width: 10, height: 10, borderRadius: 5 },
-  pplLabelText: { fontSize: 13, fontWeight: '600' },
-  pplCount: { fontSize: 13, fontWeight: '700' },
+  pplLabelText: { fontSize: 13, fontWeight: '700' },
+  pplCount: { fontSize: 13, fontWeight: '800', minWidth: 28, textAlign: 'right' },
   pplPct: { fontSize: 11 },
+  pplActionText: { fontSize: 11, marginTop: 10, lineHeight: 16 },
+  actionRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, borderWidth: 1, borderRadius: 16, padding: 12, marginBottom: 8 },
+  actionBullet: { fontSize: 13, fontWeight: '900', marginTop: 1 },
+  actionText: { flex: 1, fontSize: 12, lineHeight: 18 },
   muscleRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 10 },
   muscleLeft: { flexDirection: 'row', alignItems: 'center', width: 96, gap: 8 },
   muscleIndicator: { width: 10, height: 10, borderRadius: 5 },
@@ -788,3 +1033,8 @@ const s = StyleSheet.create({
   muscleFill: { height: '100%', borderRadius: 7, borderWidth: 1, minWidth: 4 },
   muscleCount: { width: 28, fontSize: 13, fontWeight: '700', textAlign: 'right' },
 });
+
+
+
+
+

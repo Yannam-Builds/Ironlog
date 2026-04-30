@@ -1,4 +1,4 @@
-import React, { useContext, useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,13 +11,17 @@ import {
 } from 'react-native';
 import CustomAlert from '../components/CustomAlert';
 import Svg, { Polyline, Line, Circle, Text as SvgText } from 'react-native-svg';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { AppContext } from '../context/AppContext';
+import useWatermelonBodyMeasurements from '../hooks/useWatermelonBodyMeasurements';
+import useWatermelonSettings from '../hooks/useWatermelonSettings';
 import { useTheme } from '../context/ThemeContext';
-import { triggerHaptic } from '../services/hapticsEngine';
+import { fireHaptic } from '../services/hapticsEngine';
 import { convertUnitToKg, formatWeightFromKg } from '../utils/weightUnits';
+import { withAlpha } from '../utils/colorUtils';
+import {
+  addBodyMeasurement,
+  getBodyMeasurementsObservable,
+} from '../db/repositories/bodyMeasurementRepository';
 
-const STORAGE_KEY = '@ironlog/bodyMeasurements';
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const MINI_CHART_W = (SCREEN_WIDTH - 48) / 2 - 16;
 const MINI_CHART_H = 60;
@@ -36,6 +40,7 @@ const MEASUREMENT_FIELDS = [
 
 function MiniChart({ data, colors }) {
   if (!data || data.length < 2) return null;
+  const accent = withAlpha(colors.accent, 1, '#FF4500').slice(0, 7);
   const W = MINI_CHART_W;
   const H = MINI_CHART_H;
   const PAD = 6;
@@ -53,14 +58,39 @@ function MiniChart({ data, colors }) {
   const ly = H - PAD - ((last.value - minV) / range) * (H - PAD * 2);
   return (
     <Svg width={W} height={H}>
-      <Polyline points={pts} fill="none" stroke={colors.accent} strokeWidth={1.5} />
-      <Circle cx={lx} cy={ly} r={3} fill={colors.accent} />
+      <Polyline points={pts} fill="none" stroke={accent} strokeWidth={1.5} />
+      <Circle cx={lx} cy={ly} r={3} fill={accent} />
     </Svg>
   );
 }
 
+function parseExtras(notes) {
+  if (!notes || typeof notes !== 'string') return {};
+  if (!notes.startsWith('{')) return {};
+  try {
+    const parsed = JSON.parse(notes);
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch (_) {
+    return {};
+  }
+}
+
+function mapMeasurementRow(row) {
+  const extras = parseExtras(row?.notes);
+  return {
+    id: row.id,
+    date: new Date(Number(row?.measuredAt) || Date.now()).toISOString(),
+    chest: row?.chest ?? null,
+    waist: row?.waist ?? null,
+    arms: row?.arm ?? null,
+    thighs: row?.thigh ?? null,
+    ...extras,
+  };
+}
+
 export default function BodyMeasurementsScreen() {
-  const { bodyWeight, logBodyWeight, settings } = useContext(AppContext);
+  const { bodyWeight, add: logBodyWeight } = useWatermelonBodyMeasurements();
+  const { settings } = useWatermelonSettings();
   const colors = useTheme();
   const haptic = settings?.hapticFeedback !== false;
   const weightUnit = settings?.weightUnit || 'kg';
@@ -72,25 +102,20 @@ export default function BodyMeasurementsScreen() {
   const [formValues, setFormValues] = useState({});
   const [alertConfig, setAlertConfig] = useState(null);
 
-  // Load measurements from AsyncStorage
   useEffect(() => {
-    (async () => {
-      try {
-        const raw = await AsyncStorage.getItem(STORAGE_KEY);
-        if (raw) setMeasurements(JSON.parse(raw));
-      } catch (e) {
-        console.warn('Failed to load body measurements', e);
-      }
-    })();
+    const sub = getBodyMeasurementsObservable().subscribe({
+      next: (rows) => {
+        const mapped = (rows || [])
+          .filter((row) => row.bodyweight == null)
+          .map(mapMeasurementRow);
+        setMeasurements(mapped);
+      },
+      error: (error) => {
+        console.warn('Body measurement subscribe failed:', error);
+      },
+    });
+    return () => sub.unsubscribe();
   }, []);
-
-  const saveMeasurements = async (updated) => {
-    try {
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-    } catch (e) {
-      console.warn('Failed to save body measurements', e);
-    }
-  };
 
   // ── WEIGHT TAB ──────────────────────────────────────────────────────────────
 
@@ -98,7 +123,7 @@ export default function BodyMeasurementsScreen() {
     const inputWeight = parseFloat(weightInput);
     const w = convertUnitToKg(inputWeight, weightUnit, 2);
     if (!inputWeight || w < 20 || w > 300) {
-      triggerHaptic('invalidAction', { enabled: haptic }).catch(() => {});
+      fireHaptic('invalidAction', { enabled: haptic });
       const min = formatWeightFromKg(20, weightUnit);
       const max = formatWeightFromKg(300, weightUnit);
       setAlertConfig({ title: 'Invalid weight', message: `Enter a value between ${min} and ${max}.`, buttons: [{ text: 'OK', style: 'default' }] });
@@ -106,7 +131,7 @@ export default function BodyMeasurementsScreen() {
     }
     logBodyWeight({ date: new Date().toISOString(), weight: w });
     setWeightInput('');
-    triggerHaptic('success', { enabled: haptic }).catch(() => {});
+    fireHaptic('success', { enabled: haptic });
   };
 
   const recentWeights = bodyWeight.slice(0, 30).reverse();
@@ -118,6 +143,9 @@ export default function BodyMeasurementsScreen() {
 
   const buildWeightChart = () => {
     if (recentWeights.length < 2) return null;
+    const accent = withAlpha(colors.accent, 1, '#FF4500').slice(0, 7);
+    const faint = withAlpha(colors.faint, 1, '#333333').slice(0, 7);
+    const text = withAlpha(colors.text, 1, '#FFFFFF').slice(0, 7);
     const W = SCREEN_WIDTH - 40;
     const H = 120;
     const PAD = 20;
@@ -135,10 +163,10 @@ export default function BodyMeasurementsScreen() {
     const ly = H - PAD - ((last.weight - minW) / range) * (H - PAD * 2);
     return (
       <Svg width={W} height={H} style={{ marginVertical: 8 }}>
-        <Line x1={PAD} y1={H - PAD} x2={W - PAD} y2={H - PAD} stroke={colors.faint} strokeWidth={1} />
-        <Polyline points={pts} fill="none" stroke={colors.accent} strokeWidth={2} />
-        <Circle cx={lx} cy={ly} r={4} fill={colors.accent} />
-        <SvgText x={lx} y={ly - 8} textAnchor="middle" fill={colors.text} fontSize={11}>
+        <Line x1={PAD} y1={H - PAD} x2={W - PAD} y2={H - PAD} stroke={faint} strokeWidth={1} />
+        <Polyline points={pts} fill="none" stroke={accent} strokeWidth={2} />
+        <Circle cx={lx} cy={ly} r={4} fill={accent} />
+        <SvgText x={lx} y={ly - 8} textAnchor="middle" fill={text} fontSize={11}>
           {formatWeightFromKg(last.weight, weightUnit)}
         </SvgText>
       </Svg>
@@ -155,7 +183,7 @@ export default function BodyMeasurementsScreen() {
   const saveMeasurementEntry = async () => {
     const hasAny = MEASUREMENT_FIELDS.some(f => formValues[f.key] && formValues[f.key].trim() !== '');
     if (!hasAny) {
-      triggerHaptic('invalidAction', { enabled: haptic }).catch(() => {});
+      fireHaptic('invalidAction', { enabled: haptic });
       setAlertConfig({ title: 'No data', message: 'Enter at least one measurement value.', buttons: [{ text: 'OK', style: 'default' }] });
       return;
     }
@@ -164,11 +192,21 @@ export default function BodyMeasurementsScreen() {
       const v = parseFloat(formValues[f.key]);
       if (!isNaN(v) && v > 0) entry[f.key] = v;
     });
-    const updated = [entry, ...measurements];
-    setMeasurements(updated);
-    await saveMeasurements(updated);
+    const extras = {};
+    ['hips', 'shoulders', 'neck', 'calves', 'bodyFat'].forEach((key) => {
+      if (entry[key] != null) extras[key] = entry[key];
+    });
+    await addBodyMeasurement({
+      measuredAt: new Date(entry.date).getTime(),
+      bodyweight: null,
+      chest: entry.chest ?? null,
+      waist: entry.waist ?? null,
+      arm: entry.arms ?? null,
+      thigh: entry.thighs ?? null,
+      notes: Object.keys(extras).length > 0 ? JSON.stringify(extras) : '',
+    });
     setModalVisible(false);
-    triggerHaptic('success', { enabled: haptic }).catch(() => {});
+    fireHaptic('success', { enabled: haptic });
   };
 
   const getMiniChartData = (fieldKey) => {
@@ -246,7 +284,7 @@ export default function BodyMeasurementsScreen() {
           <TouchableOpacity
             key={tab}
             style={[s.tabBtn, activeTab === tab && { borderBottomColor: colors.accent, borderBottomWidth: 2 }]}
-            onPress={() => { setActiveTab(tab); triggerHaptic('selection', { enabled: haptic }).catch(() => {}); }}
+            onPress={() => { setActiveTab(tab); fireHaptic('selection', { enabled: haptic }); }}
           >
             <Text style={[
               s.tabText,
@@ -410,6 +448,7 @@ const s = StyleSheet.create({
   card: {
     padding: 20,
     borderWidth: 1,
+    borderRadius: 14,
     marginBottom: 16,
   },
   chartCard: {
@@ -435,6 +474,7 @@ const s = StyleSheet.create({
   logBtn: {
     paddingHorizontal: 24,
     paddingVertical: 16,
+    borderRadius: 10,
   },
   logBtnText: {
     color: '#fff',
@@ -466,6 +506,7 @@ const s = StyleSheet.create({
     paddingVertical: 14,
     alignItems: 'center',
     marginBottom: 20,
+    borderRadius: 10,
   },
   addBtnText: {
     color: '#fff',
@@ -482,6 +523,7 @@ const s = StyleSheet.create({
     width: (SCREEN_WIDTH - 48) / 2,
     padding: 12,
     borderWidth: 1,
+    borderRadius: 14,
     minHeight: 90,
   },
   measureLabel: {
@@ -527,8 +569,8 @@ const s = StyleSheet.create({
   },
   modalSheet: {
     maxHeight: '90%',
-    borderTopLeftRadius: 0,
-    borderTopRightRadius: 0,
+    borderTopLeftRadius: 14,
+    borderTopRightRadius: 14,
   },
   modalHeader: {
     flexDirection: 'row',
@@ -574,6 +616,7 @@ const s = StyleSheet.create({
     marginTop: 28,
     paddingVertical: 16,
     alignItems: 'center',
+    borderRadius: 10,
   },
   saveBtnText: {
     color: '#fff',
@@ -582,3 +625,5 @@ const s = StyleSheet.create({
     letterSpacing: 2,
   },
 });
+
+

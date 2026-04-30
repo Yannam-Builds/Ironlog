@@ -1,5 +1,5 @@
 
-import React, { useContext, useState, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -9,8 +9,8 @@ import {
   Modal,
   Dimensions,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { AppContext } from '../context/AppContext';
+import Ionicons from 'react-native-vector-icons/Ionicons';
+import useWatermelonHome from '../hooks/useWatermelonHome';
 import { useTheme } from '../context/ThemeContext';
 import { formatWeightFromKg } from '../utils/weightUnits';
 
@@ -80,7 +80,7 @@ function toDisplayVolume(kgValue, unit) {
 }
 
 export default function WorkoutCalendarScreen() {
-  const { history, settings } = useContext(AppContext);
+  const { history, settings } = useWatermelonHome();
   const colors = useTheme();
   const weightUnit = settings?.weightUnit || 'kg';
 
@@ -172,24 +172,22 @@ export default function WorkoutCalendarScreen() {
       <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
 
         {/* Header Stats Card */}
-        <View style={s.statsCard}>
-          <View style={s.statItem}>
-            <Text style={s.statVal}>{streak}</Text>
-            <Text style={s.statLabel}>STREAK</Text>
+        <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: 12, paddingVertical: 8 }}>
+          <View style={{ flex: 1, backgroundColor: colors.card, borderRadius: 12, paddingVertical: 12, paddingHorizontal: 10, borderWidth: 1, borderColor: colors.cardBorder, alignItems: 'center' }}>
+            <Text style={{ fontSize: 20, fontWeight: '900', color: colors.text }}>{streak}</Text>
+            <Text style={{ fontSize: 8, letterSpacing: 2, color: colors.muted, marginTop: 4 }}>STREAK</Text>
           </View>
-          <View style={[s.statDivider, { backgroundColor: colors.faint }]} />
-          <View style={s.statItem}>
-            <Text style={s.statVal}>{monthWorkoutCount}</Text>
-            <Text style={s.statLabel}>THIS MONTH</Text>
+          <View style={{ flex: 1, backgroundColor: colors.card, borderRadius: 12, paddingVertical: 12, paddingHorizontal: 10, borderWidth: 1, borderColor: colors.cardBorder, alignItems: 'center' }}>
+            <Text style={{ fontSize: 20, fontWeight: '900', color: colors.text }}>{monthWorkoutCount}</Text>
+            <Text style={{ fontSize: 8, letterSpacing: 2, color: colors.muted, marginTop: 4 }}>THIS MONTH</Text>
           </View>
-          <View style={[s.statDivider, { backgroundColor: colors.faint }]} />
-          <View style={s.statItem}>
-            <Text style={s.statVal}>
+          <View style={{ flex: 1, backgroundColor: colors.card, borderRadius: 12, paddingVertical: 12, paddingHorizontal: 10, borderWidth: 1, borderColor: colors.cardBorder, alignItems: 'center' }}>
+            <Text style={{ fontSize: 20, fontWeight: '900', color: colors.text }}>
               {toDisplayVolume(monthTotalVolume, weightUnit) >= 1000
                 ? `${(toDisplayVolume(monthTotalVolume, weightUnit) / 1000).toFixed(1)}k`
                 : toDisplayVolume(monthTotalVolume, weightUnit)}
             </Text>
-            <Text style={s.statLabel}>VOLUME ({weightUnit})</Text>
+            <Text style={{ fontSize: 8, letterSpacing: 2, color: colors.muted, marginTop: 4 }}>VOLUME ({weightUnit})</Text>
           </View>
         </View>
 
@@ -277,16 +275,16 @@ export default function WorkoutCalendarScreen() {
                   key={session.id || idx}
                   style={[s.sessionCard, { backgroundColor: colors.card, borderColor: colors.cardBorder, borderLeftColor: accentColor }]}
                   onPress={() => { setSelectedSession(session); setModalVisible(true); }}
-                  activeOpacity={0.7}
+                  activeOpacity={0.85}
                 >
                   <View style={s.sessionCardRow}>
                     <View style={{ flex: 1 }}>
                       <Text style={[s.sessionDayName, { color: accentColor }]}>
                         {session.dayName || (session.dayId ? session.dayId.toUpperCase() : 'WORKOUT')}
-                        {session.isDeload ? ' · DELOAD' : ''}
+                        {session.isDeload ? ' - DELOAD' : ''}
                       </Text>
                       <Text style={[s.sessionMeta, { color: colors.muted }]}>
-                        {session.sets} sets · {formatDurationMins(session.duration)}
+                        {session.sets} sets - {formatDurationMins(session.duration)}
                       </Text>
                     </View>
                     <View style={{ alignItems: 'flex-end' }}>
@@ -422,36 +420,6 @@ function makeStyles(colors) {
     container: {
       flex: 1,
       backgroundColor: colors.bg,
-    },
-    // Stats card
-    statsCard: {
-      flexDirection: 'row',
-      backgroundColor: colors.card,
-      borderWidth: 1,
-      borderColor: colors.cardBorder,
-      margin: 16,
-      marginBottom: 8,
-    },
-    statItem: {
-      flex: 1,
-      alignItems: 'center',
-      paddingVertical: 14,
-    },
-    statVal: {
-      fontSize: 22,
-      fontWeight: '900',
-      color: colors.text,
-      letterSpacing: -0.5,
-    },
-    statLabel: {
-      fontSize: 8,
-      letterSpacing: 2,
-      color: colors.muted,
-      marginTop: 4,
-    },
-    statDivider: {
-      width: 1,
-      marginVertical: 10,
     },
     // Month nav
     monthNav: {
@@ -629,3 +597,5 @@ const modalS = StyleSheet.create({
     lineHeight: 18,
   },
 });
+
+

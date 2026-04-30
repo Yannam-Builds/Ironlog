@@ -1,7 +1,7 @@
 
-import * as FileSystem from 'expo-file-system/legacy';
-import * as Sharing from 'expo-sharing';
-import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from '../platform/filesystem';
+import * as Sharing from '../platform/sharing';
+import * as DocumentPicker from '../platform/documentPicker';
 
 export async function exportBackup(data) {
   const json = JSON.stringify(data, null, 2);
@@ -19,3 +19,4 @@ export async function importBackup() {
   const content = await FileSystem.readAsStringAsync(asset.uri, { encoding: 'utf8' });
   return JSON.parse(content);
 }
+

@@ -1,15 +1,17 @@
-import React, { useContext, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   PanResponder,
   Modal,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { AppContext } from '../context/AppContext';
+import Ionicons from 'react-native-vector-icons/Ionicons';
+import useWatermelonHome from '../hooks/useWatermelonHome';
+import useWatermelonManualRecovery from '../hooks/useWatermelonManualRecovery';
 import { useTheme } from '../context/ThemeContext';
 import useDeferredScreenReady from '../hooks/useDeferredScreenReady';
 import BodyMapSVG from '../components/BodyMapSVG';
@@ -17,6 +19,8 @@ import { computeMuscleAnalytics } from '../domain/intelligence/trainingAnalytics
 import { buildReadinessSuggestions, computeRecoveryScore } from '../domain/intelligence/recoveryReadinessEngine';
 import { getExerciseIndex } from '../services/ExerciseLibraryService';
 import { getMuscleAtTouch } from '../utils/muscleMapHitTest';
+import SegmentedTabs from '../components/ui/SegmentedTabs';
+import { BottomSheetModal, BottomSheetView } from '@gorhom/bottom-sheet';
 
 const REGION_TO_GROUP = {
   chest: 'chest',
@@ -31,11 +35,19 @@ const REGION_TO_GROUP = {
 };
 
 const RECOVERY_COLORS = {
-  recovering: '#FF6B6B',
-  partial: '#FFD93D',
-  ready: '#6BCB77',
+  recovering: '#E88787',
+  partial: '#E5C46A',
+  ready: '#79C98D',
   untrained: null,
 };
+const CARD_RADIUS = 14;
+const RECOVERY_ACTIONS = {
+  fresh: 'Train',
+  recovering: 'Maintain',
+  fatigued: 'Back Off',
+};
+const RECOVERY_RED_THRESHOLD = 0.72;
+const RECOVERY_PARTIAL_THRESHOLD = 0.9;
 
 function getRegionColors(groupReadiness, colors) {
   const result = {};
@@ -47,22 +59,26 @@ function getRegionColors(groupReadiness, colors) {
         ? groupReadiness.shoulders
         : 1;
     let status = 'ready';
-    if (readiness < 0.6) status = 'recovering';
-    else if (readiness < 0.82) status = 'partial';
+    if (readiness < RECOVERY_RED_THRESHOLD) status = 'recovering';
+    else if (readiness < RECOVERY_PARTIAL_THRESHOLD) status = 'partial';
     result[region] = RECOVERY_COLORS[status] || colors.faint;
   });
   return result;
 }
 
 export default function RecoveryMapScreen({ navigation, route }) {
-  const { history, plans, manualRecoveryInput, saveManualRecovery } = useContext(AppContext);
+  const { history, plans } = useWatermelonHome();
+  const { manualRecoveryInput, saveManualRecovery } = useWatermelonManualRecovery();
   const colors = useTheme();
   const analyticsReady = useDeferredScreenReady({ minDelayMs: 24 });
   const [view, setView] = useState('front');
   const [windowKey, setWindowKey] = useState('7d');
   const [mapSize, setMapSize] = useState({ width: 1, height: 1 });
   const [tooltip, setTooltip] = useState(null);
+  const [selectedRegion, setSelectedRegion] = useState(null);
   const hideTimerRef = useRef(null);
+  const gestureRef = useRef({ startedAt: 0, moved: false, startX: 0, startY: 0, muscle: null });
+  const regionSheetRef = useRef(null);
   const [libraryIndex, setLibraryIndex] = useState([]);
   const [showManualModal, setShowManualModal] = useState(false);
   const [manualDraft, setManualDraft] = useState({
@@ -137,6 +153,39 @@ export default function RecoveryMapScreen({ navigation, route }) {
     [groupReadiness, colors]
   );
 
+  const readinessConfidence = useMemo(() => {
+    const base = analytics.totalWorkingSets > 0 ? 'Volume + recency model' : 'Low-confidence (insufficient session data)';
+    if (manualRecoveryInput?.recordedAt) return `${base} + manual check-in`;
+    return base;
+  }, [analytics.totalWorkingSets, manualRecoveryInput?.recordedAt]);
+
+  const actionDirective = useMemo(() => RECOVERY_ACTIONS[recoveryScore.state] || 'Maintain', [recoveryScore.state]);
+
+  const openRegionExplain = useCallback((muscle) => {
+    if (!muscle) return;
+    const group = REGION_TO_GROUP[muscle.slug] || REGION_TO_GROUP[muscle.id] || null;
+    const readinessValue = typeof groupReadiness?.[group] === 'number'
+      ? groupReadiness[group]
+      : group === 'rearDelts' && typeof groupReadiness?.shoulders === 'number'
+        ? groupReadiness.shoulders
+        : null;
+    let recommendation = 'Maintain current load and monitor response.';
+    if (typeof readinessValue === 'number') {
+      if (readinessValue < RECOVERY_RED_THRESHOLD) recommendation = 'Back off hard loading here for 24-48h.';
+      else if (readinessValue < RECOVERY_PARTIAL_THRESHOLD) recommendation = 'Train with moderate effort and avoid forced reps.';
+      else recommendation = 'Train this region normally or use it as a priority focus.';
+    }
+    setSelectedRegion({
+      label: muscle.label || muscle.slug || 'Region',
+      slug: muscle.slug || muscle.id || '',
+      group: group || 'unknown',
+      readinessValue,
+      recommendation,
+      source: readinessConfidence,
+    });
+    regionSheetRef.current?.present();
+  }, [groupReadiness, readinessConfidence]);
+
   const revealRegionFromTouch = (evt) => {
     if (!mapSize.width || !mapSize.height) return;
     const { locationX, locationY } = evt.nativeEvent;
@@ -150,9 +199,11 @@ export default function RecoveryMapScreen({ navigation, route }) {
 
     if (!muscle) {
       setTooltip(null);
+      gestureRef.current.muscle = null;
       return;
     }
 
+    gestureRef.current.muscle = muscle;
     if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
     const estimatedWidth = Math.min(170, Math.max(84, muscle.label.length * 8 + 28));
     setTooltip({
@@ -167,14 +218,28 @@ export default function RecoveryMapScreen({ navigation, route }) {
       PanResponder.create({
         onStartShouldSetPanResponder: () => true,
         onMoveShouldSetPanResponder: () => true,
-        onPanResponderGrant: revealRegionFromTouch,
-        onPanResponderMove: revealRegionFromTouch,
+        onPanResponderGrant: (evt) => {
+          const { locationX, locationY } = evt.nativeEvent;
+          gestureRef.current = { startedAt: Date.now(), moved: false, startX: locationX, startY: locationY, muscle: null };
+          revealRegionFromTouch(evt);
+        },
+        onPanResponderMove: (evt) => {
+          const { locationX, locationY } = evt.nativeEvent;
+          if (Math.abs(locationX - gestureRef.current.startX) > 8 || Math.abs(locationY - gestureRef.current.startY) > 8) {
+            gestureRef.current.moved = true;
+          }
+          revealRegionFromTouch(evt);
+        },
         onPanResponderRelease: () => {
+          const didTap = !gestureRef.current.moved && (Date.now() - gestureRef.current.startedAt) < 260;
+          if (didTap && gestureRef.current.muscle) {
+            openRegionExplain(gestureRef.current.muscle);
+          }
           if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
           hideTimerRef.current = setTimeout(() => setTooltip(null), 700);
         },
       }),
-    [mapSize, view]
+    [mapSize, openRegionExplain, view]
   );
 
   useEffect(() => {
@@ -188,16 +253,23 @@ export default function RecoveryMapScreen({ navigation, route }) {
   }, [manualRecoveryInput, showManualModal]);
 
   return (
-    <View style={[s.container, { backgroundColor: colors.bg }]}>
+    <View style={[s.scrollRoot, { backgroundColor: colors.bg }]}>
+    <ScrollView contentContainerStyle={s.container}>
       <View style={[s.scoreCard, { borderColor: colors.cardBorder, backgroundColor: colors.card }]}>
         <Text style={[s.scoreLabel, { color: colors.muted }]}>RECOVERY SCORE</Text>
-        <Text style={[s.scoreValue, { color: recoveryScore.state === 'fatigued' ? '#FF8E8E' : recoveryScore.state === 'recovering' ? '#FFD166' : '#6FE0A4' }]}>
+        <Text style={[s.scoreValue, { color: recoveryScore.state === 'fatigued' ? '#E88787' : recoveryScore.state === 'recovering' ? '#E5C46A' : '#79C98D' }]}>
           {recoveryScore.score}
         </Text>
         <Text style={[s.scoreHint, { color: colors.subtext }]}>{recoveryScore.explanation}</Text>
         {readinessSuggestions[0] ? (
           <Text style={[s.scoreHint, { color: colors.muted }]}>{readinessSuggestions[0]}</Text>
         ) : null}
+        <View style={[s.metaRow, { borderColor: colors.faint }]}>
+          <Text style={[s.metaChip, { color: colors.text, borderColor: colors.faint }]}>Action: {actionDirective}</Text>
+          <Text style={[s.metaChip, { color: colors.subtext, borderColor: colors.faint }]} numberOfLines={1}>
+            Confidence: {readinessConfidence}
+          </Text>
+        </View>
         {!analyticsReady ? (
           <Text style={[s.scoreHint, { color: colors.muted }]}>Loading real muscle readiness after navigation settles.</Text>
         ) : null}
@@ -206,69 +278,38 @@ export default function RecoveryMapScreen({ navigation, route }) {
         </TouchableOpacity>
       </View>
 
-      <View style={s.switchRow}>
-        {[
-          ['current_workout', 'Workout'],
-          ['7d', '7D'],
-          ['30d', '30D'],
-          ['program', 'Program'],
-        ].map(([key, label]) => {
-          const disabled = key === 'program' && !programHasExercises;
-          const active = key === windowKey;
-          return (
-            <TouchableOpacity
-              key={key}
-              style={[
-                s.switchBtn,
-                {
-                  opacity: disabled ? 0.45 : 1,
-                  borderColor: active ? colors.accent : colors.faint,
-                  backgroundColor: active ? colors.accentSoft : colors.card,
-                },
-              ]}
-              onPress={() => {
-                if (disabled) return;
-                setWindowKey(key);
-                setTooltip(null);
-              }}
-              disabled={disabled}
-            >
-              <Text style={[s.switchText, { color: active ? colors.accent : colors.subtext }]}>
-                {label.toUpperCase()}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
+      <SegmentedTabs
+        items={[
+          { id: 'current_workout', label: 'Workout' },
+          { id: '7d', label: '7D' },
+          { id: '30d', label: '30D' },
+          { id: 'program', label: 'Program' },
+        ]}
+        value={windowKey}
+        disabledIds={programHasExercises ? [] : ['program']}
+        onChange={(key) => {
+          setWindowKey(key);
+          setTooltip(null);
+        }}
+      />
 
-      <View style={s.switchRow}>
-        {['front', 'back'].map((side) => {
-          const active = side === view;
-          return (
-            <TouchableOpacity
-              key={side}
-              style={[
-                s.switchBtn,
-                {
-                  borderColor: active ? colors.accent : colors.faint,
-                  backgroundColor: active ? colors.accentSoft : colors.card,
-                },
-              ]}
-              onPress={() => {
-                setView(side);
-                setTooltip(null);
-              }}
-            >
-              <Text style={[s.switchText, { color: active ? colors.accent : colors.subtext }]}>
-                {side.toUpperCase()}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
+      <View style={{ marginTop: 10 }}>
+        <SegmentedTabs
+          items={[
+            { id: 'front', label: 'Front' },
+            { id: 'back', label: 'Back' },
+          ]}
+          value={view}
+          onChange={(side) => {
+            setView(side);
+            setTooltip(null);
+          }}
+          compact
+        />
       </View>
 
       <Text style={[s.helpText, { color: colors.muted }]}>
-        Slide over the body map to inspect regions. Color intensity follows real recent stimulus and recovery state.
+        Slide over the body map to inspect regions. Tap a region to explain why it is train / maintain / back-off.
       </Text>
 
       <View
@@ -311,6 +352,33 @@ export default function RecoveryMapScreen({ navigation, route }) {
         <Ionicons name="analytics-outline" size={15} color="#fff" />
         <Text style={s.analyticsBtnText}>OPEN VOLUME ANALYTICS</Text>
       </TouchableOpacity>
+
+    </ScrollView>
+
+      <BottomSheetModal
+        ref={regionSheetRef}
+        snapPoints={['42%']}
+        backgroundStyle={{ backgroundColor: colors.card, borderWidth: 1, borderColor: colors.cardBorder }}
+        handleIndicatorStyle={{ backgroundColor: colors.faint }}
+      >
+        <BottomSheetView style={s.regionSheet}>
+          <Text style={[s.sheetTitle, { color: colors.text }]}>{selectedRegion?.label || 'Region'}</Text>
+          <Text style={[s.sheetSub, { color: colors.muted }]}>Source: {selectedRegion?.source || 'Readiness model'}</Text>
+          <Text style={[s.sheetSub, { color: colors.subtext }]}>
+            Readiness: {typeof selectedRegion?.readinessValue === 'number' ? `${Math.round(selectedRegion.readinessValue * 100)}%` : 'Not enough data'}
+          </Text>
+          <View style={[s.sheetRecommendation, { borderColor: colors.faint, backgroundColor: colors.bg }]}>
+            <Text style={[s.sheetRecommendationTitle, { color: colors.accent }]}>
+              {typeof selectedRegion?.readinessValue === 'number' && selectedRegion.readinessValue < RECOVERY_RED_THRESHOLD
+                ? 'Back Off'
+                : typeof selectedRegion?.readinessValue === 'number' && selectedRegion.readinessValue < RECOVERY_PARTIAL_THRESHOLD
+                  ? 'Maintain'
+                  : 'Train'}
+            </Text>
+            <Text style={[s.sheetRecommendationText, { color: colors.text }]}>{selectedRegion?.recommendation || 'Keep monitoring this region.'}</Text>
+          </View>
+        </BottomSheetView>
+      </BottomSheetModal>
 
       <Modal visible={showManualModal} transparent animationType="fade" onRequestClose={() => setShowManualModal(false)}>
         <View style={s.overlay}>
@@ -372,29 +440,23 @@ export default function RecoveryMapScreen({ navigation, route }) {
 }
 
 const s = StyleSheet.create({
-  container: { flex: 1, padding: 16 },
-  scoreCard: { borderWidth: 1, borderRadius: 12, padding: 12, marginBottom: 10 },
+  scrollRoot: { flex: 1 },
+  container: { padding: 16, paddingBottom: 32 },
+  scoreCard: { borderWidth: 1, borderRadius: 18, padding: 14, marginBottom: 12 },
   scoreLabel: { fontSize: 9, letterSpacing: 2.3, fontWeight: '800' },
   scoreValue: { fontSize: 30, fontWeight: '900', marginTop: 4 },
   scoreHint: { fontSize: 11, marginTop: 4, lineHeight: 16 },
-  manualBtn: { marginTop: 10, borderWidth: 1, paddingVertical: 8, alignItems: 'center' },
+  metaRow: { marginTop: 10, borderWidth: 1, borderRadius: 14, padding: 10, flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
+  metaChip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 5, fontSize: 10, fontWeight: '700', maxWidth: '100%' },
+  manualBtn: { marginTop: 12, borderWidth: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 14 },
   manualBtnText: { fontSize: 10, fontWeight: '800', letterSpacing: 1.2 },
   switchRow: { flexDirection: 'row', gap: 10, marginBottom: 10 },
-  switchBtn: {
-    flex: 1,
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingVertical: 11,
-    alignItems: 'center',
-  },
-  switchText: { fontSize: 11, fontWeight: '800', letterSpacing: 1.5 },
   helpText: { fontSize: 12, marginBottom: 10 },
   mapCard: {
-    flex: 1,
     borderWidth: 1,
-    borderRadius: 14,
+    borderRadius: 18,
     overflow: 'hidden',
-    minHeight: 420,
+    height: 480,
   },
   tooltip: {
     position: 'absolute',
@@ -409,7 +471,7 @@ const s = StyleSheet.create({
   tooltipText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.3 },
   analyticsBtn: {
     marginTop: 12,
-    borderRadius: 12,
+    borderRadius: 16,
     paddingVertical: 14,
     alignItems: 'center',
     justifyContent: 'center',
@@ -422,12 +484,20 @@ const s = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 1.2,
   },
+  regionSheet: { paddingHorizontal: 18, paddingTop: 8, paddingBottom: 24, gap: 10 },
+  sheetTitle: { fontSize: 20, fontWeight: '900' },
+  sheetSub: { fontSize: 12, lineHeight: 17 },
+  sheetRecommendation: { borderWidth: 1, borderRadius: 12, padding: 12, marginTop: 4 },
+  sheetRecommendationTitle: { fontSize: 11, fontWeight: '800', letterSpacing: 1.1, marginBottom: 4 },
+  sheetRecommendationText: { fontSize: 13, lineHeight: 18 },
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.84)', justifyContent: 'center', padding: 24 },
-  modalCard: { borderWidth: 1, padding: 16 },
+  modalCard: { borderWidth: 1, padding: 16, borderRadius: CARD_RADIUS },
   modalTitle: { fontSize: 16, fontWeight: '900', marginBottom: 12 },
   inputLabel: { fontSize: 11, marginBottom: 8 },
-  rateBtn: { width: 34, height: 34, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  notesInput: { borderWidth: 1, minHeight: 70, padding: 10, textAlignVertical: 'top', marginTop: 6 },
+  rateBtn: { width: 34, height: 34, borderWidth: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 10 },
+  notesInput: { borderWidth: 1, minHeight: 70, padding: 10, textAlignVertical: 'top', marginTop: 6, borderRadius: 10 },
   modalActions: { flexDirection: 'row', gap: 8, marginTop: 12 },
-  modalBtn: { flex: 1, borderWidth: 1, paddingVertical: 10, alignItems: 'center' },
+  modalBtn: { flex: 1, borderWidth: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 10 },
 });
+
+

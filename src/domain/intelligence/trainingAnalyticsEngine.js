@@ -253,6 +253,7 @@ export function buildWorkoutCompletionSummary({
   history = [],
   exerciseIndex = [],
   recentUsage = [],
+  progressionStyle = 'balanced',
 } = {}) {
   if (!session) return '';
   const previousSession = getPreviousComparableSession(history, session);
@@ -267,7 +268,7 @@ export function buildWorkoutCompletionSummary({
   const lookup = buildLookup(exerciseIndex);
 
   (session.exercises || []).forEach((exercise) => {
-    const suggestion = buildProgressionSuggestion({ exercise, history, profileCatalog: lookup.profileCatalog });
+    const suggestion = buildProgressionSuggestion({ exercise, history, profileCatalog: lookup.profileCatalog, progressionStyle });
     if (suggestion?.action === 'increase') progressionWins += 1;
     if (suggestion?.action === 'reduce') dips += 1;
 

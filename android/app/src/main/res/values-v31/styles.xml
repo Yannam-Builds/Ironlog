@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!--
+    Android 12+ (API 31) splash screen override.
+
+    The bootsplash library sets windowSplashScreenBackground and
+    windowSplashScreenAnimatedIcon, but does NOT set
+    windowSplashScreenIconBackgroundColor. On API 31+ Android mandates a
+    circular frame behind the animated icon — when that colour is unset it
+    defaults to white/system-grey, producing the "big grey circle" visible
+    against the dark #080808 splash background.
+
+    Setting it to the same dark colour as the rest of the splash makes the
+    circle invisible so only the logo is seen.
+  -->
+  <style name="BootTheme" parent="Theme.BootSplash">
+    <item name="bootSplashBackground">@color/splashscreen_background</item>
+    <item name="bootSplashLogo">@drawable/splashscreen_logo</item>
+    <item name="postBootSplashTheme">@style/AppTheme</item>
+    <item name="android:windowSplashScreenIconBackgroundColor">@color/splashscreen_background</item>
+  </style>
+</resources>

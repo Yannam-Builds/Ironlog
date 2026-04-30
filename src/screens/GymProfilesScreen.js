@@ -1,16 +1,22 @@
 
 import React, { useContext, useState } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import CustomAlert from '../components/CustomAlert';
-import { Ionicons } from '@expo/vector-icons';
-import { AppContext } from '../context/AppContext';
+import Ionicons from 'react-native-vector-icons/Ionicons';
+import useWatermelonGymProfiles from '../hooks/useWatermelonGymProfiles';
+import useWatermelonSettings from '../hooks/useWatermelonSettings';
 import { useTheme } from '../context/ThemeContext';
-import { triggerHaptic } from '../services/hapticsEngine';
+import { fireHaptic } from '../services/hapticsEngine';
+import { convertKgToUnit } from '../utils/weightUnits';
 
 export default function GymProfilesScreen({ navigation }) {
-  const { gymProfiles, activeGymProfileId, saveGymProfiles, setActiveGymProfileId, settings } = useContext(AppContext);
+  const { gymProfiles, activeGymProfileId, saveGymProfiles, setActiveGymProfileId } = useWatermelonGymProfiles();
+  const { settings } = useWatermelonSettings();
   const colors = useTheme();
   const haptic = settings?.hapticFeedback !== false;
+  const unit = settings?.weightUnit === 'lbs' ? 'lbs' : 'kg';
+  const unitLabel = unit === 'lbs' ? 'lb' : 'kg';
 
   const [alertConfig, setAlertConfig] = useState(null);
 
@@ -19,7 +25,7 @@ export default function GymProfilesScreen({ navigation }) {
       setAlertConfig({ title: 'Cannot delete', message: 'You need at least one gym profile.', buttons: [{ text: 'OK', style: 'default' }] });
       return;
     }
-    triggerHaptic('destructiveAction', { enabled: haptic }).catch(() => {});
+    fireHaptic('destructiveAction', { enabled: haptic });
     setAlertConfig({
       title: 'Delete profile?',
       message: profile.name,
@@ -38,17 +44,18 @@ export default function GymProfilesScreen({ navigation }) {
 
   return (
     <View style={[s.container, { backgroundColor: colors.bg }]}>
-      <FlatList
+      <FlashList
         data={gymProfiles}
         keyExtractor={p => p.id}
+        estimatedItemSize={170}
         contentContainerStyle={{ padding: 16, gap: 10, paddingBottom: 80 }}
         renderItem={({ item: profile }) => {
           const isActive = profile.id === activeGymProfileId;
           return (
             <TouchableOpacity
               style={[s.card, { backgroundColor: colors.card, borderColor: isActive ? colors.accent : colors.cardBorder }]}
-              onPress={() => { triggerHaptic('selection', { enabled: haptic }).catch(() => {}); setActiveGymProfileId(profile.id); }}
-              activeOpacity={0.8}>
+              onPress={() => { fireHaptic('selection', { enabled: haptic }); setActiveGymProfileId(profile.id); }}
+              activeOpacity={0.85}>
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <Ionicons
                   name={isActive ? 'radio-button-on' : 'radio-button-off'}
@@ -59,7 +66,7 @@ export default function GymProfilesScreen({ navigation }) {
                 <View style={{ flex: 1 }}>
                   <Text style={[s.name, { color: colors.text }]}>{profile.name}</Text>
                   <Text style={[s.meta, { color: colors.muted }]}>
-                    {profile.barWeight}kg bar Â· {(profile.plates || []).map(p => p.weight + 'kg').join(', ')}
+                    {convertKgToUnit(profile.barWeight, unit, 2)}{unitLabel} bar · {(profile.plates || []).map((p) => `${convertKgToUnit(p.weight, unit, 2)}${unitLabel}`).join(', ')}
                   </Text>
                 </View>
                 {isActive && (
@@ -76,7 +83,7 @@ export default function GymProfilesScreen({ navigation }) {
                   <Text style={[s.actionText, { color: colors.muted }]}>EDIT</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[s.actionBtn, { borderColor: '#CC222233' }]}
+                  style={[s.actionBtn, { borderColor: '#CC222244' }]}
                   onPress={() => deleteProfile(profile)}>
                   <Ionicons name="trash-outline" size={13} color="#CC2222" />
                   <Text style={[s.actionText, { color: '#CC2222' }]}>DELETE</Text>
@@ -101,13 +108,15 @@ export default function GymProfilesScreen({ navigation }) {
 
 const s = StyleSheet.create({
   container: { flex: 1 },
-  card: { padding: 16, borderWidth: 1 },
+  card: { padding: 16, borderWidth: 1, borderRadius: 14 },
   name: { fontSize: 17, fontWeight: '800' },
   meta: { fontSize: 12, marginTop: 3 },
-  activeBadge: { paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderRadius: 3 },
+  activeBadge: { paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderRadius: 999 },
   activeBadgeText: { fontSize: 9, fontWeight: '800', letterSpacing: 1 },
-  actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1 },
+  actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderRadius: 10 },
   actionText: { fontSize: 10, fontWeight: '700', letterSpacing: 1 },
-  addBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, padding: 16, borderWidth: 1, borderStyle: 'dashed', marginTop: 4 },
+  addBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, padding: 16, borderWidth: 1, borderStyle: 'dashed', marginTop: 4, borderRadius: 14 },
   addText: { fontSize: 12, fontWeight: '700', letterSpacing: 2 },
 });
+
+

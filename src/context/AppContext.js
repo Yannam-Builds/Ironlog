@@ -1,7 +1,6 @@
 
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
-import { AppState } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { AppState, InteractionManager } from 'react-native';
 import { buildExerciseMap } from '../domain/intelligence/muscleContributionEngine';
 import { EXERCISES } from '../data/exerciseLibrary';
 import { setHapticsEnabled } from '../services/hapticsEngine';
@@ -29,30 +28,23 @@ import {
   setBackupDirtyFlag,
 } from '../services/backupService';
 import { DEFAULT_BACKUP_CONFIG, DEFAULT_BACKUP_STATUS, DEFAULT_NOTIFICATION_SETTINGS } from '../services/backupConstants';
-import {
-  clearDriveOAuthClientId,
-  connectGoogleDrive,
-  disconnectGoogleDrive,
-  getDriveConnectionStatus,
-  hydrateDriveOAuthConfig,
-  saveDriveOAuthClientId,
-  setDriveBackupFolder,
-  setDriveSyncMode,
-} from '../services/googleDriveService';
 import { cancelBackupJob, scheduleBackupJob } from '../services/BackupScheduler';
-import {
-  SQLITE_MIGRATION_MARKER_KEY,
-} from '../domain/storage/trainingDatabase';
-import {
-  addHistorySessionToDb,
-  clearHistoryInDb,
-  loadTrainingSnapshot,
-  migrateLegacyAsyncStorageToSQLite,
-  replaceTrainingSnapshot,
-  saveBodyWeightToDb,
-  savePlansToDb,
-} from '../domain/storage/trainingRepository';
 import { getExerciseIndex } from '../services/ExerciseLibraryService';
+import { database } from '../db/database';
+import {
+  createCompletedWorkout,
+  updateWorkoutMetadata,
+  deleteWorkoutWithData,
+  clearCompletedWorkouts,
+} from '../db/repositories/workoutRepository';
+import { addBodyMeasurement, deleteBodyMeasurement as deleteBodyMeasurementRow } from '../db/repositories/bodyMeasurementRepository';
+import {
+  getSetting as getWatermelonSetting,
+  setSetting as setWatermelonSetting,
+  removeSetting as removeWatermelonSetting,
+} from '../db/repositories/settingsRepository';
+import { importDatabase as importWatermelonDatabase } from '../db/repositories/importExportRepository';
+import { mapHistoryFromWatermelonRows } from '../db/adapters/sessionAdapter';
 
 function isoWeekKey(dateStr) {
   const d = new Date(dateStr);
@@ -85,14 +77,17 @@ function hasEntryToday(list = [], field = 'date') {
   return (Array.isArray(list) ? list : []).some((item) => String(item?.[field] || '').slice(0, 10) === today);
 }
 
+function normalizeWeeklyGoalDays(value, fallback = 4) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(1, Math.min(7, Math.round(parsed)));
+}
+
 async function buildIndexUpdatesForSession(session) {
   if (!session?.exercises || !session?.date) return null;
-  const pairs = await AsyncStorage.multiGet([
-    '@ironlog/pr_index', '@ironlog/volume_index', '@ironlog/lastPerformance',
-  ]);
-  const prIndex = pairs[0][1] ? JSON.parse(pairs[0][1]) : {};
-  const volumeIndex = pairs[1][1] ? JSON.parse(pairs[1][1]) : {};
-  const lastPerf = pairs[2][1] ? JSON.parse(pairs[2][1]) : {};
+  const prIndex = (await getWatermelonSetting('pr_index_v1')) || {};
+  const volumeIndex = (await getWatermelonSetting('volume_index_v1')) || {};
+  const lastPerf = (await getWatermelonSetting('last_performance_v1')) || {};
 
   const dateStr = session.date.split('T')[0];
   const weekKey = isoWeekKey(session.date);
@@ -132,11 +127,61 @@ async function buildIndexUpdatesForSession(session) {
     }
   }
 
-  return [
-    ['@ironlog/pr_index', JSON.stringify(prIndex)],
-    ['@ironlog/volume_index', JSON.stringify(volumeIndex)],
-    ['@ironlog/lastPerformance', JSON.stringify(lastPerf)],
-  ];
+  return { prIndex, volumeIndex, lastPerf };
+}
+
+async function buildIndexUpdatesForHistory(historyList = []) {
+  const prIndex = {};
+  const volumeIndex = {};
+  const lastPerf = {};
+  const ordered = (Array.isArray(historyList) ? historyList : [])
+    .slice()
+    .sort((a, b) => new Date(a?.date || 0) - new Date(b?.date || 0));
+
+  for (const session of ordered) {
+    if (!session?.date || !Array.isArray(session?.exercises)) continue;
+    const dateStr = session.date.split('T')[0];
+    const weekKey = isoWeekKey(session.date);
+
+    for (const ex of session.exercises) {
+      if (!ex?.name || !Array.isArray(ex?.sets)) continue;
+      const exId = ex.exerciseId || ex.name;
+      const workingSets = ex.sets.filter((setItem) => (setItem?.type || 'normal') !== 'warmup');
+
+      lastPerf[exId] = {
+        date: dateStr,
+        workoutId: session.id,
+        sets: workingSets.map((setItem) => ({
+          weight: setItem.weight,
+          reps: setItem.reps,
+          type: setItem.type || 'normal',
+          rpe: setItem.rpe || null,
+        })),
+      };
+
+      if (session.isDeload) continue;
+
+      const prSets = ex.sets.filter((setItem) => ['normal', 'failure', 'amrap'].includes(setItem?.type || 'normal'));
+      if (!prIndex[exId]) prIndex[exId] = [];
+      for (const setItem of prSets) {
+        const weight = Number(setItem?.weight || 0);
+        const reps = Number(setItem?.reps || 0);
+        if (!weight || !reps) continue;
+        const e1rm = Math.round(weight * (1 + reps / 30) * 10) / 10;
+        prIndex[exId].push({ date: dateStr, weight, reps, e1rm });
+      }
+      prIndex[exId].sort((a, b) => a.date.localeCompare(b.date));
+
+      if (workingSets.length) {
+        const muscle = resolveSessionPrimaryMuscle(ex);
+        const normalized = normalizeMuscleKey(muscle);
+        if (!volumeIndex[weekKey]) volumeIndex[weekKey] = {};
+        volumeIndex[weekKey][normalized] = (volumeIndex[weekKey][normalized] || 0) + workingSets.length;
+      }
+    }
+  }
+
+  return { prIndex, volumeIndex, lastPerf };
 }
 
 const HEAVY = new Set([
@@ -156,8 +201,76 @@ const DEFAULT_GYM_PROFILE = {
   isDefault: true,
 };
 const HAPTICS_RECOVERY_MIGRATION_KEY = '@ironlog/hapticsRecoveryMigrationV1';
-const MANUAL_RECOVERY_INPUT_KEY = '@ironlog/manualRecoveryInput';
-const MILESTONE_UNLOCKS_KEY = '@ironlog/milestoneUnlocks';
+const EXERCISE_MAP_VERSION = 1;
+const WM_GYM_PROFILES_KEY = 'gym_profiles_v1';
+const WM_ACTIVE_GYM_PROFILE_ID_KEY = 'active_gym_profile_id_v1';
+const WM_EXERCISE_NOTES_KEY = 'exercise_notes_v1';
+const WM_MANUAL_RECOVERY_KEY = 'manual_recovery_v1';
+const WM_MILESTONE_UNLOCKS_KEY = 'milestone_unlocks_v1';
+
+const WM_EXERCISES = database.get('exercises');
+const WM_PLANS = database.get('plans');
+const WM_PLAN_DAYS = database.get('plan_days');
+const WM_PLAN_EXERCISES = database.get('plan_exercises');
+const WM_WORKOUTS = database.get('workouts');
+const WM_WORKOUT_EXERCISES = database.get('workout_exercises');
+const WM_WORKOUT_SETS = database.get('workout_sets');
+const WM_BODY = database.get('body_measurements');
+
+function mapPlansFromWatermelon(plansRows, dayRows, dayExerciseRows, exerciseRows) {
+  const exById = new Map(exerciseRows.map((e) => [e.id, e]));
+  const dayByPlan = new Map();
+  dayRows.forEach((d) => {
+    const pid = d._raw.plan_id;
+    if (!dayByPlan.has(pid)) dayByPlan.set(pid, []);
+    dayByPlan.get(pid).push(d);
+  });
+  const exByDay = new Map();
+  dayExerciseRows.forEach((pe) => {
+    const did = pe._raw.plan_day_id;
+    if (!exByDay.has(did)) exByDay.set(did, []);
+    exByDay.get(did).push(pe);
+  });
+  return plansRows
+    .slice()
+    .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
+    .map((p) => ({
+      id: p.id,
+      name: p.name,
+      goal: p.goal,
+      description: p.description || '',
+      isActive: !!p.isActive,
+      days: (dayByPlan.get(p.id) || [])
+        .slice()
+        .sort((a, b) => (a.orderIndex || 0) - (b.orderIndex || 0))
+        .map((d) => ({
+          id: d.id,
+          name: d.name,
+          color: d.color,
+          exercises: (exByDay.get(d.id) || [])
+            .slice()
+            .sort((a, b) => (a.orderIndex || 0) - (b.orderIndex || 0))
+            .map((pe) => {
+              const ex = exById.get(pe._raw.exercise_id);
+              return {
+                id: pe.id,
+                exerciseId: pe._raw.exercise_id,
+                name: ex?.name || 'Unknown',
+                sets: pe.sets,
+                reps: pe.reps,
+                restSeconds: pe.restSeconds,
+                supersetGroup: pe.supersetGroup || null,
+                isWarmup: !!pe.isWarmup,
+                notes: pe.notes || '',
+              };
+            }),
+        })),
+    }));
+}
+
+function mapHistoryFromWatermelon(workoutRows, workoutExerciseRows, setRows, exerciseRows) {
+  return mapHistoryFromWatermelonRows(workoutRows, workoutExerciseRows, setRows, exerciseRows);
+}
 
 export function AppContextProvider({ children }) {
   const [plans, setPlans] = useState([]);
@@ -169,6 +282,7 @@ export function AppContextProvider({ children }) {
     weightUnit: 'kg', defaultRestNormal: 120, defaultRestHeavy: 180, barWeight: 20,
     effortTracking: 'off', keepAwake: true, warmupScheme: 'standard', hapticFeedback: true,
     goalMode: 'hypertrophy',
+    weeklyGoalDays: 4,
     completedWorkoutCount: 0, lastRatePromptCount: 0, neverAskToRate: false,
   });
   const [gymProfiles, setGymProfiles] = useState([DEFAULT_GYM_PROFILE]);
@@ -194,23 +308,22 @@ export function AppContextProvider({ children }) {
   }, [settings?.hapticFeedback]);
 
   const refreshBackupState = async () => {
-    const [config, status, notifications, drive] = await Promise.all([
+    const [config, status, notifications] = await Promise.all([
       loadBackupConfig(),
       loadBackupStatus(),
       loadNotificationSettings(),
-      getDriveConnectionStatus(),
     ]);
     const nextStatus = {
       ...status,
       enabled: config.enabled,
-      driveLinked: drive.linked,
-      driveConfigured: drive.configured,
-      driveEmail: drive.email || null,
-      driveRedirectUri: drive.redirectUri || null,
-      driveConfigMessage: drive.reason || null,
-      driveFolderId: drive.folderId || null,
-      driveFolderName: drive.folderName || null,
-      driveMode: drive.mode || 'appdata',
+      driveLinked: false,
+      driveConfigured: false,
+      driveEmail: null,
+      driveRedirectUri: null,
+      driveConfigMessage: 'Google Drive backup is disabled in this build.',
+      driveFolderId: null,
+      driveFolderName: null,
+      driveMode: 'appdata',
     };
     setBackupConfigState(config);
     setBackupStatusState(nextStatus);
@@ -235,7 +348,7 @@ export function AppContextProvider({ children }) {
       await queueBackup(reason);
       const scheduled = await scheduleBackupJob(reason, delayMs);
       if (!scheduled) {
-        await runBackupNow({ reason, syncToDrive: true });
+        await runBackupNow({ reason, syncToDrive: false });
       }
       await refreshBackupState();
     } catch (e) {
@@ -245,95 +358,85 @@ export function AppContextProvider({ children }) {
 
   const init = async () => {
     try {
-      await hydrateDriveOAuthConfig().catch(() => '');
-      const keys = [
-        'ironlog_plans',
-        'ironlog_history',
-        'ironlog_pb',
-        'ironlog_bw',
-        'ironlog_notes',
-        'ironlog_settings',
-        '@ironlog/gymProfiles',
-        '@ironlog/activeGymProfileId',
-        '@ironlog/onboardingComplete',
-        'ironlog_exerciseMap',
-        HAPTICS_RECOVERY_MIGRATION_KEY,
-        SQLITE_MIGRATION_MARKER_KEY,
-        MANUAL_RECOVERY_INPUT_KEY,
-        MILESTONE_UNLOCKS_KEY,
-      ];
-      const vals = await AsyncStorage.multiGet(keys);
-      const map = Object.fromEntries(vals.map(([k, v]) => [k, v ? JSON.parse(v) : null]));
-      if (map.ironlog_plans) setPlans(map.ironlog_plans);
-      if (map.ironlog_history) setHistory(map.ironlog_history);
-      if (map.ironlog_pb) setPb(map.ironlog_pb);
-      if (map.ironlog_bw) setBodyWeight(map.ironlog_bw);
-      if (map.ironlog_notes) setExerciseNotes(map.ironlog_notes);
-      let loadedSettings = settings;
-      if (map.ironlog_settings) {
-        loadedSettings = { ...settings, ...map.ironlog_settings };
-        setSettings(loadedSettings);
-      }
-      if (!map[HAPTICS_RECOVERY_MIGRATION_KEY]) {
-        // One-time recovery: force haptics back on for affected installs.
-        loadedSettings = { ...loadedSettings, hapticFeedback: true };
-        setSettings(loadedSettings);
-        await AsyncStorage.multiSet([
-          ['ironlog_settings', JSON.stringify(loadedSettings)],
-          [HAPTICS_RECOVERY_MIGRATION_KEY, JSON.stringify(true)],
-        ]);
-      }
-      if (map['@ironlog/gymProfiles'] && map['@ironlog/gymProfiles'].length > 0) {
-        setGymProfiles(map['@ironlog/gymProfiles']);
-      } else {
-        // Seed default using barWeight from settings
-        const defaultProfile = { ...DEFAULT_GYM_PROFILE, barWeight: loadedSettings.barWeight || 20 };
-        setGymProfiles([defaultProfile]);
-        await AsyncStorage.setItem('@ironlog/gymProfiles', JSON.stringify([defaultProfile]));
-      }
-      if (map['@ironlog/activeGymProfileId']) {
-        setActiveGymProfileIdState(map['@ironlog/activeGymProfileId']);
-      }
-      if (map['@ironlog/onboardingComplete']) {
-        setOnboardingCompleteState(true);
-      }
-      if (map[MANUAL_RECOVERY_INPUT_KEY]) setManualRecoveryInput(map[MANUAL_RECOVERY_INPUT_KEY]);
-      if (map[MILESTONE_UNLOCKS_KEY]) setMilestoneUnlocks(map[MILESTONE_UNLOCKS_KEY]);
+      const [
+        wmPlanRows, wmDayRows, wmPlanExerciseRows, wmExerciseRows,
+        wmWorkoutRows, wmWorkoutExerciseRows, wmWorkoutSetRows,
+        wmBodyRows,
+      ] = await Promise.all([
+        WM_PLANS.query().fetch(),
+        WM_PLAN_DAYS.query().fetch(),
+        WM_PLAN_EXERCISES.query().fetch(),
+        WM_EXERCISES.query().fetch(),
+        WM_WORKOUTS.query().fetch(),
+        WM_WORKOUT_EXERCISES.query().fetch(),
+        WM_WORKOUT_SETS.query().fetch(),
+        WM_BODY.query().fetch(),
+      ]);
 
-      let sqliteMigrated = !!map[SQLITE_MIGRATION_MARKER_KEY];
-      if (!sqliteMigrated) {
-        try {
-          sqliteMigrated = await migrateLegacyAsyncStorageToSQLite();
-        } catch (migrationError) {
-          // Keep legacy state active if migration fails; never wipe user data.
-          console.warn('SQLite migration skipped:', migrationError);
-          sqliteMigrated = false;
-        }
-      }
+      const wmPlans = mapPlansFromWatermelon(wmPlanRows, wmDayRows, wmPlanExerciseRows, wmExerciseRows);
+      const wmHistory = mapHistoryFromWatermelon(
+        wmWorkoutRows.filter((w) => String(w.status || '') === 'completed'),
+        wmWorkoutExerciseRows,
+        wmWorkoutSetRows,
+        wmExerciseRows
+      );
+      const wmBodyWeight = wmBodyRows
+        .filter((row) => row.bodyweight != null)
+        .sort((a, b) => (b.measuredAt || 0) - (a.measuredAt || 0))
+        .map((row) => ({
+          id: row.id,
+          date: new Date(Number(row.measuredAt) || Date.now()).toISOString(),
+          weight: Number(row.bodyweight) || 0,
+          note: row.notes || '',
+        }));
 
-      if (sqliteMigrated) {
-        const snapshot = await loadTrainingSnapshot();
-        setPlans(snapshot.plans || []);
-        setHistory(snapshot.history || []);
-        setBodyWeight(snapshot.bodyWeight || []);
-        if (!map[MILESTONE_UNLOCKS_KEY]) {
-          const computed = evaluateMilestones({ history: snapshot.history || [], milestoneState: {} });
-          setMilestoneUnlocks(computed.state);
-          await AsyncStorage.setItem(MILESTONE_UNLOCKS_KEY, JSON.stringify(computed.state));
-        }
-      }
+      const wmSettings = await getWatermelonSetting('ironlog_settings');
+      const wmNotes = await getWatermelonSetting(WM_EXERCISE_NOTES_KEY);
+      const wmManualRecovery = await getWatermelonSetting(WM_MANUAL_RECOVERY_KEY);
+      const wmMilestones = await getWatermelonSetting(WM_MILESTONE_UNLOCKS_KEY);
+      const wmProfiles = await getWatermelonSetting(WM_GYM_PROFILES_KEY);
+      const wmActiveProfile = await getWatermelonSetting(WM_ACTIVE_GYM_PROFILE_ID_KEY);
+      const wmOnboarding = await getWatermelonSetting('onboarding_complete');
+      const fallbackPb = await getWatermelonSetting('ironlog_pb');
 
-      const libraryIndex = await getExerciseIndex().catch(() => null);
-      let emap = map.ironlog_exerciseMap;
-      if (!emap || Object.keys(emap).length === 0 || sqliteMigrated) {
-        emap = buildExerciseMap(libraryIndex || EXERCISES);
-        await AsyncStorage.setItem('ironlog_exerciseMap', JSON.stringify(emap));
+      setPlans(wmPlans);
+      setHistory(wmHistory);
+      setBodyWeight(wmBodyWeight);
+      if (wmSettings && typeof wmSettings === 'object') {
+        setSettings((prev) => ({
+          ...prev,
+          ...wmSettings,
+          weeklyGoalDays: normalizeWeeklyGoalDays(wmSettings.weeklyGoalDays, prev.weeklyGoalDays || 4),
+        }));
       }
-      setExerciseMap(emap);
-      await refreshBackupState();
-
+      if (wmNotes && typeof wmNotes === 'object') setExerciseNotes(wmNotes);
+      if (wmManualRecovery && typeof wmManualRecovery === 'object') setManualRecoveryInput(wmManualRecovery);
+      if (wmMilestones && typeof wmMilestones === 'object') setMilestoneUnlocks(wmMilestones);
+      if (Array.isArray(wmProfiles) && wmProfiles.length) setGymProfiles(wmProfiles);
+      if (wmActiveProfile) setActiveGymProfileIdState(wmActiveProfile);
+      if (typeof wmOnboarding === 'boolean') setOnboardingCompleteState(wmOnboarding);
+      if (fallbackPb && typeof fallbackPb === 'object') setPb(fallbackPb);
     } catch (e) { console.warn('Init error:', e); }
     setInitialized(true);
+    // Non-critical boot work deferred until after first paint and interactions settle.
+    InteractionManager.runAfterInteractions(async () => {
+      try {
+        let emap = await getWatermelonSetting('exercise_map_v1');
+        const storedMapVersion = Number(await getWatermelonSetting('exercise_map_version_v1') || 0);
+        if (!emap || Object.keys(emap).length === 0 || storedMapVersion < EXERCISE_MAP_VERSION) {
+          const libraryIndex = await getExerciseIndex().catch(() => null);
+          emap = buildExerciseMap(libraryIndex || EXERCISES);
+          await Promise.all([
+            setWatermelonSetting('exercise_map_v1', emap, 'json'),
+            setWatermelonSetting('exercise_map_version_v1', EXERCISE_MAP_VERSION, 'number'),
+          ]);
+        }
+        setExerciseMap(emap || {});
+      } catch (e) {
+        console.warn('Exercise map boot hydration failed:', e);
+      }
+      await refreshBackupState().catch((e) => console.warn('Backup state refresh failed:', e));
+    });
   };
 
   useEffect(() => {
@@ -398,23 +501,76 @@ export function AppContextProvider({ children }) {
     return () => sub.remove();
   }, [backupConfig.autoBackupOnBackground, backupConfig.enabled, backupConfig.passphraseConfigured, backupStatus.dirty]);
 
-  const save = async (key, value, reason = 'data_changed') => {
-    try {
-      await AsyncStorage.setItem(key, JSON.stringify(value));
-      if (reason) await flagDirty(reason);
-    } catch (e) {
-      console.warn(e);
-    }
-  };
-
   const savePlans = async (v) => {
     setPlans(v);
     try {
-      await savePlansToDb(v);
-    } catch (e) {
-      console.warn('savePlans SQLite error:', e);
+      await database.write(async () => {
+        const [existingPlans, existingDays, existingPlanExercises] = await Promise.all([
+          WM_PLANS.query().fetch(),
+          WM_PLAN_DAYS.query().fetch(),
+          WM_PLAN_EXERCISES.query().fetch(),
+        ]);
+        const deleteOps = [
+          ...existingPlanExercises.map((row) => row.prepareDestroyPermanently()),
+          ...existingDays.map((row) => row.prepareDestroyPermanently()),
+          ...existingPlans.map((row) => row.prepareDestroyPermanently()),
+        ];
+        if (deleteOps.length) await database.batch(...deleteOps);
+
+        const exRows = await WM_EXERCISES.query().fetch();
+        const exByName = new Map(exRows.map((ex) => [String(ex.name || '').trim().toLowerCase(), ex.id]));
+        const now = Date.now();
+        const createOps = [];
+        for (let pi = 0; pi < (v || []).length; pi += 1) {
+          const plan = v[pi];
+          const p = WM_PLANS.prepareCreate((row) => {
+            row.name = String(plan?.name || `Plan ${pi + 1}`).trim();
+            row.goal = String(plan?.goal || 'General Fitness').trim();
+            row.description = String(plan?.description || '');
+            row.isActive = !!plan?.isActive;
+            row._raw.created_at = now;
+            row.updatedAt = now;
+          });
+          createOps.push(p);
+          const days = Array.isArray(plan?.days) ? plan.days : [];
+          for (let di = 0; di < days.length; di += 1) {
+            const day = days[di];
+            const d = WM_PLAN_DAYS.prepareCreate((row) => {
+              row.plan.id = p.id;
+              row.name = String(day?.name || `Day ${di + 1}`).trim();
+              row.color = String(day?.color || '#FF4500');
+              row.orderIndex = di;
+              row._raw.created_at = now;
+              row.updatedAt = now;
+            });
+            createOps.push(d);
+            const exs = Array.isArray(day?.exercises) ? day.exercises : [];
+            for (let ei = 0; ei < exs.length; ei += 1) {
+              const ex = exs[ei];
+              const exId = ex?.exerciseId || exByName.get(String(ex?.name || '').trim().toLowerCase());
+              if (!exId) continue;
+              createOps.push(WM_PLAN_EXERCISES.prepareCreate((row) => {
+                row.planDay.id = d.id;
+                row.exercise.id = exId;
+                row.orderIndex = ei;
+                row.sets = Math.max(1, Number(ex?.sets || 3));
+                row.reps = String(ex?.reps || '10');
+                row.restSeconds = Math.max(0, Number(ex?.restSeconds ?? ex?.rest ?? 90));
+                row.supersetGroup = String(ex?.supersetGroup || '');
+                row.isWarmup = !!ex?.isWarmup;
+                row.notes = String(ex?.notes || '');
+                row._raw.created_at = now;
+                row.updatedAt = now;
+              }));
+            }
+          }
+        }
+        if (createOps.length) await database.batch(...createOps);
+      });
+    } catch (wmError) {
+      console.warn('savePlans Watermelon error:', wmError);
     }
-    await save('ironlog_plans', v, 'plans_changed');
+    await flagDirty('plans_changed');
   };
   const addHistory = async (entry) => {
     const h = [entry, ...history].slice(0, 200);
@@ -423,20 +579,92 @@ export function AppContextProvider({ children }) {
     setMilestoneUnlocks(nextMilestones.state);
     setLatestMilestones(nextMilestones.unlocked);
     try {
-      await addHistorySessionToDb(entry);
-      const indexPairs = await buildIndexUpdatesForSession(entry);
-      const storageWrite = [['ironlog_history', JSON.stringify(h)], ...(indexPairs || [])];
-      storageWrite.push([MILESTONE_UNLOCKS_KEY, JSON.stringify(nextMilestones.state)]);
-      await AsyncStorage.multiSet(storageWrite);
+      await setWatermelonSetting(WM_MILESTONE_UNLOCKS_KEY, nextMilestones.state, 'json');
+      await createCompletedWorkout({
+        name: entry?.dayName || entry?.name || 'Workout',
+        startedAt: entry?.date ? new Date(entry.date).getTime() : Date.now(),
+        durationSeconds: Number(entry?.duration || 0),
+        rating: entry?.rating ?? null,
+        notes: entry?.summaryText || entry?.notes || '',
+        exerciseData: Array.isArray(entry?.exercises) ? entry.exercises : [],
+      });
+      const indexes = await buildIndexUpdatesForSession(entry);
+      if (indexes) {
+        await Promise.all([
+          setWatermelonSetting('pr_index_v1', indexes.prIndex, 'json'),
+          setWatermelonSetting('volume_index_v1', indexes.volumeIndex, 'json'),
+          setWatermelonSetting('last_performance_v1', indexes.lastPerf, 'json'),
+        ]);
+      }
       await flagDirty('workout_completion');
       if (backupConfig.enabled && backupConfig.autoBackupOnWorkoutCompletion && backupConfig.passphraseConfigured) {
         queueAutoBackup('workout_completion', 5000).catch((error) => console.warn('Workout backup queue failed:', error));
       }
     } catch (e) {
       console.warn('addHistory index error:', e);
-      await save('ironlog_history', h, 'workout_completion');
+      await flagDirty('workout_completion');
     }
     return { unlockedMilestones: nextMilestones.unlocked };
+  };
+  const updateHistoryEntry = async (entry) => {
+    if (!entry?.id) return false;
+    const h = history
+      .map((item) => (item?.id === entry.id ? { ...item, ...entry } : item))
+      .sort((a, b) => new Date(b?.date || 0) - new Date(a?.date || 0))
+      .slice(0, 200);
+    setHistory(h);
+    const nextMilestones = evaluateMilestones({ history: h, milestoneState: milestoneUnlocks });
+    setMilestoneUnlocks(nextMilestones.state);
+    try {
+      await setWatermelonSetting(WM_MILESTONE_UNLOCKS_KEY, nextMilestones.state, 'json');
+      if (entry?.id) {
+        await updateWorkoutMetadata(entry.id, {
+          startedAt: entry?.date ? new Date(entry.date).getTime() : undefined,
+          durationSeconds: entry?.duration,
+          rating: entry?.rating,
+          notes: entry?.summaryText,
+        });
+      }
+      const indexes = await buildIndexUpdatesForHistory(h);
+      if (indexes) {
+        await Promise.all([
+          setWatermelonSetting('pr_index_v1', indexes.prIndex, 'json'),
+          setWatermelonSetting('volume_index_v1', indexes.volumeIndex, 'json'),
+          setWatermelonSetting('last_performance_v1', indexes.lastPerf, 'json'),
+        ]);
+      }
+      await flagDirty('history_edited');
+    } catch (e) {
+      console.warn('updateHistoryEntry persistence error:', e);
+      await flagDirty('history_edited');
+    }
+    return true;
+  };
+  const deleteHistoryEntry = async (entryId) => {
+    if (!entryId) return false;
+    const h = history
+      .filter((item) => item?.id !== entryId)
+      .sort((a, b) => new Date(b?.date || 0) - new Date(a?.date || 0));
+    setHistory(h);
+    const nextMilestones = evaluateMilestones({ history: h, milestoneState: milestoneUnlocks });
+    setMilestoneUnlocks(nextMilestones.state);
+    try {
+      await setWatermelonSetting(WM_MILESTONE_UNLOCKS_KEY, nextMilestones.state, 'json');
+      if (entryId) await deleteWorkoutWithData(entryId);
+      const indexes = await buildIndexUpdatesForHistory(h);
+      if (indexes) {
+        await Promise.all([
+          setWatermelonSetting('pr_index_v1', indexes.prIndex, 'json'),
+          setWatermelonSetting('volume_index_v1', indexes.volumeIndex, 'json'),
+          setWatermelonSetting('last_performance_v1', indexes.lastPerf, 'json'),
+        ]);
+      }
+      await flagDirty('history_deleted');
+    } catch (e) {
+      console.warn('deleteHistoryEntry persistence error:', e);
+      await flagDirty('history_deleted');
+    }
+    return true;
   };
   const clearHistory = async () => {
     try {
@@ -448,32 +676,75 @@ export function AppContextProvider({ children }) {
     }
     setHistory([]);
     try {
-      await clearHistoryInDb();
+      await clearCompletedWorkouts();
     } catch (e) {
       console.warn('clearHistory SQLite error:', e);
     }
-    await AsyncStorage.multiRemove(['ironlog_history', '@ironlog/pr_index', '@ironlog/volume_index', '@ironlog/lastPerformance']);
+    await Promise.all([
+      removeWatermelonSetting('pr_index_v1'),
+      removeWatermelonSetting('volume_index_v1'),
+      removeWatermelonSetting('last_performance_v1'),
+    ]);
     await flagDirty('history_cleared');
   };
   const updatePb = async (key, val) => {
-    const n = { ...pb, [key]: val }; setPb(n); await save('ironlog_pb', n, 'pb_changed');
+    const n = { ...pb, [key]: val };
+    setPb(n);
+    await setWatermelonSetting('ironlog_pb', n, 'json');
+    await flagDirty('pb_changed');
   };
-  const clearPbs = async () => { setPb({}); await AsyncStorage.removeItem('ironlog_pb'); await flagDirty('pb_cleared'); };
+  const clearPbs = async () => {
+    setPb({});
+    await removeWatermelonSetting('ironlog_pb');
+    await flagDirty('pb_cleared');
+  };
   const logBodyWeight = async (entry) => {
     const bw = [entry, ...bodyWeight].slice(0, 365);
     setBodyWeight(bw);
     try {
-      await saveBodyWeightToDb(bw);
+      await addBodyMeasurement({
+        measuredAt: entry?.date ? new Date(entry.date).getTime() : Date.now(),
+        bodyweight: Number(entry?.weight ?? entry?.bodyweight ?? 0),
+        notes: entry?.note || entry?.notes || '',
+      });
+      await flagDirty('body_weight_changed');
     } catch (e) {
       console.warn('saveBodyWeight SQLite error:', e);
     }
-    await save('ironlog_bw', bw, 'body_weight_changed');
+  };
+  const deleteBodyWeightEntry = async ({ id, sourceIndex }) => {
+    const current = Array.isArray(bodyWeight) ? bodyWeight : [];
+    const next = current.filter((_, index) => index !== sourceIndex);
+    setBodyWeight(next);
+    if (id) {
+      try {
+        await deleteBodyMeasurementRow(id);
+      } catch (e) {
+        console.warn('deleteBodyWeightEntry Watermelon error:', e);
+      }
+    }
+    await flagDirty('body_weight_changed');
   };
   const saveExerciseNotes = async (exName, note) => {
     const n = { ...exerciseNotes, [exName]: note };
-    setExerciseNotes(n); await save('ironlog_notes', n, 'notes_changed');
+    setExerciseNotes(n);
+    try {
+      await setWatermelonSetting(WM_EXERCISE_NOTES_KEY, n, 'json');
+      await flagDirty('notes_changed');
+    } catch (wmError) {
+      console.warn('saveExerciseNotes Watermelon write failed:', wmError);
+    }
   };
-  const updateSettings = async (s) => { setSettings(s); await save('ironlog_settings', s, 'settings_changed'); };
+  const updateSettings = async (s) => {
+    const next = { ...(s || {}), weeklyGoalDays: normalizeWeeklyGoalDays(s?.weeklyGoalDays, settings?.weeklyGoalDays || 4) };
+    setSettings(next);
+    try {
+      await setWatermelonSetting('ironlog_settings', next, 'json');
+      await flagDirty('settings_changed');
+    } catch (wmError) {
+      console.warn('updateSettings Watermelon write failed:', wmError);
+    }
+  };
   const saveManualRecovery = async (entry) => {
     const payload = {
       soreness: Number(entry?.soreness || 0),
@@ -483,22 +754,31 @@ export function AppContextProvider({ children }) {
       recordedAt: entry?.recordedAt || new Date().toISOString(),
     };
     setManualRecoveryInput(payload);
-    await AsyncStorage.setItem(MANUAL_RECOVERY_INPUT_KEY, JSON.stringify(payload));
-    await flagDirty('manual_recovery_changed');
+    try {
+      await setWatermelonSetting(WM_MANUAL_RECOVERY_KEY, payload, 'json');
+      await flagDirty('manual_recovery_changed');
+    } catch (wmError) {
+      console.warn('manual recovery Watermelon write failed:', wmError);
+    }
     return payload;
   };
 
-  const completeOnboarding = async () => {
+  const completeOnboarding = async (options = {}) => {
     setOnboardingCompleteState(true);
     try {
-      await AsyncStorage.setItem('@ironlog/onboardingComplete', 'true');
+      if (options?.weeklyGoalDays != null) {
+        const nextSettings = { ...settings, weeklyGoalDays: normalizeWeeklyGoalDays(options.weeklyGoalDays, settings?.weeklyGoalDays || 4) };
+        setSettings(nextSettings);
+        await setWatermelonSetting('ironlog_settings', nextSettings, 'json');
+      }
+      await setWatermelonSetting('onboarding_complete', true, 'boolean');
       await flagDirty('onboarding_changed');
     } catch (e) { console.warn(e); }
   };
   const resetOnboarding = async () => {
     setOnboardingCompleteState(false);
     try {
-      await AsyncStorage.removeItem('@ironlog/onboardingComplete');
+      await setWatermelonSetting('onboarding_complete', false, 'boolean');
       await flagDirty('onboarding_changed');
     } catch (e) { console.warn(e); }
   };
@@ -506,14 +786,14 @@ export function AppContextProvider({ children }) {
   const saveGymProfiles = async (profiles) => {
     setGymProfiles(profiles);
     try {
-      await AsyncStorage.setItem('@ironlog/gymProfiles', JSON.stringify(profiles));
+      await setWatermelonSetting(WM_GYM_PROFILES_KEY, profiles, 'json');
       await flagDirty('gym_profiles_changed');
     } catch (e) { console.warn(e); }
   };
   const setActiveGymProfileId = async (id) => {
     setActiveGymProfileIdState(id);
     try {
-      await AsyncStorage.setItem('@ironlog/activeGymProfileId', JSON.stringify(id));
+      await setWatermelonSetting(WM_ACTIVE_GYM_PROFILE_ID_KEY, String(id || 'default'), 'string');
       await flagDirty('gym_profiles_changed');
     } catch (e) { console.warn(e); }
   };
@@ -561,84 +841,58 @@ export function AppContextProvider({ children }) {
   };
 
   const unlinkDriveBackup = async () => {
-    await disconnectGoogleDrive();
     await refreshBackupState();
+    return { disabled: true };
   };
 
   const linkDriveBackup = async (options = {}) => {
-    const result = await connectGoogleDrive(options);
     await refreshBackupState();
-    return result;
+    return { connected: false, disabled: true, reason: 'Google Drive backup is disabled in this build.', options };
   };
 
   const updateDriveBackupFolder = async (folderName) => {
-    const result = await setDriveBackupFolder(folderName);
     await refreshBackupState();
-    return result;
+    return { updated: false, disabled: true, folderName };
   };
 
   const updateDriveSyncMode = async (mode) => {
-    const result = await setDriveSyncMode(mode);
     await refreshBackupState();
-    return result;
+    return { updated: false, disabled: true, mode };
   };
 
   const runManualBackup = async (options = {}) => {
-    const result = await runBackupNow({ reason: 'manual', syncToDrive: true, ...options });
+    const result = await runBackupNow({ reason: 'manual', syncToDrive: false, ...options });
     await refreshBackupState();
     return result;
   };
 
   const saveDriveOAuthClient = async (clientId) => {
-    await saveDriveOAuthClientId(clientId);
     await refreshBackupState();
+    return { saved: false, disabled: true, clientId };
   };
 
   const clearDriveOAuthClient = async () => {
-    await clearDriveOAuthClientId();
     await refreshBackupState();
+    return { cleared: false, disabled: true };
   };
 
   const restoreData = async (data) => {
-    if (data.plans) { setPlans(data.plans); await save('ironlog_plans', data.plans); }
-    if (data.history) { setHistory(data.history); await save('ironlog_history', data.history); }
-    if (data.pb) { setPb(data.pb); await save('ironlog_pb', data.pb); }
-    if (data.bodyWeight) { setBodyWeight(data.bodyWeight); await save('ironlog_bw', data.bodyWeight); }
-    if (data.exerciseNotes) { setExerciseNotes(data.exerciseNotes); await save('ironlog_notes', data.exerciseNotes); }
-    if (data.settings) { setSettings(data.settings); await save('ironlog_settings', data.settings); }
-    if (data.manualRecoveryInput) {
-      setManualRecoveryInput(data.manualRecoveryInput);
-      await AsyncStorage.setItem(MANUAL_RECOVERY_INPUT_KEY, JSON.stringify(data.manualRecoveryInput));
-    }
-    if (data.milestoneUnlocks) {
-      setMilestoneUnlocks(data.milestoneUnlocks);
-      await AsyncStorage.setItem(MILESTONE_UNLOCKS_KEY, JSON.stringify(data.milestoneUnlocks));
-    }
-    if (data.gymProfiles?.length) {
-      setGymProfiles(data.gymProfiles);
-      await AsyncStorage.setItem('@ironlog/gymProfiles', JSON.stringify(data.gymProfiles));
-    }
-    if (data.activeGymProfileId) {
-      setActiveGymProfileIdState(data.activeGymProfileId);
-      await AsyncStorage.setItem('@ironlog/activeGymProfileId', JSON.stringify(data.activeGymProfileId));
-    }
-    if (typeof data.onboardingComplete === 'boolean') {
-      setOnboardingCompleteState(data.onboardingComplete);
-      if (data.onboardingComplete) await AsyncStorage.setItem('@ironlog/onboardingComplete', 'true');
-      else await AsyncStorage.removeItem('@ironlog/onboardingComplete');
-    }
+    const payload = data?.payload && typeof data.payload === 'object' ? data.payload : data;
     try {
-      await replaceTrainingSnapshot({
-        plans: data.plans || plans,
-        history: data.history || history,
-        bodyWeight: data.bodyWeight || bodyWeight,
-        bodyMeasurements: data.bodyMeasurements || [],
-        customExercises: data.customExercises || [],
-      });
-    } catch (e) {
-      console.warn('restoreData SQLite error:', e);
+      await importWatermelonDatabase(payload);
+      await init();
+      await refreshBackupState();
+      return {
+        plans: Array.isArray(payload?.plans) ? payload.plans.length : 0,
+        history: Array.isArray(payload?.history) ? payload.history.length : 0,
+        bodyWeight: Array.isArray(payload?.bodyWeight) ? payload.bodyWeight.length : 0,
+        bodyMeasurements: Array.isArray(payload?.bodyMeasurements) ? payload.bodyMeasurements.length : 0,
+        customExercises: Array.isArray(payload?.customExercises) ? payload.customExercises.length : 0,
+      };
+    } catch (wmImportError) {
+      console.warn('Watermelon restore failed:', wmImportError);
+      throw wmImportError;
     }
-    await refreshBackupState();
   };
 
   const activeGymProfile = gymProfiles.find(p => p.id === activeGymProfileId) || gymProfiles[0] || DEFAULT_GYM_PROFILE;
@@ -650,8 +904,8 @@ export function AppContextProvider({ children }) {
       onboardingComplete, completeOnboarding, resetOnboarding,
       gymProfiles, activeGymProfileId, activeGymProfile,
       exerciseMap, backupConfig, backupStatus, notificationSettings,
-      savePlans, addHistory, clearHistory, updatePb, clearPbs,
-      logBodyWeight, saveExerciseNotes, updateSettings,
+      savePlans, addHistory, updateHistoryEntry, deleteHistoryEntry, clearHistory, updatePb, clearPbs,
+      logBodyWeight, deleteBodyWeightEntry, saveExerciseNotes, updateSettings,
       saveManualRecovery,
       saveGymProfiles, setActiveGymProfileId,
       getAllData, restoreData, reloadFromStorage,

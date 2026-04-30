@@ -7,20 +7,18 @@ import ThemedToast from './src/components/ui/ThemedToast';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import BootSplash from 'react-native-bootsplash';
-import { AppContextProvider } from './src/context/AppContext';
 import { ThemeProvider } from './src/context/ThemeContext';
 import { ActiveWorkoutBannerProvider } from './src/context/ActiveWorkoutBannerContext';
 import AppNavigator from './src/navigation/AppNavigator';
-import { runMigrations } from './src/services/migrations';
-import MigrationScreen from './src/screens/MigrationScreen';
 import LibrarySetupScreen from './src/screens/LibrarySetupScreen';
-import { ensureTrainingDatabase } from './src/domain/storage/trainingDatabase';
+// WatermelonDB bootstrap — database singleton is created on import
+import './src/db/database';
+import { seedExercisesIfNeeded, backfillExerciseMusclesIfNeeded } from './src/db/repositories/exerciseRepository';
 
 enableScreens(true);
 enableFreeze(true);
 
 export default function App() {
-  const [migrationStep, setMigrationStep] = useState(null);
   const [ready, setReady] = useState(false);
   const [startupError, setStartupError] = useState(null);
   const [bootAttempt, setBootAttempt] = useState(0);
@@ -28,12 +26,15 @@ export default function App() {
   const bootstrap = useCallback(async () => {
     setReady(false);
     setStartupError(null);
-    setMigrationStep(null);
 
     try {
-      await runMigrations((step, total) => setMigrationStep({ step, total }));
-      setMigrationStep(null);
-      await ensureTrainingDatabase();
+      // Seed built-in exercise library into WatermelonDB on first launch.
+      // This is idempotent — subsequent launches skip seeding via the
+      // 'exercise_seed_v1_complete' marker in app_settings.
+      await seedExercisesIfNeeded();
+      // Backfill exercise_muscles rows for users who installed before
+      // muscle rows were written during seeding. No-op if already populated.
+      await backfillExerciseMusclesIfNeeded();
     } catch (e) {
       console.warn('Startup error:', e);
       setStartupError(e);
@@ -56,20 +57,12 @@ export default function App() {
 
   let content = null;
 
-  if (migrationStep) {
-    content = (
-      <MigrationScreen
-        step={migrationStep.step}
-        total={migrationStep.total}
-        message="Upgrading your data..."
-      />
-    );
-  } else if (!ready) {
+  if (!ready) {
     content = <LibrarySetupScreen status="setting_up" />;
   } else if (startupError) {
     content = (
       <View style={s.errorScreen}>
-        <Text style={s.errorTitle}>IronlogDB</Text>
+        <Text style={s.errorTitle}>Ironlog</Text>
         <Text style={s.errorHeading}>Startup failed</Text>
         <Text style={s.errorMessage}>
           {startupError?.message || 'Something went wrong while loading your data.'}
@@ -83,14 +76,12 @@ export default function App() {
     content = (
       <KeyboardProvider>
         <BottomSheetModalProvider>
-          <AppContextProvider>
-            <ThemeProvider>
-              <ActiveWorkoutBannerProvider>
-                <AppNavigator />
-                <ThemedToast />
-              </ActiveWorkoutBannerProvider>
-            </ThemeProvider>
-          </AppContextProvider>
+          <ThemeProvider>
+            <ActiveWorkoutBannerProvider>
+              <AppNavigator />
+              <ThemedToast />
+            </ActiveWorkoutBannerProvider>
+          </ThemeProvider>
         </BottomSheetModalProvider>
       </KeyboardProvider>
     );

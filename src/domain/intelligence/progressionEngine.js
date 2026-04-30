@@ -130,9 +130,22 @@ function choosePlateauAction(profile, plateau) {
   return { action: 'variation_swap', label: 'Variation swap', reason: 'a nearby movement may break the stall with less fatigue' };
 }
 
-function chooseLoadAdjustment(profile, lastExposure, successState, repeatedMiss) {
+/**
+ * Scale microload/upper/lower jump sizes based on user progressionStyle preference.
+ * - conservative: 0.5x (half-steps)
+ * - balanced:    1.0x (default behavior)
+ * - aggressive:  1.5x (larger jumps)
+ */
+function progressionStyleMultiplier(style) {
+  if (style === 'conservative') return 0.5;
+  if (style === 'aggressive')   return 1.5;
+  return 1.0; // balanced, default, undefined
+}
+
+function chooseLoadAdjustment(profile, lastExposure, successState, repeatedMiss, progressionStyle = 'balanced') {
   let baseWeight = Number(lastExposure?.bestWeight || 0);
   const targetReps = parsePositiveNumber(lastExposure?.prescribedReps, 8);
+  const mult = progressionStyleMultiplier(progressionStyle);
 
   // Bodyweight lifts are frequently logged with body mass in the weight field.
   // Treat that as BW baseline, not external load for progression targets.
@@ -142,20 +155,20 @@ function chooseLoadAdjustment(profile, lastExposure, successState, repeatedMiss)
 
   if (profile.loadModel === 'barbell_upper_compound') {
     if (repeatedMiss) return { action: 'reduce', targetWeight: roundToIncrement(baseWeight * 0.95, 2.5), targetReps: Math.max(5, targetReps - 1) };
-    if (successState.status === 'success') return { action: 'increase', targetWeight: roundToIncrement(baseWeight + 2.5, 2.5), targetReps };
+    if (successState.status === 'success') return { action: 'increase', targetWeight: roundToIncrement(baseWeight + 2.5 * mult, 2.5), targetReps };
     return { action: 'hold', targetWeight: roundToIncrement(baseWeight, 2.5), targetReps };
   }
 
   if (profile.loadModel === 'barbell_lower_compound') {
     if (repeatedMiss) return { action: 'reduce', targetWeight: roundToIncrement(baseWeight * 0.93, 2.5), targetReps: Math.max(4, targetReps - 1) };
-    if (successState.status === 'success') return { action: 'increase', targetWeight: roundToIncrement(baseWeight + 5, 2.5), targetReps };
+    if (successState.status === 'success') return { action: 'increase', targetWeight: roundToIncrement(baseWeight + 5 * mult, 2.5), targetReps };
     return { action: 'hold', targetWeight: roundToIncrement(baseWeight, 2.5), targetReps };
   }
 
   if (profile.loadModel === 'dumbbell_increment') {
     if (repeatedMiss) return { action: 'hold', targetWeight: roundToIncrement(baseWeight, 2.5), targetReps: clamp(targetReps - 1, 6, 15) };
     if (successState.status === 'success') {
-      const nextWeight = roundToIncrement(baseWeight + profile.microloadStep, 2.5);
+      const nextWeight = roundToIncrement(baseWeight + profile.microloadStep * mult, 2.5);
       const isLargeJump = baseWeight > 0 && ((nextWeight - baseWeight) / baseWeight) > 0.1;
       if (isLargeJump) return { action: 'hold', targetWeight: roundToIncrement(baseWeight, 2.5), targetReps: clamp(targetReps + 1, 6, profile.repCeiling) };
       return { action: 'increase', targetWeight: nextWeight, targetReps };
@@ -166,7 +179,7 @@ function chooseLoadAdjustment(profile, lastExposure, successState, repeatedMiss)
   if (profile.loadModel === 'machine_or_cable') {
     if (repeatedMiss) return { action: 'hold', targetWeight: roundToIncrement(baseWeight, 2.5), targetReps: clamp(targetReps - 1, 8, 15) };
     if (successState.status === 'success' && successState.averageReps >= Math.max(targetReps, profile.repCeiling - 1)) {
-      return { action: 'increase', targetWeight: roundToIncrement(baseWeight + profile.microloadStep, 2.5), targetReps };
+      return { action: 'increase', targetWeight: roundToIncrement(baseWeight + profile.microloadStep * mult, 2.5), targetReps };
     }
     if (successState.status === 'success') {
       return { action: 'hold', targetWeight: roundToIncrement(baseWeight, 2.5), targetReps: clamp(targetReps + 1, 8, profile.repCeiling) };
@@ -180,13 +193,13 @@ function chooseLoadAdjustment(profile, lastExposure, successState, repeatedMiss)
       return { action: 'hold', targetWeight: roundToIncrement(baseWeight, 2.5), targetReps: targetReps + 1 };
     }
     if (successState.status === 'success') {
-      return { action: 'increase', targetWeight: roundToIncrement(baseWeight + profile.microloadStep, 2.5), targetReps: clamp(targetReps - 2, 5, profile.repCeiling) };
+      return { action: 'increase', targetWeight: roundToIncrement(baseWeight + profile.microloadStep * mult, 2.5), targetReps: clamp(targetReps - 2, 5, profile.repCeiling) };
     }
     return { action: 'hold', targetWeight: roundToIncrement(baseWeight, 2.5), targetReps };
   }
 
   if (repeatedMiss) return { action: 'reduce', targetWeight: roundToIncrement(baseWeight * 0.95, 1.25), targetReps: clamp(targetReps - 1, 6, 15) };
-  if (successState.status === 'success') return { action: 'increase', targetWeight: roundToIncrement(baseWeight + profile.microloadStep, 1.25), targetReps };
+  if (successState.status === 'success') return { action: 'increase', targetWeight: roundToIncrement(baseWeight + profile.microloadStep * mult, 1.25), targetReps };
   return { action: 'hold', targetWeight: roundToIncrement(baseWeight, 1.25), targetReps };
 }
 
@@ -195,6 +208,7 @@ export function buildProgressionSuggestion({
   history = [],
   profileCatalog = null,
   readiness = null,
+  progressionStyle = 'balanced',
 } = {}) {
   const profile = resolveExerciseProfile(exercise, profileCatalog) || buildExerciseProfile(exercise);
   const exposures = getComparableExerciseHistory(history, exercise).filter((item) => !item.isDeload);
@@ -219,7 +233,7 @@ export function buildProgressionSuggestion({
   const repeatedMiss = successState.status === 'fail' && previousState?.status === 'fail';
   const plateau = detectPlateau(exposures);
   const plateauAction = choosePlateauAction(profile, plateau);
-  const loadAdjustment = chooseLoadAdjustment(profile, lastExposure, successState, repeatedMiss);
+  const loadAdjustment = chooseLoadAdjustment(profile, lastExposure, successState, repeatedMiss, progressionStyle);
   const deload = repeatedMiss && typeof readiness === 'number' && readiness < 0.45
     ? {
         recommended: true,

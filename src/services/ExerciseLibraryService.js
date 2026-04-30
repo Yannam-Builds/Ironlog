@@ -4,19 +4,22 @@ import { EXERCISES as BUNDLED_EXERCISES } from '../data/exerciseLibrary';
 import { EXERCISE_LIBRARY_ADDITIONS } from '../data/exerciseLibraryAdditions';
 import { EXERCISE_ID_MAP } from '../data/exerciseMapping';
 import { resolveCanonicalExerciseName, normalizeAliasKey } from '../data/exerciseAliases';
-import {
-  deleteCustomExerciseFromDb,
-  upsertCustomExerciseToDb,
-} from '../domain/storage/trainingRepository';
 import { resolveExerciseYoutubeMeta } from '../utils/exerciseVideoLinks';
+import {
+  createCustomExercise as wmCreateCustomExercise,
+  deleteCustomExercise as wmDeleteCustomExercise,
+  getExercisesSnapshot as wmGetExercisesSnapshot,
+} from '../db/repositories/exerciseRepository';
 
 const LIBRARY_KEY = '@ironlog/exerciseLibrary';
 const INDEX_KEY = '@ironlog/exerciseIndex';
 const FETCH_URL = 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/dist/exercises.json';
 
-const VALID_EQUIPMENT = new Set(['Barbell', 'Dumbbell', 'Cable', 'Machine', 'Bodyweight', 'Band', 'Conditioning', 'Other']);
+const VALID_EQUIPMENT = new Set(['Barbell', 'Dumbbell', 'Cable', 'Machine', 'Bodyweight', 'Band', 'Kettlebell', 'Conditioning', 'Other']);
 const VALID_TRACKING = new Set(['weight_reps', 'duration', 'duration_distance']);
 
+// LEGACY_COMPAT: historical ids kept for upgrade/import continuity.
+// These aliases are migration bridges, not active canonical ids.
 const LEGACY_EXERCISE_ID_ALIASES = {
   pullups: 'pull_up',
   pushups: 'push_up',
@@ -25,10 +28,12 @@ const LEGACY_EXERCISE_ID_ALIASES = {
   hammer_curls: 'hammer_curl',
   weighted_pull_ups: 'weighted_pull_up',
   smith_machine_bench_press: 'longhaul_bench_press_smith_machine',
-  smith_machine_incline_bench_press: 'incline_bench_press_smith_machine',
+  smith_machine_incline_bench_press: 'longhaul_incline_bench_press_smith_machine',
+  incline_bench_press_smith_machine: 'longhaul_incline_bench_press_smith_machine',
   smith_machine_squat: 'longhaul_squat_smith_machine',
   barbell_hack_squat: 'longhaul_hack_squat_barbell',
   barbell_rear_delt_row: 'longhaul_rear_delt_row_barbell',
+  longhaul_pull_apart_band: 'band_pull_apart',
 };
 
 const REQUIRED_CANONICAL_EXERCISES = [
@@ -112,7 +117,7 @@ function normalizeEquipment(eq) {
   const map = {
     'barbell': 'Barbell', 'dumbbell': 'Dumbbell', 'cable': 'Cable',
     'machine': 'Machine', 'body only': 'Bodyweight', 'bodyweight': 'Bodyweight',
-    'kettlebells': 'Kettlebell', 'bands': 'Band', 'other': 'Other',
+    'kettlebells': 'Kettlebell', 'kettlebell': 'Kettlebell', 'bands': 'Band', 'band': 'Band', 'other': 'Other',
     'medicine ball': 'Other', 'exercise ball': 'Other', 'e-z curl bar': 'Barbell',
     'foam roll': 'Other',
   };
@@ -290,6 +295,15 @@ function buildFromBundled() {
       youtubeShortsLink: youtube.youtubeShortsLink,
       youtubeSearchQuery: youtube.youtubeSearchQuery,
       hasBundledYoutubeLink: youtube.hasBundledYoutubeLink,
+      aliases: toArray(ex.aliases),
+      // v2 fields
+      isBodyweight: ex.isBodyweight ?? null,
+      requiresExternalLoad: ex.requiresExternalLoad ?? null,
+      movementPattern: ex.movementPattern || null,
+      difficulty: ex.difficulty || null,
+      apparatus: ex.apparatus || null,
+      equipmentDetail: ex.equipmentDetail || null,
+      sourceTags: toArray(ex.sourceTags),
     };
   });
   return applyCanonicalNormalizationAndDedup(mergeSupplementalExercises(bundled, EXERCISE_LIBRARY_ADDITIONS));
@@ -319,6 +333,15 @@ function normalizeSupplementalExercise(ex) {
     youtubeSearchQuery: youtube.youtubeSearchQuery,
     hasBundledYoutubeLink: youtube.hasBundledYoutubeLink,
     source: ex.source || 'supplemental',
+    aliases: toArray(ex.aliases),
+    // v2 fields (supplemental exercises may define these; fall through as null if absent)
+    isBodyweight: ex.isBodyweight ?? null,
+    requiresExternalLoad: ex.requiresExternalLoad ?? null,
+    movementPattern: ex.movementPattern || null,
+    difficulty: ex.difficulty || null,
+    apparatus: ex.apparatus || null,
+    equipmentDetail: ex.equipmentDetail || null,
+    sourceTags: toArray(ex.sourceTags),
   };
 }
 
@@ -422,6 +445,14 @@ function buildIndex(exercises) {
       youtubeShortsLink: ex.youtubeShortsLink || youtube.youtubeShortsLink,
       youtubeSearchQuery: ex.youtubeSearchQuery || youtube.youtubeSearchQuery,
       hasBundledYoutubeLink: ex.hasBundledYoutubeLink === true || youtube.hasBundledYoutubeLink === true,
+      // v2 fields
+      isBodyweight: ex.isBodyweight ?? null,
+      requiresExternalLoad: ex.requiresExternalLoad ?? null,
+      movementPattern: ex.movementPattern || null,
+      difficulty: ex.difficulty || null,
+      apparatus: ex.apparatus || null,
+      equipmentDetail: ex.equipmentDetail || null,
+      sourceTags: toArray(ex.sourceTags),
     };
   });
 }
@@ -449,6 +480,22 @@ function shouldRebuildIndex(index) {
   const indexIds = new Set(index.map((entry) => entry.id));
   const supplementalCoverage = EXERCISE_LIBRARY_ADDITIONS.filter((entry) => indexIds.has(entry.id)).length;
 
+  const requiredV2Fields = [
+    'isBodyweight',
+    'requiresExternalLoad',
+    'movementPattern',
+    'difficulty',
+    'apparatus',
+    'equipmentDetail',
+    'sourceTags',
+  ];
+  const v2FieldCoverage = index.filter((entry) =>
+    entry && requiredV2Fields.every((field) => Object.prototype.hasOwnProperty.call(entry, field))
+  ).length / index.length;
+
+  // Rebuild when v2 fields are absent or only partially present (stale v1/v2 transition index).
+  if (v2FieldCoverage < 0.95) return true;
+
   // Rebuild stale index generated from old schema where muscles were lost.
   return muscleCoverage < 0.5
     || variedCategories < 0.02
@@ -471,11 +518,20 @@ async function rebuildLibraryAndIndexFromBundled() {
 }
 
 export async function initExerciseLibrary(onStatus) {
-  // Already bootstrapped — instant return
+  // Already bootstrapped - instant return
   const existing = await AsyncStorage.getItem(INDEX_KEY);
   if (existing) {
-    const parsed = JSON.parse(existing);
+    let parsed = null;
+    try {
+      parsed = JSON.parse(existing);
+    } catch (error) {
+      console.warn('Exercise library index was corrupt; rebuilding from bundled v2 library:', error);
+      await AsyncStorage.multiRemove([INDEX_KEY, LIBRARY_KEY]);
+      onStatus && onStatus('repairing');
+      return rebuildLibraryAndIndexFromBundled();
+    }
     if (!shouldRebuildIndex(parsed)) return parsed;
+    onStatus && onStatus('optimizing');
     return rebuildLibraryAndIndexFromBundled();
   }
 
@@ -483,15 +539,15 @@ export async function initExerciseLibrary(onStatus) {
   const bundled = buildFromBundled();
   const index = buildIndex(bundled);
 
-  // Save bundled exercises immediately — never block on network
+  // Save bundled exercises immediately - never block on network
   await AsyncStorage.multiSet([
     [LIBRARY_KEY, JSON.stringify(bundled)],
     [INDEX_KEY, JSON.stringify(index)],
   ]);
   onStatus && onStatus('done');
 
-  // Bundled library already contains the full free-exercise-db (873 exercises)
-  // No network fetch needed
+  // Bundled library is the v2 Codex-verified set (1,731 exercises).
+  // No network fetch needed.
 
   return index;
 }
@@ -517,16 +573,24 @@ async function _fetchAndMerge(bundled) {
 }
 
 export async function getExerciseIndex() {
+  const wmIndex = await wmGetExercisesSnapshot();
+  if (Array.isArray(wmIndex) && wmIndex.length > 0) return wmIndex;
   const raw = await AsyncStorage.getItem(INDEX_KEY);
-  if (!raw) return null;
-  const parsed = JSON.parse(raw);
-  if (shouldRebuildIndex(parsed)) {
-    return rebuildLibraryAndIndexFromBundled();
-  }
-  return parsed;
+  if (!raw) return initExerciseLibrary();
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+  } catch (_) {}
+  return initExerciseLibrary();
 }
 
 export async function getExerciseById(id) {
+  const wmIndex = await wmGetExercisesSnapshot();
+  if (Array.isArray(wmIndex) && wmIndex.length > 0) {
+    const canonicalId = LEGACY_EXERCISE_ID_ALIASES[id] || id;
+    const found = wmIndex.find((exercise) => exercise.id === canonicalId || toArray(exercise.aliases).includes(id));
+    if (found) return found;
+  }
   const raw = await AsyncStorage.getItem(LIBRARY_KEY);
   if (!raw) return null;
   const lib = JSON.parse(raw);
@@ -535,6 +599,17 @@ export async function getExerciseById(id) {
 }
 
 export async function getExerciseByName(name) {
+  const wmIndex = await wmGetExercisesSnapshot();
+  if (Array.isArray(wmIndex) && wmIndex.length > 0) {
+    const canonical = resolveCanonicalExerciseName(name);
+    const key = normalizeAliasKey(canonical);
+    const found = wmIndex.find((exercise) => {
+      if (resolveCanonicalExerciseName(exercise.name) === canonical) return true;
+      const aliases = toArray(exercise.aliases).map((alias) => normalizeAliasKey(alias));
+      return aliases.includes(key);
+    });
+    if (found) return found;
+  }
   const raw = await AsyncStorage.getItem(LIBRARY_KEY);
   if (!raw) return null;
   const lib = JSON.parse(raw);
@@ -549,50 +624,33 @@ export async function getExerciseByName(name) {
 
 export async function saveCustomExercise(exercise) {
   const normalizedExercise = canonicalizeExerciseRecord({ ...exercise, isCustom: true });
-  const raw = await AsyncStorage.getItem('@ironlog/customExercises');
-  const custom = raw ? JSON.parse(raw) : [];
-  const idx = custom.findIndex(e => e.id === normalizedExercise.id);
-  if (idx >= 0) custom[idx] = normalizedExercise;
-  else custom.push(normalizedExercise);
-
-  // Also update main library and index
-  const libRaw = await AsyncStorage.getItem(LIBRARY_KEY);
-  const lib = libRaw ? JSON.parse(libRaw) : [];
-  const libIdx = lib.findIndex(e => e.id === normalizedExercise.id);
-  if (libIdx >= 0) lib[libIdx] = normalizedExercise;
-  else lib.push(normalizedExercise);
-
-  const index = buildIndex(lib);
-  await AsyncStorage.multiSet([
-    ['@ironlog/customExercises', JSON.stringify(custom)],
-    [LIBRARY_KEY, JSON.stringify(lib)],
-    [INDEX_KEY, JSON.stringify(index)],
-  ]);
-  upsertCustomExerciseToDb(normalizedExercise).catch((error) => {
-    console.warn('Custom exercise SQLite upsert failed:', error);
-  });
-  return index;
+  try {
+    await wmCreateCustomExercise({
+      name: normalizedExercise.name,
+      primaryMuscle: normalizedExercise.primaryMuscle || normalizedExercise.primaryMuscles?.[0] || 'Other',
+      equipment: normalizeEquipment(normalizedExercise.equipment || 'Other'),
+      category: normalizeCategory(normalizedExercise.category || 'strength'),
+      notes: normalizedExercise.instructions?.join('\n') || '',
+      muscles: toArray(normalizedExercise.primaryMuscles).map((muscle) => ({
+        muscle,
+        role: 'primary',
+        contribution_fraction: 1,
+      })),
+    });
+  } catch (error) {
+    if (String(error?.message || '').toLowerCase().includes('already exists')) {
+      const duplicateError = new Error(`Exercise "${normalizedExercise.name}" already exists.`);
+      duplicateError.code = 'DUPLICATE_EXERCISE_NAME';
+      throw duplicateError;
+    }
+    throw error;
+  }
+  return wmGetExercisesSnapshot();
 }
 
 export async function deleteCustomExercise(id) {
-  const raw = await AsyncStorage.getItem('@ironlog/customExercises');
-  const custom = raw ? JSON.parse(raw) : [];
-  const updated = custom.filter(e => e.id !== id);
-
-  const libRaw = await AsyncStorage.getItem(LIBRARY_KEY);
-  const lib = libRaw ? JSON.parse(libRaw) : [];
-  const updatedLib = lib.filter(e => e.id !== id);
-  const index = buildIndex(updatedLib);
-
-  await AsyncStorage.multiSet([
-    ['@ironlog/customExercises', JSON.stringify(updated)],
-    [LIBRARY_KEY, JSON.stringify(updatedLib)],
-    [INDEX_KEY, JSON.stringify(index)],
-  ]);
-  deleteCustomExerciseFromDb(id).catch((error) => {
-    console.warn('Custom exercise SQLite delete failed:', error);
-  });
-  return index;
+  await wmDeleteCustomExercise(id);
+  return wmGetExercisesSnapshot();
 }
 
 export async function retryLibraryFetch() {

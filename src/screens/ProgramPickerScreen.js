@@ -1,19 +1,23 @@
 import React, { useContext, useEffect, useMemo, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
-import { AppContext } from '../context/AppContext';
+import useWatermelonPlans from '../hooks/useWatermelonPlans';
+import useWatermelonSettings from '../hooks/useWatermelonSettings';
 import { useTheme } from '../context/ThemeContext';
 import { PROGRAM_TEMPLATES, PROGRAM_TEMPLATE_CATEGORIES, resolveProgramTemplateId } from '../data/programTemplates';
 import CustomAlert from '../components/CustomAlert';
-import { triggerHaptic } from '../services/hapticsEngine';
+import { fireHaptic } from '../services/hapticsEngine';
+import { withAlpha } from '../utils/colorUtils';
 
 function genId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 }
 
 const DAY_COLORS = ['#FF4500', '#0080FF', '#00C170', '#A020F0', '#FFD700', '#FF6B35', '#00BCD4'];
+const CARD_RADIUS = 14;
 
 export default function ProgramPickerScreen({ navigation, route }) {
-  const { plans, savePlans, settings } = useContext(AppContext);
+  const { plans, savePlans } = useWatermelonPlans();
+  const { settings } = useWatermelonSettings();
   const colors = useTheme();
   const haptic = settings?.hapticFeedback !== false;
   const [confirmTemplate, setConfirmTemplate] = useState(null);
@@ -45,7 +49,7 @@ export default function ProgramPickerScreen({ navigation, route }) {
   }, [route?.params?.autoOpenRecommended, route?.params?.recommendedTemplateId]);
 
   const loadProgram = (template) => {
-    triggerHaptic('selection', { enabled: haptic }).catch(() => {});
+    fireHaptic('selection', { enabled: haptic });
     setConfirmTemplate(template);
   };
 
@@ -80,12 +84,12 @@ export default function ProgramPickerScreen({ navigation, route }) {
       })),
     };
     savePlans([...plans, newPlan]);
-    triggerHaptic('success', { enabled: haptic }).catch(() => {});
+    fireHaptic('success', { enabled: haptic });
     navigation.goBack();
   };
 
   const startFromScratch = () => {
-    triggerHaptic('lightConfirm', { enabled: haptic }).catch(() => {});
+    fireHaptic('lightConfirm', { enabled: haptic });
     navigation.goBack();
     setTimeout(() => navigation.navigate('Plans'), 100);
   };
@@ -108,7 +112,7 @@ export default function ProgramPickerScreen({ navigation, route }) {
         <TouchableOpacity
           style={[s.categoryChip, { borderColor: colors.faint, backgroundColor: activeCategory === 'ALL' ? colors.accentSoft : colors.card }]}
           onPress={() => {
-            if (activeCategory !== 'ALL') triggerHaptic('selection', { enabled: haptic }).catch(() => {});
+            if (activeCategory !== 'ALL') fireHaptic('selection', { enabled: haptic });
             setActiveCategory('ALL');
           }}>
           <Text style={[s.categoryChipText, { color: activeCategory === 'ALL' ? colors.accent : colors.muted }]}>ALL</Text>
@@ -118,7 +122,7 @@ export default function ProgramPickerScreen({ navigation, route }) {
             key={category.id}
             style={[s.categoryChip, { borderColor: colors.faint, backgroundColor: activeCategory === category.id ? colors.accentSoft : colors.card }]}
             onPress={() => {
-              if (activeCategory !== category.id) triggerHaptic('selection', { enabled: haptic }).catch(() => {});
+              if (activeCategory !== category.id) fireHaptic('selection', { enabled: haptic });
               setActiveCategory(category.id);
             }}>
             <Text style={[s.categoryChipText, { color: activeCategory === category.id ? colors.accent : colors.muted }]}>
@@ -145,16 +149,16 @@ export default function ProgramPickerScreen({ navigation, route }) {
                 onPress={() => loadProgram(template)}
                 activeOpacity={0.75}>
                 <View style={[s.daysTag, { backgroundColor: colors.accentSoft, borderColor: colors.accentBorder }]}>
-                  <Text style={[s.daysText, { color: colors.accent }]}>{template.daysPerWeek}×/week</Text>
+                  <Text style={[s.daysText, { color: colors.accent }]}>{template.daysPerWeek}x/week</Text>
                 </View>
                 <Text style={[s.cardName, { color: colors.text }]}>{template.name}</Text>
                 <Text style={[s.cardDesc, { color: colors.muted }]}>{template.description}</Text>
                 <Text style={[s.cardMeta, { color: colors.subtext }]}>{template.goal}</Text>
-                <Text style={[s.cardMeta, { color: colors.subtext }]}>{template.experienceLevel} · {template.days.length} days</Text>
-                <Text style={[s.cardMeta, { color: colors.subtext }]}>{template.progressionModel} · {template.effortTarget}</Text>
+                <Text style={[s.cardMeta, { color: colors.subtext }]}>{template.experienceLevel} - {template.days.length} days</Text>
+                <Text style={[s.cardMeta, { color: colors.subtext }]}>{template.progressionModel} - {template.effortTarget}</Text>
                 <View style={s.dayPills}>
                   {template.days.slice(0, 4).map((d, i) => (
-                    <View key={i} style={[s.dayPill, { backgroundColor: DAY_COLORS[i % DAY_COLORS.length] + '22', borderColor: DAY_COLORS[i % DAY_COLORS.length] + '55' }]}>
+                    <View key={i} style={[s.dayPill, { backgroundColor: withAlpha(DAY_COLORS[i % DAY_COLORS.length], 0.13), borderColor: withAlpha(DAY_COLORS[i % DAY_COLORS.length], 0.33) }]}>
                       <Text style={[s.dayPillText, { color: DAY_COLORS[i % DAY_COLORS.length] }]} numberOfLines={1}>{d.name.split(' ')[0]}</Text>
                     </View>
                   ))}
@@ -179,7 +183,7 @@ export default function ProgramPickerScreen({ navigation, route }) {
         title={confirmTemplate?.name || ''}
         message={
           confirmTemplate
-            ? `${confirmTemplate.daysPerWeek} days/week · ${confirmTemplate.days.length} training days\n\n${confirmTemplate.goal}\n${confirmTemplate.description}\n\nThis will be added to your plans.`
+            ? `${confirmTemplate.daysPerWeek} days/week - ${confirmTemplate.days.length} training days\n\n${confirmTemplate.goal}\n${confirmTemplate.description}\n\nThis will be added to your plans.`
             : ''
         }
         onDismiss={() => setConfirmTemplate(null)}
@@ -195,10 +199,10 @@ export default function ProgramPickerScreen({ navigation, route }) {
 const s = StyleSheet.create({
   container: { flex: 1 },
   subtitle: { fontSize: 13, lineHeight: 20, paddingHorizontal: 4 },
-  onboardingTip: { borderWidth: 1, padding: 10 },
+  onboardingTip: { borderWidth: 1, padding: 10, borderRadius: CARD_RADIUS },
   onboardingTipText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.4, lineHeight: 16 },
   categoryRow: { gap: 8, paddingVertical: 2, paddingRight: 8 },
-  categoryChip: { borderWidth: 1, paddingHorizontal: 12, paddingVertical: 8 },
+  categoryChip: { borderWidth: 1, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999 },
   categoryChipText: { fontSize: 10, fontWeight: '800', letterSpacing: 1 },
   categorySection: { gap: 8, marginTop: 2 },
   categoryHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
@@ -206,15 +210,17 @@ const s = StyleSheet.create({
   categoryCount: { fontSize: 10, fontWeight: '700', letterSpacing: 0.8 },
   categoryDescription: { fontSize: 11, lineHeight: 16 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-  card: { width: '47%', borderWidth: 1, padding: 16, gap: 6, minHeight: 190 },
-  daysTag: { alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, marginBottom: 4 },
+  card: { width: '47%', borderWidth: 1, padding: 16, gap: 6, minHeight: 190, borderRadius: CARD_RADIUS },
+  daysTag: { alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, marginBottom: 4, borderRadius: 8 },
   daysText: { fontSize: 9, fontWeight: '800', letterSpacing: 1 },
   cardName: { fontSize: 16, fontWeight: '900', letterSpacing: -0.5 },
   cardDesc: { fontSize: 11, lineHeight: 15 },
   cardMeta: { fontSize: 10, letterSpacing: 0.4 },
   dayPills: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 4 },
-  dayPill: { paddingHorizontal: 6, paddingVertical: 2, borderWidth: 1, maxWidth: 60 },
+  dayPill: { paddingHorizontal: 6, paddingVertical: 2, borderWidth: 1, maxWidth: 60, borderRadius: 999 },
   dayPillText: { fontSize: 9, fontWeight: '700', letterSpacing: 0.5 },
-  scratchBtn: { borderWidth: 1, borderStyle: 'dashed', padding: 16, alignItems: 'center', marginTop: 8 },
+  scratchBtn: { borderWidth: 1, borderStyle: 'dashed', padding: 16, alignItems: 'center', marginTop: 8, borderRadius: 12 },
   scratchText: { fontSize: 13, fontWeight: '600', letterSpacing: 1 },
 });
+
+

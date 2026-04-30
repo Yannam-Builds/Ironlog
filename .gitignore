@@ -1,3 +1,11 @@
+# AI agent working directories
+.claude/
+.codex/
+.agents/
+
+# Release APKs (tracked separately, not in source tree)
+release_builds/
+
 # dependencies
 node_modules/
 
@@ -11,7 +19,6 @@ expo-env.d.ts
 
 # local native generation
 ios/
-android/
 .kotlin/
 
 # editor and workspace
@@ -51,9 +58,12 @@ step_check_*.png
 verify_*.png
 t*.png
 new*.png
+ironlog_*.png
+phone-*.png
+rounded-fix-check.png
+*current_screen*.png
 
 # one-off local scratch scripts and notes
-scripts/
 __*.py
 __*.js
 .tmp_check.js
@@ -70,9 +80,44 @@ ironlog_873_exercises.txt
 svg_analysis.txt
 svg_out.json
 
+# android tracked source + ignored outputs
+android/.gradle/
+android/build/
+android/local.properties
+android/**/build/
+android/**/captures/
+android/.cxx/
+android/app/debug.keystore
+android/app/*.keystore
+
+# scripts tracked source + ignored outputs
+scripts/**/*.log
+scripts/**/*.tmp
+scripts/**/__pycache__/
+logs_*.txt
+installed-base.apk
+
+# local heavy bundles
+Skills Base/
+IronlogKotlin/
+IronlogIOS/
+
 # python cache
 __pycache__/
 *.pyc
 
 # TypeScript
 *.tsbuildinfo
+
+# Repo hygiene outputs
+perf_*.txt
+perf_*.log
+build_log*.txt
+metro_perf.log
+bundle.log
+tmp*.txt
+tmp*.xml
+tmp*.py
+tmp*.js
+wdump*.xml
+window_dump*.xml

@@ -305,13 +305,15 @@ export async function replaceTrainingSnapshot({
   bodyMeasurements = [],
   customExercises = [],
 } = {}) {
-  await runInTransaction(async (db) => {
-    await replacePlansInternal(db, plans);
-    await replaceHistoryInternal(db, history);
-    await replaceBodyWeightInternal(db, bodyWeight);
-    await replaceBodyMeasurementsInternal(db, bodyMeasurements);
-    await replaceCustomExercisesInternal(db, customExercises);
-  });
+  // NOTE: We avoid withTransactionAsync (same reason as savePlansToDb — the
+  // react-native-sqlite-storage callback-based transaction commits before async
+  // tasks complete, silently losing all INSERT data). Each function auto-commits.
+  const db = await ensureTrainingDatabase();
+  await replacePlansInternal(db, plans);
+  await replaceHistoryInternal(db, history);
+  await replaceBodyWeightInternal(db, bodyWeight);
+  await replaceBodyMeasurementsInternal(db, bodyMeasurements);
+  await replaceCustomExercisesInternal(db, customExercises);
 }
 
 function inflatePlanDayExercise(row) {
@@ -484,24 +486,38 @@ export async function loadTrainingSnapshot() {
 }
 
 export async function savePlansToDb(plans = []) {
-  await runInTransaction((db) => replacePlansInternal(db, plans));
+  // NOTE: We intentionally avoid withTransactionAsync here.
+  // react-native-sqlite-storage's callback-based transaction model does not
+  // reliably wait for async task completion before committing, causing plans
+  // to disappear after an app restart. Statements auto-commit individually,
+  // and AsyncStorage provides durability as a fallback.
+  const db = await ensureTrainingDatabase();
+  await replacePlansInternal(db, plans);
 }
 
 export async function addHistorySessionToDb(session) {
-  await runInTransaction((db) => insertHistorySessionInternal(db, session));
+  const db = await ensureTrainingDatabase();
+  await insertHistorySessionInternal(db, session);
 }
 
 export async function clearHistoryInDb() {
   const db = await ensureTrainingDatabase();
-  await db.execAsync('DELETE FROM session_sets; DELETE FROM session_exercises; DELETE FROM workout_sessions;');
+  await db.execAsync('DELETE FROM session_sets; DELETE FROM session_exercises; DELETE FROM pr_events; DELETE FROM session_insights; DELETE FROM workout_sessions;');
+}
+
+export async function replaceHistoryInDb(history = []) {
+  const db = await ensureTrainingDatabase();
+  await replaceHistoryInternal(db, history);
 }
 
 export async function saveBodyWeightToDb(entries = []) {
-  await runInTransaction((db) => replaceBodyWeightInternal(db, entries));
+  const db = await ensureTrainingDatabase();
+  await replaceBodyWeightInternal(db, entries);
 }
 
 export async function syncCustomExercisesToDb(exercises = []) {
-  await runInTransaction((db) => replaceCustomExercisesInternal(db, exercises));
+  const db = await ensureTrainingDatabase();
+  await replaceCustomExercisesInternal(db, exercises);
 }
 
 export async function upsertCustomExerciseToDb(exercise) {
@@ -527,7 +543,9 @@ export async function seedExerciseIntelligence(exercises = []) {
   const profileCatalog = buildExerciseProfileCatalog(exercises);
   const contributionCatalog = buildExerciseContributionCatalog(exercises, profileCatalog);
 
-  await runInTransaction(async (txn) => {
+  await (async () => {
+    const db = await ensureTrainingDatabase();
+    const txn = db; // run directly, no transaction wrapper
     await txn.execAsync('DELETE FROM exercise_profiles; DELETE FROM exercise_muscle_contributions;');
     for (const exercise of exercises) {
       const id = exercise.id || exercise.exerciseId || exercise.name;
@@ -567,7 +585,7 @@ export async function seedExerciseIntelligence(exercises = []) {
         );
       }
     }
-  });
+  })();
 }
 
 export async function getRecentComparisonUsage(limit = 5) {

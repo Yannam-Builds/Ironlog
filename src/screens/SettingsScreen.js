@@ -1,12 +1,13 @@
 
-import React, { useContext, useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, Modal, Switch, Vibration } from 'react-native';
 import CustomAlert from '../components/CustomAlert';
-import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as FileSystem from 'expo-file-system/legacy';
-import { AppContext } from '../context/AppContext';
+import Ionicons from 'react-native-vector-icons/Ionicons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as FileSystem from '../platform/filesystem';
+import useWatermelonAppData from '../hooks/useWatermelonAppData';
 import { useTheme } from '../context/ThemeContext';
+import GoldConfettiBurst from '../components/GoldConfettiBurst';
 import { THEMES } from '../utils/themes';
 import { exportBackup, importBackup } from '../utils/backup';
 import { getCacheSize, clearCache, downloadAllImages } from '../services/ExerciseImageCache';
@@ -21,11 +22,14 @@ import {
 } from '../services/sqliteExportImport';
 import { exportOpenWeightBundleAndShare } from '../services/openweightInterop';
 import ImportPreviewModal from '../components/ImportPreviewModal';
-import { setHapticsEnabled, triggerHaptic } from '../services/hapticsEngine';
-import { ensureNotificationPermissions, getNotificationPermissionStatus } from '../services/notificationScheduler';
+import { setHapticsEnabled, fireHaptic } from '../services/hapticsEngine';
+import { ensureNotificationPermissions, getNotificationPermissionStatus, sendTestNotification } from '../services/notificationScheduler';
 import { convertUnitToKg, formatWeightFromKg } from '../utils/weightUnits';
+import { resolveCelebrationConfig } from '../utils/celebration';
+import { getBottomOverlaySpacing } from '../utils/bottomOverlaySpacing';
+import { showErrorToast, showInfoToast, showSuccessToast } from '../services/toastService';
+import { clearProgressPhotos, getProgressPhotos } from '../db/repositories/progressPhotoRepository';
 
-const PHOTO_INDEX_KEY = '@ironlog/progressPhotoIndex';
 const PHOTO_DIR = FileSystem.documentDirectory + 'progress-photos/';
 const EFFORT_CYCLE = ['off', 'rpe', 'rir', 'both'];
 const EFFORT_LABEL = { off: 'Off', rpe: 'RPE', rir: 'RIR', both: 'Both' };
@@ -116,7 +120,7 @@ export default function SettingsScreen({ navigation }) {
     resetOnboarding,
     notificationSettings,
     updateNotificationPreferences,
-  } = useContext(AppContext);
+  } = useWatermelonAppData();
   const colors = useTheme();
   const [editTimer, setEditTimer] = useState(null);
   const [timerVal, setTimerVal] = useState('');
@@ -129,29 +133,42 @@ export default function SettingsScreen({ navigation }) {
   const [alertConfig, setAlertConfig] = useState(null);
   const [quietStartInput, setQuietStartInput] = useState('22:00');
   const [quietEndInput, setQuietEndInput] = useState('08:00');
+  const [dailyReminderInput, setDailyReminderInput] = useState('');
   const [notificationPermissionGranted, setNotificationPermissionGranted] = useState(null);
+  const [celebrationPreviewKey, setCelebrationPreviewKey] = useState(0);
 
   const haptic = settings?.hapticFeedback !== false;
   const weightUnit = settings?.weightUnit || 'kg';
+  const celebration = resolveCelebrationConfig(settings);
+  const insets = useSafeAreaInsets();
+  const bottomSpacing = getBottomOverlaySpacing({
+    safeAreaBottom: insets.bottom,
+    includeWorkoutPill: true,
+    extra: 8,
+  });
 
   useEffect(() => {
     getCacheSize().then(bytes => setCacheSize(bytes));
-    AsyncStorage.getItem(PHOTO_INDEX_KEY).then(raw => {
-      if (!raw) return;
-      const idx = JSON.parse(raw);
-      const total = idx.reduce((a, p) => a + (p.sizeBytes || 0), 0);
-      setPhotoSize(total);
-    }).catch(() => {});
+    getProgressPhotos()
+      .then((rows) => Promise.all((rows || []).map((row) => FileSystem.getInfoAsync(row.fileUri))))
+      .then((infos) => {
+        const total = (infos || []).reduce((sum, info) => sum + Number(info?.size || 0), 0);
+        setPhotoSize(total);
+      })
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
     setQuietStartInput(formatQuietTime(getQuietMinutes(notificationSettings, 'quietHoursStartMinutes', 22)));
     setQuietEndInput(formatQuietTime(getQuietMinutes(notificationSettings, 'quietHoursEndMinutes', 8)));
+    const reminderMinutes = Number(notificationSettings?.dailyReminderTimeMinutes);
+    setDailyReminderInput(Number.isFinite(reminderMinutes) ? formatQuietTime(reminderMinutes) : '');
   }, [
     notificationSettings?.quietHoursStartMinutes,
     notificationSettings?.quietHoursEndMinutes,
     notificationSettings?.quietHoursStart,
     notificationSettings?.quietHoursEnd,
+    notificationSettings?.dailyReminderTimeMinutes,
   ]);
 
   useEffect(() => {
@@ -194,7 +211,7 @@ export default function SettingsScreen({ navigation }) {
   const cycleEffort = () => {
     const cur = settings.effortTracking || 'off';
     const next = EFFORT_CYCLE[(EFFORT_CYCLE.indexOf(cur) + 1) % EFFORT_CYCLE.length];
-    triggerHaptic('selection', { enabled: haptic }).catch(() => {});
+    fireHaptic('selection', { enabled: haptic });
     updateSettings({ ...settings, effortTracking: next });
   };
 
@@ -208,7 +225,7 @@ export default function SettingsScreen({ navigation }) {
           text: 'Clear All', style: 'destructive', onPress: async () => {
             try {
               await FileSystem.deleteAsync(PHOTO_DIR, { idempotent: true });
-              await AsyncStorage.removeItem(PHOTO_INDEX_KEY);
+              await clearProgressPhotos();
               setPhotoSize(0);
             } catch (e) { setAlertConfig({ title: 'Error', message: String(e), buttons: [{ text: 'OK', style: 'default' }] }); }
           },
@@ -222,7 +239,7 @@ export default function SettingsScreen({ navigation }) {
     if (editTimer === 'barWeight') {
       const barWeightKg = convertUnitToKg(val, weightUnit, 1);
       if (!val || barWeightKg < 1 || barWeightKg > 100) {
-        triggerHaptic('invalidAction', { enabled: haptic }).catch(() => {});
+        fireHaptic('invalidAction', { enabled: haptic });
         setAlertConfig({
           title: 'Invalid value',
           message: `Enter a bar weight between ${formatWeightFromKg(1, weightUnit)} and ${formatWeightFromKg(100, weightUnit)}.`,
@@ -231,11 +248,11 @@ export default function SettingsScreen({ navigation }) {
         return;
       }
     } else if (!val || val < 10 || val > 600) {
-      triggerHaptic('invalidAction', { enabled: haptic }).catch(() => {});
+      fireHaptic('invalidAction', { enabled: haptic });
       setAlertConfig({ title: 'Invalid value', message: 'Enter a value between 10-600 seconds.', buttons: [{ text: 'OK', style: 'default' }] });
       return;
     }
-    triggerHaptic('lightConfirm', { enabled: haptic }).catch(() => {});
+    fireHaptic('lightConfirm', { enabled: haptic });
     updateSettings({
       ...settings,
       [editTimer]: editTimer === 'barWeight' ? convertUnitToKg(val, weightUnit, 1) : Math.round(val),
@@ -246,10 +263,10 @@ export default function SettingsScreen({ navigation }) {
   const doExport = async () => {
     try {
       await exportBackup(getAllData());
-      triggerHaptic('backupSucceeded', { enabled: haptic }).catch(() => {});
+      fireHaptic('backupSucceeded', { enabled: haptic });
       setAlertConfig({ title: 'Backup saved!', message: 'Your data has been exported.', buttons: [{ text: 'OK', style: 'default' }] });
     } catch (e) {
-      triggerHaptic('error', { enabled: haptic }).catch(() => {});
+      fireHaptic('error', { enabled: haptic });
       setAlertConfig({ title: 'Export failed', message: String(e), buttons: [{ text: 'OK', style: 'default' }] });
     }
   };
@@ -263,44 +280,50 @@ export default function SettingsScreen({ navigation }) {
         message: 'This will replace all current data.',
         buttons: [
           { text: 'Cancel', style: 'cancel' },
-          { text: 'Restore', style: 'destructive', onPress: async () => { await restoreData(data); triggerHaptic('restoreSucceeded', { enabled: haptic, force: true }).catch(() => {}); setAlertConfig({ title: 'Restored!', message: 'Your backup has been restored.', buttons: [{ text: 'OK', style: 'default' }] }); } },
+          { text: 'Restore', style: 'destructive', onPress: async () => { await restoreData(data); fireHaptic('restoreSucceeded', { enabled: haptic, force: true }); setAlertConfig({ title: 'Restored!', message: 'Your backup has been restored.', buttons: [{ text: 'OK', style: 'default' }] }); } },
         ],
       });
     } catch (e) {
-      triggerHaptic('error', { enabled: haptic }).catch(() => {});
+      fireHaptic('error', { enabled: haptic });
       setAlertConfig({ title: 'Import failed', message: String(e), buttons: [{ text: 'OK', style: 'default' }] });
     }
   };
 
   const doExportCSV = async () => {
     try {
-      triggerHaptic('lightConfirm', { enabled: haptic }).catch(() => {});
+      fireHaptic('lightConfirm', { enabled: haptic });
       await exportCSV(history);
     } catch (e) {
-      triggerHaptic('error', { enabled: haptic }).catch(() => {});
+      fireHaptic('error', { enabled: haptic });
       setAlertConfig({ title: 'Export failed', message: String(e), buttons: [{ text: 'OK', style: 'default' }] });
     }
   };
 
   const doImportCSV = async () => {
     try {
-      triggerHaptic('lightConfirm', { enabled: haptic }).catch(() => {});
+      fireHaptic('lightConfirm', { enabled: haptic });
       const parsed = await pickAndParseCSV();
       if (!parsed) return;
       setCsvParsed(parsed);
     } catch (e) {
-      triggerHaptic('error', { enabled: haptic }).catch(() => {});
+      fireHaptic('error', { enabled: haptic });
       setAlertConfig({ title: 'Import failed', message: String(e), buttons: [{ text: 'OK', style: 'default' }] });
     }
   };
 
   const doExportSQLite = async () => {
     try {
-      triggerHaptic('lightConfirm', { enabled: haptic }).catch(() => {});
+      fireHaptic('lightConfirm', { enabled: haptic });
       const bundle = await exportSQLiteBundleAndShare();
+      const c = bundle.counts || {};
+      const parts = [];
+      if (c.plans > 0) parts.push(`${c.plans} plan${c.plans !== 1 ? 's' : ''}`);
+      if (c.history > 0) parts.push(`${c.history} workout${c.history !== 1 ? 's' : ''}`);
+      if (c.bodyWeight > 0) parts.push(`${c.bodyWeight} weight entries`);
+      if (c.customExercises > 0) parts.push(`${c.customExercises} custom exercises`);
       setAlertConfig({
         title: 'SQLite export complete',
-        message: `Exported ${bundle.counts?.history || 0} workouts in versioned schema.`,
+        message: parts.length ? `Exported: ${parts.join(', ')}.` : 'Export complete (no training data found).',
         buttons: [{ text: 'OK', style: 'default' }],
       });
     } catch (e) {
@@ -310,7 +333,7 @@ export default function SettingsScreen({ navigation }) {
 
   const doExportOpenWeight = async () => {
     try {
-      triggerHaptic('lightConfirm', { enabled: haptic }).catch(() => {});
+      fireHaptic('lightConfirm', { enabled: haptic });
       const bundle = await exportOpenWeightBundleAndShare(history);
       setAlertConfig({
         title: 'OpenWeight export complete',
@@ -342,7 +365,7 @@ export default function SettingsScreen({ navigation }) {
             onPress: async () => {
               await importSQLiteBundle(bundle);
               await reloadFromStorage();
-              triggerHaptic('restoreSucceeded', { enabled: haptic, force: true }).catch(() => {});
+              fireHaptic('restoreSucceeded', { enabled: haptic, force: true });
               setAlertConfig({ title: 'SQLite restore complete', message: 'Data imported and migrated safely.', buttons: [{ text: 'OK', style: 'default' }] });
             },
           },
@@ -360,10 +383,10 @@ export default function SettingsScreen({ navigation }) {
       const count = await importParsedCSV(csvParsed);
       await reloadFromStorage();
       setCsvParsed(null);
-      triggerHaptic('restoreSucceeded', { enabled: haptic }).catch(() => {});
+      fireHaptic('restoreSucceeded', { enabled: haptic });
       setAlertConfig({ title: 'Import complete', message: `Imported ${count} workouts.`, buttons: [{ text: 'OK', style: 'default' }] });
     } catch (e) {
-      triggerHaptic('error', { enabled: haptic }).catch(() => {});
+      fireHaptic('error', { enabled: haptic });
       setAlertConfig({ title: 'Import error', message: String(e), buttons: [{ text: 'OK', style: 'default' }] });
     } finally {
       setCsvImporting(false);
@@ -385,6 +408,7 @@ export default function SettingsScreen({ navigation }) {
     const granted = await ensureNotificationPermissions();
     setNotificationPermissionGranted(granted);
     if (!granted) {
+      showErrorToast('Notifications blocked', 'Enable notification permission in Android settings.');
       setAlertConfig({
         title: 'Notifications blocked',
         message: 'IRONLOG could not get notification permission. You can enable it later from Android app settings.',
@@ -393,12 +417,37 @@ export default function SettingsScreen({ navigation }) {
       return false;
     }
     await updateNotificationPreferences({ enabled: true });
+    showSuccessToast('Notifications enabled', 'Smart reminders can now run with your policy settings.');
     setAlertConfig({
       title: 'Notifications enabled',
       message: 'Smart reminders can now use your quiet hours and cooldown rules.',
       buttons: [{ text: 'OK', style: 'default' }],
     });
     return true;
+  };
+
+  const sendTestNotificationNow = async () => {
+    const granted = notificationPermissionGranted === true ? true : await requestNotificationAccess();
+    if (!granted) return;
+    try {
+      await sendTestNotification({
+        title: 'IRONLOG test notification',
+        body: 'Your notification pipeline is alive and ready.',
+      });
+      showSuccessToast('Test notification sent', 'Check your notification shade in a moment.');
+      setAlertConfig({
+        title: 'Test notification sent',
+        message: 'Check your notification shade in a moment.',
+        buttons: [{ text: 'OK', style: 'default' }],
+      });
+    } catch (e) {
+      showErrorToast('Test notification failed', String(e?.message || e));
+      setAlertConfig({
+        title: 'Test notification failed',
+        message: String(e),
+        buttons: [{ text: 'OK', style: 'default' }],
+      });
+    }
   };
 
   const handleNotificationToggle = async (value) => {
@@ -429,14 +478,36 @@ export default function SettingsScreen({ navigation }) {
       quietHoursStart: Math.floor(startMinutes / 60),
       quietHoursEnd: Math.floor(endMinutes / 60),
     });
-    triggerHaptic('lightConfirm', { enabled: haptic }).catch(() => {});
+    fireHaptic('lightConfirm', { enabled: haptic });
+    showInfoToast('Quiet hours updated', `${formatQuietTime(startMinutes)} - ${formatQuietTime(endMinutes)}`);
+  };
+
+  const applyDailyReminderTime = async () => {
+    const raw = String(dailyReminderInput || '').trim();
+    if (!raw) {
+      await updateNotificationPreferences({ dailyReminderTimeMinutes: null });
+      showInfoToast('Reminder time cleared', 'IRONLOG will infer reminder timing from your workout history.');
+      return;
+    }
+    const minutes = parseQuietTimeInput(raw);
+    if (minutes == null) {
+      setAlertConfig({
+        title: 'Invalid reminder time',
+        message: 'Use 24-hour format like 18:30.',
+        buttons: [{ text: 'OK', style: 'default' }],
+      });
+      return;
+    }
+    await updateNotificationPreferences({ dailyReminderTimeMinutes: minutes });
+    fireHaptic('lightConfirm', { enabled: haptic });
+    showSuccessToast('Reminder time saved', `Daily reminder target set to ${formatQuietTime(minutes)}.`);
   };
 
   const Row = ({ label, value, onPress, danger }) => (
     <TouchableOpacity
       style={[s.row, { borderBottomColor: colors.faint }]}
       onPress={() => {
-        triggerHaptic(danger ? 'destructiveAction' : 'selection', { enabled: haptic }).catch(() => {});
+        fireHaptic(danger ? 'destructiveAction' : 'selection', { enabled: haptic });
         if (onPress) onPress();
       }}>
       <Text style={[s.rowLabel, { color: colors.text }, danger && { color: '#CC3333' }]}>{label}</Text>
@@ -453,7 +524,11 @@ export default function SettingsScreen({ navigation }) {
   );
 
   return (
-    <ScrollView style={[s.container, { backgroundColor: colors.bg }]} contentContainerStyle={{ padding: 20, paddingBottom: 40, gap: 16 }}>
+    <View style={[s.container, { backgroundColor: colors.bg }]}>
+      <ScrollView
+        style={s.container}
+        contentContainerStyle={{ padding: 20, paddingBottom: bottomSpacing, gap: 16 }}
+        scrollIndicatorInsets={{ bottom: bottomSpacing }}>
       {/* Theme */}
       <View style={[s.section, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
         <Text style={[s.sectionTitle, { color: colors.muted }]}>THEME</Text>
@@ -464,7 +539,7 @@ export default function SettingsScreen({ navigation }) {
               <TouchableOpacity key={key}
                 style={[s.themeBtn, { borderColor: active ? theme.accent : colors.faint, backgroundColor: theme.bg }]}
                 onPress={() => {
-                  if ((settings.theme || 'amoled') !== key) triggerHaptic('selection', { enabled: haptic }).catch(() => {});
+                  if ((settings.theme || 'amoled') !== key) fireHaptic('selection', { enabled: haptic });
                   updateSettings({ ...settings, theme: key });
                 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
@@ -478,13 +553,13 @@ export default function SettingsScreen({ navigation }) {
       </View>
 
       {/* Weight unit */}
-      <View style={[s.section, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+      <View style={[s.section, { backgroundColor: colors.card, borderColor: colors.cardBorder, marginTop: 28 }]}>
         <Text style={[s.sectionTitle, { color: colors.muted }]}>WEIGHT UNIT</Text>
         <View style={{ flexDirection: 'row', gap: 10 }}>
           {['kg', 'lbs'].map(u => (
             <TouchableOpacity key={u} style={[s.unitBtn, { borderColor: colors.faint }, settings.weightUnit === u && { borderColor: colors.accent, backgroundColor: colors.accentSoft }]}
               onPress={() => {
-                if (settings.weightUnit !== u) triggerHaptic('selection', { enabled: haptic }).catch(() => {});
+                if (settings.weightUnit !== u) fireHaptic('selection', { enabled: haptic });
                 updateSettings({ ...settings, weightUnit: u });
               }}>
               <Text style={[s.unitBtnText, { color: colors.muted }, settings.weightUnit === u && { color: colors.accent }]}>{u.toUpperCase()}</Text>
@@ -494,21 +569,21 @@ export default function SettingsScreen({ navigation }) {
       </View>
 
       {/* Rest timers */}
-      <View style={[s.section, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+      <View style={[s.section, { backgroundColor: colors.card, borderColor: colors.cardBorder, marginTop: 28 }]}>
         <Text style={[s.sectionTitle, { color: colors.muted }]}>REST TIMERS</Text>
         <Row label="Normal exercises" value={settings.defaultRestNormal + 's'} onPress={() => { setTimerVal(String(settings.defaultRestNormal)); setEditTimer('defaultRestNormal'); }} />
         <Row label="Heavy exercises" value={settings.defaultRestHeavy + 's'} onPress={() => { setTimerVal(String(settings.defaultRestHeavy)); setEditTimer('defaultRestHeavy'); }} />
       </View>
 
       {/* Workout */}
-      <View style={[s.section, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+      <View style={[s.section, { backgroundColor: colors.card, borderColor: colors.cardBorder, marginTop: 28 }]}>
         <Text style={[s.sectionTitle, { color: colors.muted }]}>WORKOUT</Text>
         <View style={[s.row, { borderBottomColor: colors.faint }]}>
           <Text style={[s.rowLabel, { color: colors.text }]}>Keep Screen Awake</Text>
           <Switch
             value={settings.keepAwake !== false}
             onValueChange={v => {
-              triggerHaptic('selection', { enabled: haptic }).catch(() => {});
+              fireHaptic('selection', { enabled: haptic });
               updateSettings({ ...settings, keepAwake: v });
             }}
             trackColor={{ false: colors.faint, true: colors.accentSoft }}
@@ -526,26 +601,123 @@ export default function SettingsScreen({ navigation }) {
             onValueChange={v => {
               updateSettings({ ...settings, hapticFeedback: v });
               setHapticsEnabled(v);
-              if (v) triggerHaptic('selection', { enabled: true, force: true }).catch(() => {});
+              if (v) fireHaptic('selection', { enabled: true, force: true });
             }}
             trackColor={{ false: colors.faint, true: colors.accentSoft }}
             thumbColor={settings.hapticFeedback !== false ? colors.accent : colors.muted}
           />
         </View>
+
+        <OptionRow label="Celebration animation" hint="Choose how the celebration moves after workout completion.">
+          <View style={s.optionChips}>
+            {[
+              { id: 'off', label: 'Off' },
+              { id: 'fireworks', label: 'Fireworks' },
+              { id: 'wave', label: 'Wave' },
+            ].map((opt) => {
+              const active = opt.id === 'off' ? !celebration.enabled : celebration.enabled && celebration.style === opt.id;
+              return (
+                <TouchableOpacity
+                  key={`celebration:${opt.id}`}
+                  style={[s.goalBtn, { borderColor: active ? colors.accent : colors.faint, backgroundColor: active ? colors.accentSoft : 'transparent' }]}
+                  onPress={() => {
+                    if (opt.id === 'off') {
+                      updateSettings({
+                        ...settings,
+                        celebrationEnabled: false,
+                        celebrationAnimation: 'off',
+                      });
+                      return;
+                    }
+                    updateSettings({
+                      ...settings,
+                      celebrationEnabled: true,
+                      celebrationStyle: opt.id,
+                    });
+                  }}
+                >
+                  <Text style={[s.goalBtnText, { color: active ? colors.accent : colors.subtext }]}>{opt.label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </OptionRow>
+        <OptionRow label="Celebration colors" hint="Default is gold. Theme mode uses your active app palette.">
+          <View style={s.optionChips}>
+            {[
+              { id: 'gold', label: 'Gold' },
+              { id: 'theme', label: 'Theme' },
+              { id: 'multicolor', label: 'Multicolor' },
+            ].map((opt) => {
+              const active = (celebration.colorMode || 'gold') === opt.id;
+              return (
+                <TouchableOpacity
+                  key={`celebration-color:${opt.id}`}
+                  style={[s.goalBtn, { borderColor: active ? colors.accent : colors.faint, backgroundColor: active ? colors.accentSoft : 'transparent' }]}
+                  onPress={() => {
+                    updateSettings({
+                      ...settings,
+                      celebrationEnabled: true,
+                      celebrationColorMode: opt.id,
+                      // Backward-compatible marker used by older builds.
+                      celebrationAnimation: opt.id === 'gold' ? 'gold' : 'confetti',
+                    });
+                  }}
+                >
+                  <Text style={[s.goalBtnText, { color: active ? colors.accent : colors.subtext }]}>{opt.label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </OptionRow>
+
         <TouchableOpacity
           style={[s.row, { borderBottomColor: colors.faint }]}
           onPress={() => {
-            triggerHaptic('workoutCompleted', { enabled: true, force: true, androidAssist: true }).catch(() => {});
+            fireHaptic('workoutCompleted', { enabled: true, force: true, androidAssist: true });
             Vibration.vibrate([0, 24, 40, 30]);
           }}>
           <Text style={[s.rowLabel, { color: colors.text }]}>Test Haptics</Text>
           <Ionicons name="pulse-outline" size={16} color={colors.muted} />
         </TouchableOpacity>
+        <TouchableOpacity
+          style={[s.row, { borderBottomColor: colors.faint }]}
+          onPress={() => {
+            fireHaptic('success', { enabled: true, force: true, androidAssist: true });
+            setCelebrationPreviewKey(Date.now());
+          }}>
+          <Text style={[s.rowLabel, { color: colors.text }]}>Test Celebration</Text>
+          <Ionicons name="sparkles-outline" size={16} color={colors.muted} />
+        </TouchableOpacity>
       </View>
 
       {/* Goal mode */}
-      <View style={[s.section, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+      <View style={[s.section, { backgroundColor: colors.card, borderColor: colors.cardBorder, marginTop: 28 }]}>
         <Text style={[s.sectionTitle, { color: colors.muted }]}>GOAL MODE</Text>
+        <View style={[s.row, { borderBottomColor: colors.faint, alignItems: 'center' }]}>
+          <Text style={[s.rowLabel, { color: colors.text }]}>Workout days / week</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 0 }}>
+            <TouchableOpacity
+              onPress={() => {
+                const next = Math.max(1, (settings.weeklyGoalDays || 4) - 1);
+                fireHaptic('selection', { enabled: haptic });
+                updateSettings({ ...settings, weeklyGoalDays: next });
+              }}
+              style={[s.stepperBtn, { borderColor: colors.faint }]}>
+              <Text style={[s.stepperBtnText, { color: colors.text }]}>−</Text>
+            </TouchableOpacity>
+            <Text style={[s.stepperVal, { color: colors.text }]}>{settings.weeklyGoalDays || 4}</Text>
+            <TouchableOpacity
+              onPress={() => {
+                const next = Math.min(7, (settings.weeklyGoalDays || 4) + 1);
+                fireHaptic('selection', { enabled: haptic });
+                updateSettings({ ...settings, weeklyGoalDays: next });
+              }}
+              style={[s.stepperBtn, { borderColor: colors.faint }]}>
+              <Text style={[s.stepperBtnText, { color: colors.text }]}>+</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
         <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
           {GOAL_MODES.map((mode) => {
             const active = (settings.goalMode || 'hypertrophy') === mode.id;
@@ -557,7 +729,7 @@ export default function SettingsScreen({ navigation }) {
                   { borderColor: active ? colors.accent : colors.faint, backgroundColor: active ? colors.accentSoft : 'transparent' },
                 ]}
                 onPress={() => {
-                  if (!active) triggerHaptic('selection', { enabled: haptic }).catch(() => {});
+                  if (!active) fireHaptic('selection', { enabled: haptic });
                   updateSettings({ ...settings, goalMode: mode.id });
                 }}>
                 <Text style={[s.goalBtnText, { color: active ? colors.accent : colors.subtext }]}>{mode.label}</Text>
@@ -568,7 +740,7 @@ export default function SettingsScreen({ navigation }) {
       </View>
 
       {/* Intelligence preferences */}
-      <View style={[s.section, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+      <View style={[s.section, { backgroundColor: colors.card, borderColor: colors.cardBorder, marginTop: 28 }]}>
         <Text style={[s.sectionTitle, { color: colors.muted }]}>INTELLIGENCE</Text>
         <Text style={[s.rowValue, { color: colors.subtext, marginBottom: 8 }]}>Progression behavior</Text>
         <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
@@ -585,6 +757,10 @@ export default function SettingsScreen({ navigation }) {
             );
           })}
         </View>
+        <TouchableOpacity style={[s.row, { borderBottomColor: colors.faint }]} onPress={() => { fireHaptic('selection', { enabled: haptic }); navigation.navigate('TrainingIntelligence'); }}>
+          <Text style={[s.rowLabel, { color: colors.text }]}>Athlete Profile</Text>
+          <Ionicons name="chevron-forward" size={16} color={colors.muted} />
+        </TouchableOpacity>
         <View style={[s.row, { borderBottomColor: 'transparent', marginTop: 8 }]}>
           <Text style={[s.rowLabel, { color: colors.text }]}>Compact analytics numbers</Text>
           <Switch
@@ -597,29 +773,29 @@ export default function SettingsScreen({ navigation }) {
       </View>
 
       {/* Plate calculator */}
-      <View style={[s.section, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+      <View style={[s.section, { backgroundColor: colors.card, borderColor: colors.cardBorder, marginTop: 28 }]}>
         <Text style={[s.sectionTitle, { color: colors.muted }]}>PLATE CALCULATOR</Text>
         <Row
           label="Bar weight"
           value={formatWeightFromKg(settings.barWeight, weightUnit)}
           onPress={() => { setTimerVal(String(formatWeightFromKg(settings.barWeight, weightUnit, { showUnit: false }))); setEditTimer('barWeight'); }}
         />
-        <TouchableOpacity style={[s.row, { borderBottomColor: colors.faint }]} onPress={() => { triggerHaptic('selection', { enabled: haptic }).catch(() => {}); navigation.navigate('GymProfiles'); }}>
+        <TouchableOpacity style={[s.row, { borderBottomColor: colors.faint }]} onPress={() => { fireHaptic('selection', { enabled: haptic }); navigation.navigate('GymProfiles'); }}>
           <Text style={[s.rowLabel, { color: colors.text }]}>Gym Profiles</Text>
           <Ionicons name="chevron-forward" size={16} color={colors.muted} />
         </TouchableOpacity>
-        <TouchableOpacity style={[s.row, { borderBottomColor: colors.faint }]} onPress={() => { triggerHaptic('selection', { enabled: haptic }).catch(() => {}); navigation.navigate('ExerciseLibrary'); }}>
+        <TouchableOpacity style={[s.row, { borderBottomColor: colors.faint }]} onPress={() => { fireHaptic('selection', { enabled: haptic }); navigation.navigate('ExerciseLibrary'); }}>
           <Text style={[s.rowLabel, { color: colors.text }]}>Exercise Library</Text>
           <Ionicons name="chevron-forward" size={16} color={colors.muted} />
         </TouchableOpacity>
-        <TouchableOpacity style={[s.row, { borderBottomColor: colors.faint }]} onPress={() => { triggerHaptic('selection', { enabled: haptic }).catch(() => {}); navigation.navigate('BodyWeight'); }}>
+        <TouchableOpacity style={[s.row, { borderBottomColor: colors.faint }]} onPress={() => { fireHaptic('selection', { enabled: haptic }); navigation.navigate('BodyWeight'); }}>
           <Text style={[s.rowLabel, { color: colors.text }]}>Body Weight Tracker</Text>
           <Ionicons name="chevron-forward" size={16} color={colors.muted} />
         </TouchableOpacity>
       </View>
 
       {/* Exercise Images */}
-      <View style={[s.section, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+      <View style={[s.section, { backgroundColor: colors.card, borderColor: colors.cardBorder, marginTop: 28 }]}>
         <Text style={[s.sectionTitle, { color: colors.muted }]}>EXERCISE IMAGES</Text>
         <TouchableOpacity style={[s.row, { borderBottomColor: colors.faint }]}
           onPress={doDownloadAll} disabled={downloading}>
@@ -641,34 +817,38 @@ export default function SettingsScreen({ navigation }) {
       </View>
 
       {/* Progress Photos */}
-      <View style={[s.section, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+      <View style={[s.section, { backgroundColor: colors.card, borderColor: colors.cardBorder, marginTop: 28 }]}>
         <Text style={[s.sectionTitle, { color: colors.muted }]}>PROGRESS PHOTOS</Text>
         <Row label="Storage used" value={formatBytes(photoSize)} onPress={() => {
-          AsyncStorage.getItem(PHOTO_INDEX_KEY).then(raw => {
-            if (!raw) { setPhotoSize(0); return; }
-            const idx = JSON.parse(raw);
-            setPhotoSize(idx.reduce((a, p) => a + (p.sizeBytes || 0), 0));
-          }).catch(() => {});
+          getProgressPhotos()
+            .then((rows) => Promise.all((rows || []).map((row) => FileSystem.getInfoAsync(row.fileUri))))
+            .then((infos) => {
+              const total = (infos || []).reduce((sum, info) => sum + Number(info?.size || 0), 0);
+              setPhotoSize(total);
+            })
+            .catch(() => {});
         }} />
-        <TouchableOpacity style={[s.row, { borderBottomColor: 'transparent' }]} onPress={() => { triggerHaptic('destructiveAction', { enabled: haptic }).catch(() => {}); clearAllPhotos(); }}>
+        <TouchableOpacity style={[s.row, { borderBottomColor: 'transparent' }]} onPress={() => { fireHaptic('destructiveAction', { enabled: haptic }); clearAllPhotos(); }}>
           <Text style={[s.rowLabel, { color: '#CC2222' }]}>Clear All Photos</Text>
           <Ionicons name="trash-outline" size={16} color="#CC2222" />
         </TouchableOpacity>
       </View>
 
       {/* Backup */}
-      <View style={[s.section, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+      <View style={[s.section, { backgroundColor: colors.card, borderColor: colors.cardBorder, marginTop: 28 }]}>
         <Text style={[s.sectionTitle, { color: colors.muted }]}>BACKUP & RESTORE</Text>
-        <TouchableOpacity style={[s.row, { borderBottomColor: colors.faint }]} onPress={() => { triggerHaptic('selection', { enabled: haptic }).catch(() => {}); navigation.navigate('BackupCenter'); }}>
-          <Text style={[s.rowLabel, { color: colors.text }]}>Backup Center</Text>
+        <TouchableOpacity style={[s.row, { borderBottomColor: colors.faint }]} onPress={() => { fireHaptic('selection', { enabled: haptic }); navigation.navigate('DataPortability'); }}>
+          <Text style={[s.rowLabel, { color: colors.text }]}>Backup & Export</Text>
           <Ionicons name="chevron-forward" size={16} color={colors.muted} />
         </TouchableOpacity>
-        <TouchableOpacity style={[s.row, { borderBottomColor: colors.faint }]} onPress={() => { triggerHaptic('selection', { enabled: haptic }).catch(() => {}); navigation.navigate('Privacy'); }}>
+        <TouchableOpacity style={[s.row, { borderBottomColor: colors.faint }]} onPress={() => { fireHaptic('selection', { enabled: haptic }); navigation.navigate('BackupCenter'); }}>
+          <Text style={[s.rowLabel, { color: colors.text }]}>Advanced Backup Centre</Text>
+          <Ionicons name="chevron-forward" size={16} color={colors.muted} />
+        </TouchableOpacity>
+        <TouchableOpacity style={[s.row, { borderBottomColor: colors.faint }]} onPress={() => { fireHaptic('selection', { enabled: haptic }); navigation.navigate('Privacy'); }}>
           <Text style={[s.rowLabel, { color: colors.text }]}>Privacy & Local-First</Text>
           <Ionicons name="chevron-forward" size={16} color={colors.muted} />
         </TouchableOpacity>
-        <Row label="Manual export backup (JSON)" onPress={doExport} />
-        <Row label="Manual import backup (JSON)" onPress={doImport} />
         <TouchableOpacity style={[s.row, { borderBottomColor: colors.faint }]} onPress={() => navigation.navigate('ImportCenter')}>
           <Text style={[s.rowLabel, { color: colors.text }]}>Import Center (Strong / Hevy / OpenWeight)</Text>
           <Ionicons name="chevron-forward" size={16} color={colors.muted} />
@@ -681,7 +861,7 @@ export default function SettingsScreen({ navigation }) {
       </View>
 
       {/* Notifications */}
-      <View style={[s.section, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+      <View style={[s.section, { backgroundColor: colors.card, borderColor: colors.cardBorder, marginTop: 28 }]}>
         <Text style={[s.sectionTitle, { color: colors.muted }]}>NOTIFICATIONS</Text>
         <View style={[s.row, { borderBottomColor: colors.faint }]}>
           <Text style={[s.rowLabel, { color: colors.text }]}>Enable smart notifications</Text>
@@ -702,6 +882,42 @@ export default function SettingsScreen({ navigation }) {
             </Text>
           </TouchableOpacity>
         </OptionRow>
+        <TouchableOpacity
+          style={[s.row, { borderBottomColor: colors.faint }]}
+          onPress={sendTestNotificationNow}
+        >
+          <Text style={[s.rowLabel, { color: colors.text }]}>Send test notification</Text>
+          <Ionicons name="notifications-outline" size={16} color={colors.muted} />
+        </TouchableOpacity>
+        <View style={[s.row, { borderBottomColor: colors.faint }]}>
+          <Text style={[s.rowLabel, { color: colors.text }]}>Daily workout reminder time</Text>
+          <Text style={[s.rowValue, { color: colors.subtext }]}>
+            {notificationSettings?.dailyReminderTimeMinutes == null ? 'Auto' : formatQuietTime(notificationSettings.dailyReminderTimeMinutes)}
+          </Text>
+        </View>
+        <View style={s.timeInputRow}>
+          <View style={s.timeInputGroup}>
+            <Text style={[s.inputLabel, { color: colors.subtext }]}>TIME</Text>
+            <TextInput
+              style={[s.timeInput, { color: colors.text, borderColor: colors.faint, backgroundColor: colors.bg }]}
+              value={dailyReminderInput}
+              onChangeText={setDailyReminderInput}
+              placeholder="18:30 (blank = auto)"
+              placeholderTextColor={colors.muted}
+              keyboardType="numbers-and-punctuation"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+          </View>
+        </View>
+        <View style={{ flexDirection: 'row', gap: 8, marginTop: 8, marginBottom: 8 }}>
+          <TouchableOpacity
+            style={[s.goalBtn, { borderColor: colors.accent, backgroundColor: colors.accentSoft }]}
+            onPress={applyDailyReminderTime}
+          >
+            <Text style={[s.goalBtnText, { color: colors.accent }]}>Apply reminder time</Text>
+          </TouchableOpacity>
+        </View>
         <OptionRow label="Policy profile">
           <View style={s.optionChips}>
             {NOTIFICATION_PROFILES.map((profile) => {
@@ -874,7 +1090,7 @@ export default function SettingsScreen({ navigation }) {
       </View>
 
       {/* App */}
-      <View style={[s.section, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+      <View style={[s.section, { backgroundColor: colors.card, borderColor: colors.cardBorder, marginTop: 28 }]}>
         <Text style={[s.sectionTitle, { color: colors.muted }]}>APP</Text>
         <Row label="Show App Tutorial" onPress={() => setAlertConfig({
           title: 'Show Tutorial?',
@@ -887,7 +1103,7 @@ export default function SettingsScreen({ navigation }) {
       </View>
 
       {/* Danger zone */}
-      <View style={[s.section, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+      <View style={[s.section, { backgroundColor: colors.card, borderColor: colors.cardBorder, marginTop: 28 }]}>
         <Text style={[s.sectionTitle, { color: colors.muted }]}>DANGER ZONE</Text>
         <Row label="Clear all history" danger onPress={() => setAlertConfig({ title: 'Clear history?', message: 'This cannot be undone.', buttons: [{ text: 'Cancel', style: 'cancel' }, { text: 'Clear', style: 'destructive', onPress: clearHistory }] })} />
         <Row label="Reset all PBs" danger onPress={() => setAlertConfig({ title: 'Reset PBs?', message: 'All personal bests will be cleared.', buttons: [{ text: 'Cancel', style: 'cancel' }, { text: 'Reset', style: 'destructive', onPress: clearPbs }] })} />
@@ -906,51 +1122,68 @@ export default function SettingsScreen({ navigation }) {
       {/* Timer edit modal */}
       <Modal visible={!!editTimer} transparent animationType="fade">
         <View style={s.overlay}>
-          <View style={s.modal}>
-            <Text style={s.modalTitle}>{editTimer === 'defaultRestNormal' ? 'NORMAL REST' : editTimer === 'defaultRestHeavy' ? 'HEAVY REST' : 'BAR WEIGHT'}</Text>
-            <TextInput style={s.input} keyboardType="numeric" value={timerVal} onChangeText={setTimerVal} autoFocus
-              placeholder={editTimer === 'barWeight' ? weightUnit : 'seconds'} placeholderTextColor="#444" />
+          <View style={[s.modal, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+            <Text style={[s.modalTitle, { color: colors.text }]}>{editTimer === 'defaultRestNormal' ? 'NORMAL REST' : editTimer === 'defaultRestHeavy' ? 'HEAVY REST' : 'BAR WEIGHT'}</Text>
+            <TextInput style={[s.input, { color: colors.text, borderColor: colors.faint, backgroundColor: colors.bg }]} keyboardType="numeric" value={timerVal} onChangeText={setTimerVal} autoFocus
+              placeholder={editTimer === 'barWeight' ? weightUnit : 'seconds'} placeholderTextColor={colors.muted} />
             <View style={{ flexDirection: 'row', gap: 10, marginTop: 16 }}>
-              <TouchableOpacity style={s.cancelBtn} onPress={() => { triggerHaptic('selection', { enabled: haptic }).catch(() => {}); setEditTimer(null); }}><Text style={{ color: '#666' }}>Cancel</Text></TouchableOpacity>
-              <TouchableOpacity style={s.confirmBtn} onPress={saveTimer}><Text style={{ color: '#fff', fontWeight: '800' }}>SAVE</Text></TouchableOpacity>
+              <TouchableOpacity style={[s.cancelBtn, { borderColor: colors.faint }]} onPress={() => { fireHaptic('selection', { enabled: haptic }); setEditTimer(null); }}><Text style={{ color: colors.muted }}>Cancel</Text></TouchableOpacity>
+              <TouchableOpacity style={[s.confirmBtn, { backgroundColor: colors.accent }]} onPress={saveTimer}><Text style={{ color: colors.textOnAccent || '#fff', fontWeight: '800' }}>SAVE</Text></TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
       <CustomAlert visible={!!alertConfig} title={alertConfig?.title} message={alertConfig?.message} buttons={alertConfig?.buttons || []} onDismiss={() => setAlertConfig(null)} />
-    </ScrollView>
+      </ScrollView>
+      {celebrationPreviewKey ? (
+        <GoldConfettiBurst
+          key={celebrationPreviewKey}
+          enabled={true}
+          count={celebration.style === 'wave' ? 55 : 85}
+          variant={celebration.style || 'fireworks'}
+          colorMode={celebration.colorMode || 'gold'}
+          themeColors={colors}
+          fullScreen
+          onDone={() => setCelebrationPreviewKey(0)}
+        />
+      ) : null}
+    </View>
   );
 }
 
 const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#080808' },
-  section: { backgroundColor: '#0d0d0d', borderWidth: 1, borderColor: '#1a1a1a', padding: 16 },
-  sectionTitle: { fontSize: 10, letterSpacing: 3, color: '#444', marginBottom: 12 },
-  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#111' },
-  rowLabel: { fontSize: 14, color: '#f0f0f0' },
-  rowValue: { fontSize: 14, color: '#666' },
-  unitBtn: { flex: 1, borderWidth: 1, borderColor: '#1e1e1e', padding: 12, alignItems: 'center' },
-  unitBtnActive: { borderColor: '#FF4500', backgroundColor: '#FF450011' },
-  unitBtnText: { fontWeight: '800', fontSize: 16, color: '#666', letterSpacing: 2 },
+  container: { flex: 1 },
+  section: { borderWidth: 1, padding: 16, borderRadius: 14, marginBottom: 10 },
+  sectionTitle: { fontSize: 10, letterSpacing: 3, marginBottom: 12 },
+  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 13, borderBottomWidth: 1, gap: 10 },
+  rowLabel: { fontSize: 14, flex: 1, lineHeight: 19 },
+  rowValue: { fontSize: 14 },
+  unitBtn: { flex: 1, borderWidth: 1, padding: 12, alignItems: 'center', borderRadius: 10 },
+  unitBtnActive: {},
+  unitBtnText: { fontWeight: '800', fontSize: 16, letterSpacing: 2 },
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', alignItems: 'center', padding: 24 },
-  modal: { backgroundColor: '#141414', borderRadius: 12, padding: 24, width: '100%', borderWidth: 1, borderColor: '#1e1e1e' },
-  modalTitle: { color: '#f0f0f0', fontSize: 16, fontWeight: '900', letterSpacing: 2, marginBottom: 16 },
+  modal: { borderRadius: 14, padding: 24, width: '100%', borderWidth: 1 },
+  modalTitle: { fontSize: 16, fontWeight: '900', letterSpacing: 2, marginBottom: 16 },
   inputLabel: { fontSize: 9, fontWeight: '700', letterSpacing: 2, marginBottom: 6 },
-  input: { backgroundColor: '#0f0f0f', borderWidth: 1, borderColor: '#2a2a2a', color: '#f0f0f0', padding: 14, fontSize: 24, fontWeight: '900', textAlign: 'center' },
-  themeBtn: { paddingHorizontal: 14, paddingVertical: 10, borderWidth: 2, borderRadius: 2 },
-  goalBtn: { borderWidth: 1, paddingHorizontal: 12, paddingVertical: 8 },
+  input: { borderWidth: 1, padding: 14, fontSize: 24, fontWeight: '900', textAlign: 'center', borderRadius: 10 },
+  themeBtn: { paddingHorizontal: 14, paddingVertical: 10, borderWidth: 2, borderRadius: 10 },
+  goalBtn: { borderWidth: 1, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999 },
   goalBtnText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.6 },
-  stackRow: { paddingVertical: 10, borderBottomWidth: 1 },
-  optionHint: { fontSize: 11, marginTop: 4 },
+  stepperBtn: { borderWidth: 1, width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  stepperBtnText: { fontSize: 18, fontWeight: '700', lineHeight: 22 },
+  stepperVal: { fontSize: 18, fontWeight: '700', minWidth: 32, textAlign: 'center' },
+  stackRow: { paddingVertical: 13, borderBottomWidth: 1 },
+  optionHint: { fontSize: 11, marginTop: 6, lineHeight: 16 },
   optionControlWrap: { marginTop: 10, alignItems: 'flex-start' },
-  optionChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  optionChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, alignItems: 'center' },
   timeInputRow: { flexDirection: 'row', gap: 10 },
   timeInputGroup: { flex: 1 },
-  timeInput: { borderWidth: 1, paddingHorizontal: 12, paddingVertical: 10, fontSize: 15, fontWeight: '700', letterSpacing: 0.8 },
+  timeInput: { borderWidth: 1, paddingHorizontal: 12, paddingVertical: 10, fontSize: 15, fontWeight: '700', letterSpacing: 0.8, borderRadius: 10 },
   logRow: { alignItems: 'flex-start' },
   logLabel: { flex: 1, paddingRight: 8 },
   logTime: { minWidth: 106, textAlign: 'right', marginTop: 1 },
-  cancelBtn: { flex: 1, padding: 14, alignItems: 'center', borderWidth: 1, borderColor: '#1e1e1e' },
-  confirmBtn: { flex: 1, backgroundColor: '#FF4500', padding: 14, alignItems: 'center' },
+  cancelBtn: { flex: 1, padding: 14, alignItems: 'center', borderWidth: 1, borderRadius: 10 },
+  confirmBtn: { flex: 1, padding: 14, alignItems: 'center', borderRadius: 10 },
 });
+
 

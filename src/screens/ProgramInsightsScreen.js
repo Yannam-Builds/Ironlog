@@ -1,11 +1,13 @@
-import React, { useContext, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { AppContext } from '../context/AppContext';
+import Ionicons from 'react-native-vector-icons/Ionicons';
+import { RADIUS } from '../utils/themes';
+import useWatermelonHome from '../hooks/useWatermelonHome';
 import { useTheme } from '../context/ThemeContext';
 import { computeConsistencyMetrics } from '../domain/intelligence/performanceEngine';
 import { buildAdaptiveDayTargets, buildProgramInsights } from '../domain/intelligence/programIntelligenceEngine';
 import { formatWeightFromKg } from '../utils/weightUnits';
+import { withAlpha } from '../utils/colorUtils';
 
 function getWeekHitDays(history = []) {
   const weekAgo = Date.now() - (7 * 86400000);
@@ -18,7 +20,7 @@ function getWeekHitDays(history = []) {
 }
 
 export default function ProgramInsightsScreen({ navigation }) {
-  const { plans, history, bodyWeight, settings } = useContext(AppContext);
+  const { plans, history, bodyWeight, settings } = useWatermelonHome();
   const colors = useTheme();
   const activePlan = plans?.[0] || null;
   const weekHitDays = useMemo(() => getWeekHitDays(history), [history]);
@@ -48,6 +50,7 @@ export default function ProgramInsightsScreen({ navigation }) {
       day: nextDay,
       history,
       goalMode,
+      progressionStyle: settings?.progressionStyle,
     }).slice(0, 6);
   }, [goalMode, history, nextDay]);
 
@@ -66,7 +69,7 @@ export default function ProgramInsightsScreen({ navigation }) {
 
   return (
     <ScrollView style={[s.container, { backgroundColor: colors.bg }]} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
-      <View style={[s.hero, { borderColor: colors.accent + '66', backgroundColor: colors.accentSoft }]}>
+      <View style={[s.hero, { borderColor: withAlpha(colors.accent, 0.4), backgroundColor: colors.accentSoft }]}>
         <Text style={[s.heroSup, { color: colors.accent }]}>PROGRAM INSIGHTS</Text>
         <Text style={[s.heroTitle, { color: colors.text }]}>{activePlan.name}</Text>
         <Text style={[s.heroSub, { color: colors.subtext }]}>
@@ -98,7 +101,7 @@ export default function ProgramInsightsScreen({ navigation }) {
             <View key={day.dayId} style={[s.dayRow, { borderBottomColor: colors.faint }]}>
               <Text style={[s.dayName, { color: colors.text }]}>{day.dayName}</Text>
               <Text style={[s.dayRate, { color: colors.subtext }]}>{day.completionRate}%</Text>
-              <View style={[s.statusPill, { borderColor: statusColor + '66', backgroundColor: statusColor + '1a' }]}>
+              <View style={[s.statusPill, { borderColor: withAlpha(statusColor, 0.4), backgroundColor: withAlpha(statusColor, 0.1) }]}>
                 <Text style={[s.statusText, { color: statusColor }]}>{day.status.replace('_', ' ')}</Text>
               </View>
             </View>
@@ -107,7 +110,7 @@ export default function ProgramInsightsScreen({ navigation }) {
       </View>
 
       {programInsights.recommendedReschedule ? (
-        <View style={[s.callout, { borderColor: colors.accent + '44', backgroundColor: colors.accent + '12' }]}>
+        <View style={[s.callout, { borderColor: withAlpha(colors.accent, 0.27), backgroundColor: withAlpha(colors.accent, 0.07) }]}>
           <Text style={[s.calloutTitle, { color: colors.accent }]}>Missed-day handling</Text>
           <Text style={[s.calloutText, { color: colors.text }]}>{programInsights.recommendedReschedule}</Text>
         </View>
@@ -143,22 +146,22 @@ export default function ProgramInsightsScreen({ navigation }) {
 
 const s = StyleSheet.create({
   container: { flex: 1 },
-  hero: { borderWidth: 1, padding: 16, marginBottom: 12 },
+  hero: { borderWidth: 1, padding: 16, marginBottom: 12, borderRadius: RADIUS.md },
   heroSup: { fontSize: 9, fontWeight: '800', letterSpacing: 2.5 },
   heroTitle: { fontSize: 24, fontWeight: '900', letterSpacing: -0.6, marginTop: 4 },
   heroSub: { fontSize: 12, marginTop: 6, lineHeight: 17 },
   metricRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
-  metricCard: { flex: 1, borderWidth: 1, paddingVertical: 12, paddingHorizontal: 8, alignItems: 'center' },
+  metricCard: { flex: 1, borderWidth: 1, paddingVertical: 12, paddingHorizontal: 8, alignItems: 'center', borderRadius: RADIUS.sm },
   metricVal: { fontSize: 20, fontWeight: '900' },
   metricLabel: { fontSize: 9, letterSpacing: 1.2, marginTop: 3 },
-  section: { borderWidth: 1, padding: 12, marginBottom: 12 },
+  section: { borderWidth: 1, padding: 12, marginBottom: 12, borderRadius: RADIUS.md },
   sectionTitle: { fontSize: 12, fontWeight: '800', letterSpacing: 1.1, marginBottom: 8 },
   dayRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8, borderBottomWidth: 1 },
   dayName: { flex: 1, fontSize: 13, fontWeight: '700' },
   dayRate: { fontSize: 12, minWidth: 44, textAlign: 'right' },
-  statusPill: { borderWidth: 1, paddingHorizontal: 8, paddingVertical: 4 },
+  statusPill: { borderWidth: 1, paddingHorizontal: 8, paddingVertical: 4, borderRadius: RADIUS.xs },
   statusText: { fontSize: 9, fontWeight: '800', letterSpacing: 0.8, textTransform: 'uppercase' },
-  callout: { borderWidth: 1, padding: 12, marginBottom: 12 },
+  callout: { borderWidth: 1, padding: 12, marginBottom: 12, borderRadius: RADIUS.md },
   calloutTitle: { fontSize: 10, fontWeight: '800', letterSpacing: 1.5, marginBottom: 6 },
   calloutText: { fontSize: 13, lineHeight: 18 },
   targetRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 10, borderBottomWidth: 1 },
@@ -168,6 +171,8 @@ const s = StyleSheet.create({
   emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   emptyTitle: { fontSize: 18, fontWeight: '900', marginTop: 12 },
   emptySub: { fontSize: 13, marginTop: 8, textAlign: 'center' },
-  emptyBtn: { borderWidth: 1, marginTop: 14, paddingHorizontal: 14, paddingVertical: 10 },
+  emptyBtn: { borderWidth: 1, marginTop: 14, paddingHorizontal: 14, paddingVertical: 10, borderRadius: RADIUS.sm },
   emptyBtnText: { fontSize: 11, fontWeight: '800', letterSpacing: 1.3 },
 });
+
+

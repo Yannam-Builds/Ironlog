@@ -1,10 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as FileSystem from 'expo-file-system/legacy';
-import * as Sharing from 'expo-sharing';
-import * as DocumentPicker from 'expo-document-picker';
-import * as SecureStore from 'expo-secure-store';
-import * as Crypto from 'expo-crypto';
-import Constants from 'expo-constants';
+import * as FileSystem from '../platform/filesystem';
+import * as Sharing from '../platform/sharing';
+import * as DocumentPicker from '../platform/documentPicker';
+import * as SecureStore from '../platform/secureStore';
+import * as Crypto from '../platform/crypto';
+import { APP_VERSION } from '../platform/appInfo';
+import { exportDatabase, importDatabase } from '../db/repositories/importExportRepository';
 import {
   ACTIVE_WORKOUT_SESSION_PREFIX,
   BACKUP_CONFIG_KEY,
@@ -33,10 +34,42 @@ import {
   sha256Hex,
   toBase64,
 } from './backupCrypto';
-import { downloadDriveSnapshot, isDriveBackupAvailable, listDriveSnapshots, uploadSnapshotToDrive } from './googleDriveService';
+
+// Drive sync is intentionally disabled in the current IronlogDB runtime.
+async function isDriveBackupAvailable() { return false; }
+async function uploadSnapshotToDrive() { throw new Error('Drive backup is disabled.'); }
+async function listDriveSnapshots() { return []; }
+async function downloadDriveSnapshot() { throw new Error('Drive backup is disabled.'); }
 
 const SNAPSHOT_EXTENSION = '.ironlog';
 const BACKUP_AAD = 'IRONLOG_LOCAL_BACKUP';
+
+function toLegacySnapshotShapeFromExport(exportPayload = {}) {
+  const data = exportPayload?.data || {};
+  const plans = Array.isArray(data.plans) ? data.plans : [];
+  const history = Array.isArray(data.workouts) ? data.workouts : [];
+  const bodyMeasurements = Array.isArray(data.body_measurements) ? data.body_measurements : [];
+  const bodyWeight = bodyMeasurements
+    .filter((row) => row?.bodyweight != null)
+    .map((row) => ({ date: new Date(Number(row.measured_at) || Date.now()).toISOString(), weight: Number(row.bodyweight) || 0 }));
+  const customExercises = (Array.isArray(data.exercises) ? data.exercises : []).filter((row) => !!row?.is_custom);
+  return { plans, history, bodyWeight, bodyMeasurements, customExercises };
+}
+
+async function loadTrainingSnapshotCompat() {
+  const exported = await exportDatabase();
+  return toLegacySnapshotShapeFromExport(exported);
+}
+
+async function replaceTrainingSnapshotCompat(snapshot = {}) {
+  await importDatabase({
+    plans: Array.isArray(snapshot?.plans) ? snapshot.plans : [],
+    history: Array.isArray(snapshot?.history) ? snapshot.history : [],
+    bodyWeight: Array.isArray(snapshot?.bodyWeight) ? snapshot.bodyWeight : [],
+    bodyMeasurements: Array.isArray(snapshot?.bodyMeasurements) ? snapshot.bodyMeasurements : [],
+    customExercises: Array.isArray(snapshot?.customExercises) ? snapshot.customExercises : [],
+  });
+}
 
 function parseStoredValue(raw) {
   if (raw == null) return null;
@@ -392,9 +425,38 @@ export async function listLocalSnapshots(options = {}) {
 }
 
 export async function readSnapshotContainer(source) {
-  const uri = typeof source === 'string' ? source : source?.localUri || source?.uri;
+  const sourceRecord = typeof source === 'string' ? null : (source || null);
+  let uri = typeof source === 'string' ? source : source?.localUri || source?.uri;
+
+  // If a remote history item has no readable local file, fetch directly from Drive.
+  if (sourceRecord?.remote && (!uri || !(await FileSystem.getInfoAsync(uri)).exists)) {
+    const remoteId = sourceRecord.remoteFileId || sourceRecord.driveFileId;
+    if (remoteId) {
+      return downloadDriveSnapshot(remoteId);
+    }
+  }
+
+  // Recover stale migrated backup paths by snapshotId in the current backup directory.
+  if (sourceRecord?.snapshotId && uri) {
+    const currentInfo = await FileSystem.getInfoAsync(uri).catch(() => ({ exists: false }));
+    if (!currentInfo?.exists) {
+      const recoveredUri = `${getBackupDirectory()}${snapshotFileName(sourceRecord.snapshotId)}`;
+      const recoveredInfo = await FileSystem.getInfoAsync(recoveredUri).catch(() => ({ exists: false }));
+      if (recoveredInfo?.exists) {
+        uri = recoveredUri;
+      }
+    }
+  }
+
   if (!uri) throw new Error('No backup file selected.');
-  const raw = await FileSystem.readAsStringAsync(uri, { encoding: 'utf8' });
+
+  let raw;
+  try {
+    raw = await FileSystem.readAsStringAsync(uri, { encoding: 'utf8' });
+  } catch (error) {
+    const details = String(error?.message || error || '');
+    throw new Error(`Could not read backup file. ${details.includes('ENOENT') ? 'Snapshot file is missing on this device.' : details}`);
+  }
   const parsed = JSON.parse(raw);
   if (parsed?.format !== CURRENT_BACKUP_FORMAT || !parsed?.manifest || !parsed?.ciphertext) {
     throw new Error('Invalid IronLog encrypted backup file.');
@@ -409,7 +471,7 @@ async function createPayloadFromStorage({ reason, isRollback = false, restoreSou
   const recordCounts = buildRecordCounts(domains);
   const createdAt = new Date().toISOString();
   const deviceId = await getOrCreateDeviceId();
-  const appVersion = Constants.expoConfig?.version || Constants.manifest2?.extra?.expoClient?.version || '1.0.0';
+  const appVersion = APP_VERSION;
   const payload = {
     format: CURRENT_BACKUP_FORMAT,
     schemaVersion: CURRENT_BACKUP_SCHEMA_VERSION,
@@ -593,6 +655,136 @@ function keysForDomains(domains, currentStorageMap) {
   return [...keys];
 }
 
+function parseMaybeJson(raw, fallback = null) {
+  if (raw == null) return fallback;
+  if (typeof raw !== 'string') return raw;
+  try {
+    return JSON.parse(raw);
+  } catch (_) {
+    return fallback;
+  }
+}
+
+function safeArrayLength(value) {
+  return Array.isArray(value) ? value.length : 0;
+}
+
+function buildExpectedCoreCounts(restoredItems = {}, payload = {}, selectedDomains = []) {
+  const selected = new Set(selectedDomains || []);
+  const plans = parseMaybeJson(restoredItems.ironlog_plans, payload?.plans ?? null);
+  const history = parseMaybeJson(restoredItems.ironlog_history, payload?.history ?? null);
+  const bodyWeight = parseMaybeJson(restoredItems.ironlog_bw, payload?.bodyWeight ?? null);
+  const bodyMeasurements = parseMaybeJson(
+    restoredItems['@ironlog/bodyMeasurements'],
+    payload?.bodyMeasurements ?? null
+  );
+  const customExercises = parseMaybeJson(
+    restoredItems['@ironlog/customExercises'],
+    payload?.customExercises ?? null
+  );
+
+  return {
+    plans: selected.has('plans') ? safeArrayLength(plans) : null,
+    history: selected.has('history') ? safeArrayLength(history) : null,
+    bodyWeight: selected.has('metrics') ? safeArrayLength(bodyWeight) : null,
+    bodyMeasurements: selected.has('metrics') ? safeArrayLength(bodyMeasurements) : null,
+    customExercises: selected.has('customExercises') ? safeArrayLength(customExercises) : null,
+  };
+}
+
+async function verifyRestoredCoreCounts(expectedCounts = {}, selectedDomains = []) {
+  const selected = new Set(selectedDomains || []);
+  const currentSnapshot = await loadTrainingSnapshotCompat();
+  const actualCounts = {
+    plans: safeArrayLength(currentSnapshot?.plans),
+    history: safeArrayLength(currentSnapshot?.history),
+    bodyWeight: safeArrayLength(currentSnapshot?.bodyWeight),
+    bodyMeasurements: safeArrayLength(currentSnapshot?.bodyMeasurements),
+    customExercises: safeArrayLength(currentSnapshot?.customExercises),
+  };
+
+  const mismatches = [];
+  const compareCount = (label, expected, actual) => {
+    if (expected == null) return;
+    if (expected !== actual) {
+      mismatches.push(`${label}: expected ${expected}, actual ${actual}`);
+    }
+  };
+
+  if (selected.has('plans')) compareCount('plans', expectedCounts.plans, actualCounts.plans);
+  if (selected.has('history')) compareCount('history', expectedCounts.history, actualCounts.history);
+  if (selected.has('metrics')) {
+    compareCount('bodyWeight', expectedCounts.bodyWeight, actualCounts.bodyWeight);
+    compareCount('bodyMeasurements', expectedCounts.bodyMeasurements, actualCounts.bodyMeasurements);
+  }
+  if (selected.has('customExercises')) {
+    compareCount('customExercises', expectedCounts.customExercises, actualCounts.customExercises);
+  }
+
+  return { actualCounts, mismatches };
+}
+
+function collectRestoredStorageItems(payloadDomains = {}, selectedDomains = []) {
+  const items = {};
+  selectedDomains.forEach((domainId) => {
+    const domainItems = payloadDomains?.[domainId]?.items || {};
+    Object.entries(domainItems).forEach(([key, value]) => {
+      if (value != null) items[key] = value;
+    });
+  });
+  return items;
+}
+
+function inferDomainFromStorageKey(storageKey) {
+  if (!storageKey) return null;
+  const match = Object.entries(BACKUP_MANAGED_KEYS).find(([, keys]) => keys.includes(storageKey));
+  return match ? match[0] : null;
+}
+
+function mergeDomainItem(domains, domainId, key, value) {
+  if (!domainId || !key || value == null) return;
+  if (!domains[domainId]) domains[domainId] = { items: {} };
+  domains[domainId].items[key] = typeof value === 'string' ? value : JSON.stringify(value);
+}
+
+function buildDomainsFromLegacyPayload(payload = {}) {
+  const domains = {};
+  if (!payload || typeof payload !== 'object') return domains;
+
+  if (payload.domains && typeof payload.domains === 'object') {
+    Object.entries(payload.domains).forEach(([domainId, domain]) => {
+      Object.entries(domain?.items || {}).forEach(([key, value]) => {
+        mergeDomainItem(domains, domainId, key, value);
+      });
+    });
+  }
+
+  const directStorageMaps = [payload.storage, payload.storageMap, payload.items];
+  directStorageMaps.forEach((map) => {
+    if (!map || typeof map !== 'object') return;
+    Object.entries(map).forEach(([key, value]) => {
+      mergeDomainItem(domains, inferDomainFromStorageKey(key), key, value);
+    });
+  });
+
+  if (Array.isArray(payload.plans)) {
+    mergeDomainItem(domains, 'plans', 'ironlog_plans', payload.plans);
+  }
+  if (Array.isArray(payload.history)) {
+    mergeDomainItem(domains, 'history', 'ironlog_history', payload.history);
+  }
+  if (Array.isArray(payload.bodyWeight)) {
+    mergeDomainItem(domains, 'metrics', 'ironlog_bw', payload.bodyWeight);
+  }
+  if (Array.isArray(payload.bodyMeasurements)) {
+    mergeDomainItem(domains, 'metrics', '@ironlog/bodyMeasurements', payload.bodyMeasurements);
+  }
+  if (Array.isArray(payload.customExercises)) {
+    mergeDomainItem(domains, 'customExercises', '@ironlog/customExercises', payload.customExercises);
+  }
+  return domains;
+}
+
 export async function restoreBackupContainer(source, options = {}) {
   const container = typeof source?.manifest === 'object' ? source : await readSnapshotContainer(source);
   const passphrase = options.passphrase;
@@ -603,7 +795,11 @@ export async function restoreBackupContainer(source, options = {}) {
     throw new Error('Backup integrity validation failed.');
   }
 
-  const allDomainIds = container.manifest.includedDomains || Object.keys(validated.payload.domains || {});
+  const normalizedDomains = buildDomainsFromLegacyPayload(validated.payload);
+  const payloadDomainIds = Object.keys(normalizedDomains);
+  const allDomainIds = (Array.isArray(container.manifest.includedDomains) && container.manifest.includedDomains.length
+    ? container.manifest.includedDomains.filter((domainId) => payloadDomainIds.includes(domainId))
+    : payloadDomainIds);
   const selectedDomains = (options.selectedDomains?.length ? options.selectedDomains : allDomainIds)
     .filter((domainId) => allDomainIds.includes(domainId));
 
@@ -622,13 +818,54 @@ export async function restoreBackupContainer(source, options = {}) {
 
   const nextPairs = [];
   selectedDomains.forEach((domainId) => {
-    const items = validated.payload.domains?.[domainId]?.items || {};
+    const items = normalizedDomains?.[domainId]?.items || {};
     Object.entries(items).forEach(([key, rawValue]) => {
       if (rawValue != null) nextPairs.push([key, rawValue]);
     });
   });
   if (nextPairs.length) {
     await AsyncStorage.multiSet(nextPairs);
+  }
+
+  // App runtime now reads core training data from SQLite.
+  // Keep SQLite in sync with restored snapshot domains so restore is immediately visible.
+  const sqliteRelevantDomains = new Set(['plans', 'history', 'metrics', 'customExercises']);
+  const shouldSyncSqlite = selectedDomains.some((domainId) => sqliteRelevantDomains.has(domainId));
+  if (shouldSyncSqlite) {
+    const restoredItems = collectRestoredStorageItems(normalizedDomains || {}, selectedDomains);
+    const currentSnapshot = await loadTrainingSnapshotCompat().catch(() => ({
+      plans: [],
+      history: [],
+      bodyWeight: [],
+      bodyMeasurements: [],
+      customExercises: [],
+    }));
+
+    const restoredPlans = parseMaybeJson(restoredItems.ironlog_plans, validated.payload?.plans ?? null);
+    const restoredHistory = parseMaybeJson(restoredItems.ironlog_history, validated.payload?.history ?? null);
+    const restoredBodyWeight = parseMaybeJson(restoredItems.ironlog_bw, validated.payload?.bodyWeight ?? null);
+    const restoredBodyMeasurements = parseMaybeJson(
+      restoredItems['@ironlog/bodyMeasurements'],
+      validated.payload?.bodyMeasurements ?? null
+    );
+    const restoredCustomExercises = parseMaybeJson(
+      restoredItems['@ironlog/customExercises'],
+      validated.payload?.customExercises ?? null
+    );
+
+    await replaceTrainingSnapshotCompat({
+      plans: Array.isArray(restoredPlans) ? restoredPlans : (currentSnapshot.plans || []),
+      history: Array.isArray(restoredHistory) ? restoredHistory : (currentSnapshot.history || []),
+      bodyWeight: Array.isArray(restoredBodyWeight) ? restoredBodyWeight : (currentSnapshot.bodyWeight || []),
+      bodyMeasurements: Array.isArray(restoredBodyMeasurements) ? restoredBodyMeasurements : (currentSnapshot.bodyMeasurements || []),
+      customExercises: Array.isArray(restoredCustomExercises) ? restoredCustomExercises : (currentSnapshot.customExercises || []),
+    });
+
+    const expectedCounts = buildExpectedCoreCounts(restoredItems, validated.payload, selectedDomains);
+    const { mismatches } = await verifyRestoredCoreCounts(expectedCounts, selectedDomains);
+    if (mismatches.length) {
+      throw new Error(`Restore verification failed (${mismatches.join('; ')})`);
+    }
   }
 
   await saveBackupStatus({
@@ -650,7 +887,7 @@ export async function shareBackupRecord(record) {
   if (!canShare) throw new Error('Sharing is not available on this device.');
   await Sharing.shareAsync(record.localUri, {
     mimeType: 'application/json',
-    dialogTitle: 'Export IRONLOG Encrypted Backup',
+    dialogTitle: 'Export Ironlog Encrypted Backup',
   });
   return record.localUri;
 }
@@ -769,3 +1006,4 @@ export async function fetchRemoteSnapshot(record) {
 }
 
 export { BACKUP_RESTOREABLE_DOMAINS };
+

@@ -1,10 +1,10 @@
 
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, Modal, StyleSheet } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { AppContext } from '../context/AppContext';
+import useWatermelonAppData from '../hooks/useWatermelonAppData';
 import { useTheme } from '../context/ThemeContext';
-import { triggerHaptic } from '../services/hapticsEngine';
+import { fireHaptic } from '../services/hapticsEngine';
+import { getSetting as getWatermelonSetting, setSetting as setWatermelonSetting } from '../db/repositories/settingsRepository';
 
 const PERCENTAGES = [50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100];
 
@@ -24,7 +24,7 @@ function roundToPlate(kg, plates) {
 }
 
 export default function TrainingMaxCalculator({ visible, onClose, exerciseName }) {
-  const { settings, gymProfiles, activeGymProfileId } = useContext(AppContext);
+  const { settings, gymProfiles, activeGymProfileId } = useWatermelonAppData();
   const colors = useTheme();
   const haptic = settings?.hapticFeedback !== false;
 
@@ -41,9 +41,16 @@ export default function TrainingMaxCalculator({ visible, onClose, exerciseName }
 
   useEffect(() => {
     if (!visible || !exKey) return;
-    AsyncStorage.getItem('@ironlog/trainingMaxes').then(raw => {
-      if (!raw) return;
-      const all = JSON.parse(raw);
+    Promise.all([
+      getWatermelonSetting('training_maxes_v1'),
+      getWatermelonSetting('@ironlog/trainingMaxes'),
+    ]).then(([modern, legacy]) => {
+      const all = (modern && typeof modern === 'object')
+        ? modern
+        : (legacy && typeof legacy === 'object')
+          ? legacy
+          : {};
+      if (!all || typeof all !== 'object') return;
       if (all[exKey]) {
         setSavedData(all[exKey]);
         setInput1RM(String(all[exKey].estimated1RM || ''));
@@ -60,23 +67,28 @@ export default function TrainingMaxCalculator({ visible, onClose, exerciseName }
 
   const doSave = async () => {
     if (!trainingMax) return;
-    triggerHaptic('mediumConfirm', { enabled: haptic }).catch(() => {});
+    fireHaptic('mediumConfirm', { enabled: haptic });
     try {
-      const raw = await AsyncStorage.getItem('@ironlog/trainingMaxes');
-      const all = raw ? JSON.parse(raw) : {};
+      const modern = await getWatermelonSetting('training_maxes_v1');
+      const legacy = await getWatermelonSetting('@ironlog/trainingMaxes');
+      const all = (modern && typeof modern === 'object')
+        ? modern
+        : (legacy && typeof legacy === 'object')
+          ? legacy
+          : {};
       all[exKey] = {
         estimated1RM: computed1RM,
         trainingMaxPercent: tmPct,
         trainingMax,
         updatedAt: new Date().toISOString().split('T')[0],
       };
-      await AsyncStorage.setItem('@ironlog/trainingMaxes', JSON.stringify(all));
+      await setWatermelonSetting('training_maxes_v1', all, 'json');
       setSavedData(all[exKey]);
     } catch (_) {}
   };
 
   const copyWeight = w => {
-    triggerHaptic('selection', { enabled: haptic }).catch(() => {});
+    fireHaptic('selection', { enabled: haptic });
     // Visual feedback via haptic; user reads value from screen
   };
 

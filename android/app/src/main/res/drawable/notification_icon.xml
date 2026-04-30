@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Dumbbell notification icon — derived from SVG viewBox 0 0 96 96 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="96"
+    android:viewportHeight="96">
+
+    <!-- Left end cap -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M10,46 L13,46 L13,50 L10,50 Z" />
+
+    <!-- Left outer collar (ellipse rx=3.5 ry=9.5 cx=17 cy=48) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M17,38.5
+                          A3.5,9.5 0 0,1 20.5,48
+                          A3.5,9.5 0 0,1 17,57.5
+                          A3.5,9.5 0 0,1 13.5,48
+                          A3.5,9.5 0 0,1 17,38.5 Z" />
+
+    <!-- Left inner collar (ellipse rx=5.5 ry=13.5 cx=27 cy=48) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M27,34.5
+                          A5.5,13.5 0 0,1 32.5,48
+                          A5.5,13.5 0 0,1 27,61.5
+                          A5.5,13.5 0 0,1 21.5,48
+                          A5.5,13.5 0 0,1 27,34.5 Z" />
+
+    <!-- Bar (rect x=34 y=46 width=27 height=4) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M34,46 L61,46 L61,50 L34,50 Z" />
+
+    <!-- Right inner collar (ellipse rx=5.5 ry=13.5 cx=68 cy=48) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M68,34.5
+                          A5.5,13.5 0 0,1 73.5,48
+                          A5.5,13.5 0 0,1 68,61.5
+                          A5.5,13.5 0 0,1 62.5,48
+                          A5.5,13.5 0 0,1 68,34.5 Z" />
+
+    <!-- Right outer collar (ellipse rx=3.5 ry=9.5 cx=78 cy=48) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M78,38.5
+                          A3.5,9.5 0 0,1 81.5,48
+                          A3.5,9.5 0 0,1 78,57.5
+                          A3.5,9.5 0 0,1 74.5,48
+                          A3.5,9.5 0 0,1 78,38.5 Z" />
+
+    <!-- Right end cap -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M83,46 L86,46 L86,50 L83,50 Z" />
+
+</vector>

@@ -1,18 +1,31 @@
-import React, { useContext, useState } from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, TextInput, Modal, Alert, TouchableOpacity } from 'react-native';
 import { TouchableOpacity as RNGHTouchableOpacity } from 'react-native-gesture-handler';
 import CustomAlert from '../components/CustomAlert';
 import DraggableFlatList, { ScaleDecorator } from 'react-native-draggable-flatlist';
-import { Ionicons } from '@expo/vector-icons';
-import * as Sharing from 'expo-sharing';
-import * as DocumentPicker from 'expo-document-picker';
-import * as FileSystem from 'expo-file-system/legacy';
-import { AppContext } from '../context/AppContext';
+import Ionicons from 'react-native-vector-icons/Ionicons';
+import * as Sharing from '../platform/sharing';
+import * as DocumentPicker from '../platform/documentPicker';
+import * as FileSystem from '../platform/filesystem';
+import useWatermelonPlans from '../hooks/useWatermelonPlans';
+import useWatermelonSettings from '../hooks/useWatermelonSettings';
 import { useTheme } from '../context/ThemeContext';
 import { EXERCISES } from '../data/exerciseLibrary';
-import { triggerHaptic } from '../services/hapticsEngine';
+import { fireHaptic } from '../services/hapticsEngine';
+import EmptyState from '../components/ui/EmptyState';
+import { withAlpha } from '../utils/colorUtils';
 
 function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+function pickContrastText(hexColor, fallback = '#FFFFFF') {
+  const m = /^#?([0-9a-f]{6})$/i.exec(String(hexColor || ''));
+  if (!m) return fallback;
+  const n = parseInt(m[1], 16);
+  const r = (n >> 16) & 0xff;
+  const g = (n >> 8) & 0xff;
+  const b = n & 0xff;
+  const luma = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+  return luma > 0.62 ? '#111111' : '#FFFFFF';
+}
 
 // Fuzzy-match an exercise name to the library
 function matchExercise(name) {
@@ -28,9 +41,15 @@ function matchExercise(name) {
 }
 
 export default function PlansScreen({ navigation }) {
-  const { plans, savePlans, settings } = useContext(AppContext);
+  const { plans, savePlans } = useWatermelonPlans();
+  const { settings } = useWatermelonSettings();
   const colors = useTheme();
   const haptic = settings?.hapticFeedback !== false;
+  const accentHex = withAlpha(colors.accent, 1, '#FF4500').slice(0, 7);
+  const textOnAccentHex = withAlpha(colors.textOnAccent || '#FFFFFF', 1, '#FFFFFF').slice(0, 7);
+  const safeTextOnAccent = textOnAccentHex.toLowerCase() === accentHex.toLowerCase()
+    ? pickContrastText(accentHex)
+    : textOnAccentHex;
 
   const [showNew, setShowNew] = useState(false);
   const [newName, setNewName] = useState('');
@@ -59,7 +78,7 @@ export default function PlansScreen({ navigation }) {
   };
 
   const deletePlan = (id) => {
-    triggerHaptic('destructiveAction', { enabled: haptic }).catch(() => {});
+    fireHaptic('destructiveAction', { enabled: haptic });
     setAlertConfig({
       title: 'Delete plan?',
       message: '',
@@ -70,7 +89,7 @@ export default function PlansScreen({ navigation }) {
     });
   };
 
-  // ── Share / Export ──────────────────────────────────────────────
+  // -- Share / Export ----------------------------------------------
   const sharePlan = async (plan) => {
     try {
       const payload = {
@@ -112,7 +131,7 @@ export default function PlansScreen({ navigation }) {
     }
   };
 
-  // ── Import ──────────────────────────────────────────────────────
+  // -- Import ------------------------------------------------------
   const importPlan = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({ type: 'application/json', copyToCacheDirectory: true });
@@ -169,7 +188,7 @@ export default function PlansScreen({ navigation }) {
   };
 
   const onLongPress = (plan) => {
-    triggerHaptic('selection', { enabled: haptic }).catch(() => {});
+    fireHaptic('selection', { enabled: haptic });
     setAlertConfig({
       title: plan.name,
       message: '',
@@ -194,7 +213,7 @@ export default function PlansScreen({ navigation }) {
           <View style={{ flex: 1 }}>
             <Text style={[s.planName, { color: colors.text }]}>{plan.name}</Text>
             <Text style={[s.planMeta, { color: colors.muted }]}>
-              {plan.days.length} days · {plan.days.reduce((a, d) => a + (d.exercises || []).filter(e => !e.isWarmup).length, 0)} exercises
+              {plan.days.length} days � {plan.days.reduce((a, d) => a + (d.exercises || []).filter(e => !e.isWarmup).length, 0)} exercises
             </Text>
           </View>
           <View style={{ flexDirection: 'row', gap: 16, alignItems: 'center' }}>
@@ -208,7 +227,7 @@ export default function PlansScreen({ navigation }) {
         </TouchableOpacity>
         <View style={{ flexDirection: 'row', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
           {plan.days.map(d => (
-            <View key={d.id} style={[s.dayChip, { backgroundColor: d.color + '22', borderColor: d.color + '44' }]}>
+            <View key={d.id} style={[s.dayChip, { backgroundColor: withAlpha(d.color, 0.13), borderColor: withAlpha(d.color, 0.27) }]}>
               <Text style={{ fontSize: 10, color: d.color, fontWeight: '700', letterSpacing: 1 }}>{d.name}</Text>
             </View>
           ))}
@@ -223,8 +242,11 @@ export default function PlansScreen({ navigation }) {
         data={plans}
         keyExtractor={item => item.id}
         renderItem={renderPlan}
+        nestedScrollEnabled={true}
+        // Keep plan reordering from stealing horizontal PagerView tab swipes.
+        activationDistance={28}
         onDragEnd={({ data }) => {
-          triggerHaptic('selection', { enabled: haptic }).catch(() => {});
+          fireHaptic('selection', { enabled: haptic });
           savePlans(data);
         }}
         contentContainerStyle={{ padding: 16, gap: 12, paddingBottom: 80 }}
@@ -242,7 +264,22 @@ export default function PlansScreen({ navigation }) {
               <Ionicons name="download-outline" size={18} color={colors.accent} />
               <Text style={[s.browseText, { color: colors.accent }]}>IMPORT PLAN</Text>
             </TouchableOpacity>
+            <TouchableOpacity
+              style={[s.browseBtn, { backgroundColor: colors.card, borderRadius: 14, borderWidth: 1, borderColor: colors.cardBorder }]}
+              onPress={() => navigation.navigate('AIPlan')}>
+              <Ionicons name="sparkles" size={18} color={colors.text} />
+              <Text style={[s.browseText, { color: colors.text }]}>? CREATE WITH AI</Text>
+            </TouchableOpacity>
           </View>
+        }
+        ListEmptyComponent={
+          <EmptyState
+            icon="list-outline"
+            title="No plans yet"
+            subtitle="Pick a template or build your own routine."
+            ctaLabel="BROWSE TEMPLATES"
+            onCta={() => navigation.navigate('ProgramPicker')}
+          />
         }
         ListFooterComponent={
           <TouchableOpacity
@@ -268,7 +305,7 @@ export default function PlansScreen({ navigation }) {
                 <Text style={{ color: colors.muted }}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[s.confirmBtn, { backgroundColor: colors.accent }]} onPress={createPlan}>
-                <Text style={{ color: '#fff', fontWeight: '800' }}>CREATE</Text>
+                <Text style={{ color: safeTextOnAccent, fontWeight: '800' }}>CREATE</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -290,7 +327,7 @@ export default function PlansScreen({ navigation }) {
                 <Text style={{ color: colors.muted }}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[s.confirmBtn, { backgroundColor: colors.accent }]} onPress={doRename}>
-                <Text style={{ color: '#fff', fontWeight: '800' }}>SAVE</Text>
+                <Text style={{ color: safeTextOnAccent, fontWeight: '800' }}>SAVE</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -304,18 +341,19 @@ export default function PlansScreen({ navigation }) {
 
 const s = StyleSheet.create({
   container: { flex: 1 },
-  card: { padding: 16, borderWidth: 1 },
+  card: { padding: 16, borderWidth: 1, borderRadius: 20 },
   planName: { fontSize: 18, fontWeight: '900' },
   planMeta: { fontSize: 12, marginTop: 2 },
-  dayChip: { paddingHorizontal: 10, paddingVertical: 4, borderWidth: 1 },
-  browseBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, padding: 14, borderWidth: 1 },
+  dayChip: { paddingHorizontal: 10, paddingVertical: 4, borderWidth: 1, borderRadius: 999 },
+  browseBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, padding: 14, borderWidth: 1, borderRadius: 18 },
   browseText: { fontSize: 11, fontWeight: '800', letterSpacing: 2 },
-  addBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, padding: 16, borderWidth: 1, borderStyle: 'dashed', marginTop: 4 },
+  addBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, padding: 16, borderWidth: 1, borderStyle: 'dashed', marginTop: 4, borderRadius: 18 },
   addText: { fontSize: 12, fontWeight: '700', letterSpacing: 2 },
   overlay: { flex: 1, backgroundColor: '#000000cc', justifyContent: 'center', padding: 24 },
-  modal: { padding: 24, borderWidth: 1 },
+  modal: { padding: 24, borderWidth: 1, borderRadius: 20 },
   modalTitle: { fontSize: 14, fontWeight: '900', letterSpacing: 3, marginBottom: 16 },
   input: { fontSize: 22, fontWeight: '700', borderBottomWidth: 2, paddingVertical: 8, marginBottom: 8 },
-  cancelBtn: { flex: 1, padding: 14, alignItems: 'center', borderWidth: 1 },
-  confirmBtn: { flex: 1, padding: 14, alignItems: 'center' },
+  cancelBtn: { flex: 1, padding: 14, alignItems: 'center', borderWidth: 1, borderRadius: 14 },
+  confirmBtn: { flex: 1, padding: 14, alignItems: 'center', borderRadius: 14 },
 });
+

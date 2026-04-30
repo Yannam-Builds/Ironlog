@@ -1,6 +1,6 @@
 
-import * as FileSystem from 'expo-file-system/legacy';
-import * as Sharing from 'expo-sharing';
+import * as FileSystem from '../platform/filesystem';
+import * as Sharing from '../platform/sharing';
 
 function esc(val) {
   if (val === null || val === undefined) return '';
@@ -45,3 +45,4 @@ export async function exportCSV(history) {
   if (!(await Sharing.isAvailableAsync())) throw new Error('Sharing not available on this device');
   await Sharing.shareAsync(path, { mimeType: 'text/csv', dialogTitle: 'Export IRONLOG Data' });
 }
+

@@ -186,6 +186,19 @@ function deriveRepCeiling(profile) {
   return 12;
 }
 
+// Map v2 movementPattern values to the FAMILY_RULES family vocab.
+// Only covers the patterns where v2 is authoritative and name-regex is unreliable.
+// "push" and "pull" are intentionally omitted — they're too coarse (cover both
+// horizontal AND vertical variants) so we let detectFamily's regex do the fine split.
+const V2_MOVEMENT_TO_FAMILY = {
+  hinge:      { id: 'hinge',  movementPattern: 'hinge',           lane: 'lower', score: 10 },
+  squat:      { id: 'squat',  movementPattern: 'squat',           lane: 'lower', score: 10 },
+  carry:      { id: 'plank',  movementPattern: 'core_stability',  lane: 'core',  score: 8  },
+  rotation:   { id: 'plank',  movementPattern: 'core_stability',  lane: 'core',  score: 7  },
+  isometric:  { id: 'plank',  movementPattern: 'core_stability',  lane: 'core',  score: 8  },
+  locomotion: { id: 'cardio', movementPattern: 'conditioning',    lane: 'conditioning', score: 8 },
+};
+
 export function buildExerciseProfile(exercise = {}) {
   const safeExercise = exercise || {};
   const primaryMuscles = unique([
@@ -197,7 +210,11 @@ export function buildExerciseProfile(exercise = {}) {
     ...toArray(safeExercise.targetMuscle),
     ...toArray(safeExercise.bodyPart),
   ]);
-  const family = detectFamily(safeExercise.name, primaryMuscles);
+  // Prefer the authoritative v2 movementPattern when available — skip regex detection.
+  const v2Movement = safeExercise.movementPattern
+    ? V2_MOVEMENT_TO_FAMILY[safeExercise.movementPattern.toLowerCase()] || null
+    : null;
+  const family = v2Movement || detectFamily(safeExercise.name, primaryMuscles);
   const equipmentClass = resolveEquipmentClass(safeExercise);
   const compound = detectCompound(family.id);
   const base = {

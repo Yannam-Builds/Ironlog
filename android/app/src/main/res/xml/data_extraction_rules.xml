@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  IRONLOG Android data extraction contract (cloud backup + device transfer)
+  - Included: database/, sharedpref/, file/ domains.
+  - Excluded: file/no_backup/ for non-restorable cache/runtime files.
+  - Reinstall/transfer behavior: Android can migrate included app data between devices.
+  - In-app encrypted backup remains the explicit user-visible restore mechanism with
+    compatibility/version checks and should be preferred for controlled recovery.
+  - If both OS restore and in-app restore are present, in-app restore action is the
+    final authority once user confirms it.
+-->
+<data-extraction-rules>
+  <cloud-backup>
+    <include domain="database" path="." />
+    <include domain="sharedpref" path="." />
+    <include domain="file" path="." />
+    <exclude domain="file" path="no_backup/" />
+  </cloud-backup>
+  <device-transfer>
+    <include domain="database" path="." />
+    <include domain="sharedpref" path="." />
+    <include domain="file" path="." />
+    <exclude domain="file" path="no_backup/" />
+  </device-transfer>
+</data-extraction-rules>

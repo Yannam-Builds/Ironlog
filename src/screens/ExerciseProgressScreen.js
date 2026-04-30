@@ -1,14 +1,16 @@
-import React, { useContext, useMemo, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, FlatList, StyleSheet, Dimensions } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import Svg, { Polyline, Line, Rect, Text as SvgText, Circle } from 'react-native-svg';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { captureRef } from 'react-native-view-shot';
-import * as Sharing from 'expo-sharing';
-import { AppContext } from '../context/AppContext';
+import * as Sharing from '../platform/sharing';
+import useWatermelonHome from '../hooks/useWatermelonHome';
 import { useTheme } from '../context/ThemeContext';
 import TrainingMaxCalculator from '../components/TrainingMaxCalculator';
 import { buildExerciseTrend } from '../domain/intelligence/performanceEngine';
 import { convertKgToUnit, formatWeightFromKg, formatVolumeFromKg } from '../utils/weightUnits';
+import { withAlpha } from '../utils/colorUtils';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const CHART_WIDTH = SCREEN_WIDTH - 32;
@@ -29,9 +31,12 @@ function filterByRange(rows, days) {
   return rows.filter((row) => new Date(row?.date || 0).getTime() >= cutoff);
 }
 
-function formatDate(dateStr) {
+function formatDate(dateStr, includeYear = false) {
   const d = new Date(dateStr);
-  return `${d.getMonth() + 1}/${d.getDate()}`;
+  return d.toLocaleDateString('en-US', {
+    month: 'short', day: 'numeric',
+    ...(includeYear ? { year: 'numeric' } : {}),
+  });
 }
 
 function formatDateFull(dateStr) {
@@ -63,6 +68,8 @@ function buildPoints(values) {
 }
 
 function GridLines({ minV, maxV, colors }) {
+  const faint = withAlpha(colors.faint, 1, '#333333').slice(0, 7);
+  const muted = withAlpha(colors.muted, 1, '#888888').slice(0, 7);
   const steps = 4;
   const innerH = CHART_HEIGHT - PAD * 2;
   const lines = [];
@@ -70,8 +77,8 @@ function GridLines({ minV, maxV, colors }) {
     const y = PAD + (i / steps) * innerH;
     const val = roundMetric(maxV - (i / steps) * (maxV - minV), 1);
     lines.push(
-      <Line key={i} x1={PAD} y1={y} x2={CHART_WIDTH - PAD} y2={y} stroke={colors.faint} strokeWidth="1" />,
-      <SvgText key={`t${i}`} x={PAD - 2} y={y + 4} fontSize="8" fill={colors.muted} textAnchor="end">
+      <Line key={i} x1={PAD} y1={y} x2={CHART_WIDTH - PAD} y2={y} stroke={faint} strokeWidth="1" />,
+      <SvgText key={`t${i}`} x={PAD - 2} y={y + 4} fontSize="8" fill={muted} textAnchor="end">
         {val}
       </SvgText>
     );
@@ -80,6 +87,7 @@ function GridLines({ minV, maxV, colors }) {
 }
 
 function XAxisLabels({ labels, colors }) {
+  const muted = withAlpha(colors.muted, 1, '#888888').slice(0, 7);
   const innerW = CHART_WIDTH - PAD * 2;
   const count = labels.length;
   if (count === 0) return null;
@@ -90,7 +98,7 @@ function XAxisLabels({ labels, colors }) {
       {shown.map(({ l, i }) => {
         const x = PAD + (count === 1 ? innerW / 2 : (i / (count - 1)) * innerW);
         return (
-          <SvgText key={i} x={x} y={CHART_HEIGHT - 4} fontSize="8" fill={colors.muted} textAnchor="middle">
+          <SvgText key={i} x={x} y={CHART_HEIGHT - 4} fontSize="8" fill={muted} textAnchor="middle">
             {l}
           </SvgText>
         );
@@ -101,6 +109,7 @@ function XAxisLabels({ labels, colors }) {
 
 function LineChart({ values, dates, colors }) {
   if (!values || values.length === 0) return null;
+  const accent = withAlpha(colors.accent, 1, '#FF4500').slice(0, 7);
   const { points, minV, maxV } = buildPoints(values);
   const polylinePoints = points.map((p) => `${p.x},${p.y}`).join(' ');
   const labels = dates.map(formatDate);
@@ -110,10 +119,10 @@ function LineChart({ values, dates, colors }) {
       <GridLines minV={minV} maxV={maxV} colors={colors} />
       <XAxisLabels labels={labels} colors={colors} />
       {points.length > 1 && (
-        <Polyline points={polylinePoints} fill="none" stroke={colors.accent} strokeWidth="2" />
+        <Polyline points={polylinePoints} fill="none" stroke={accent} strokeWidth="2" />
       )}
       {points.map((p, i) => (
-        <Circle key={i} cx={p.x} cy={p.y} r="3.5" fill={colors.accent} />
+        <Circle key={i} cx={p.x} cy={p.y} r="3.5" fill={accent} />
       ))}
     </Svg>
   );
@@ -121,6 +130,7 @@ function LineChart({ values, dates, colors }) {
 
 function BarChart({ values, dates, colors }) {
   if (!values || values.length === 0) return null;
+  const accent = withAlpha(colors.accent, 1, '#FF4500').slice(0, 7);
   const minV = 0;
   const maxV = Math.max(...values) || 1;
   const innerW = CHART_WIDTH - PAD * 2;
@@ -145,7 +155,7 @@ function BarChart({ values, dates, colors }) {
             y={y}
             width={barW}
             height={Math.max(2, barH)}
-            fill={colors.accent}
+            fill={accent}
             rx="2"
             ry="2"
           />
@@ -189,7 +199,7 @@ function RangeSelector({ selected, onSelect, colors }) {
 
 export default function ExerciseProgressScreen({ route }) {
   const { exerciseName } = route.params;
-  const { history, settings } = useContext(AppContext);
+  const { history, settings } = useWatermelonHome();
   const colors = useTheme();
   const weightUnit = settings?.weightUnit || 'kg';
 
@@ -334,8 +344,9 @@ export default function ExerciseProgressScreen({ route }) {
         historyRows.length === 0 ? (
           <EmptyState colors={colors} />
         ) : (
-          <FlatList
+          <FlashList
             data={historyRows}
+            estimatedItemSize={112}
             keyExtractor={(_, i) => String(i)}
             renderItem={renderHistoryRow}
             contentContainerStyle={styles.historyList}
@@ -399,9 +410,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderWidth: 1,
+    borderRadius: 10,
   },
   tmBtnText: { fontSize: 9, fontWeight: '800', letterSpacing: 1 },
-  shareBtn: { borderWidth: 1, width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
+  shareBtn: { borderWidth: 1, borderRadius: 10, width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
   tabBar: { flexDirection: 'row', borderBottomWidth: 1 },
   tabItem: {
     flex: 1,
@@ -413,7 +425,7 @@ const styles = StyleSheet.create({
   tabLabel: { fontSize: 9, fontWeight: '700', letterSpacing: 0.8 },
   scrollContent: { padding: 16, paddingBottom: 40 },
   heroCard: {
-    borderRadius: 8,
+    borderRadius: 14,
     borderWidth: 1,
     padding: 16,
     marginBottom: 12,
@@ -423,7 +435,7 @@ const styles = StyleSheet.create({
   heroValue: { fontSize: 32, fontWeight: '900' },
   heroSub: { fontSize: 11, marginTop: 4 },
   shareStatus: { fontSize: 11, marginBottom: 8, textAlign: 'center' },
-  chartContainer: { borderRadius: 8, borderWidth: 1, overflow: 'hidden', marginBottom: 12 },
+  chartContainer: { borderRadius: 14, borderWidth: 1, overflow: 'hidden', marginBottom: 12 },
   emptyState: {
     flex: 1,
     alignItems: 'center',
@@ -445,7 +457,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     borderWidth: 1,
-    borderRadius: 8,
+    borderRadius: 14,
     padding: 12,
     marginBottom: 8,
   },
@@ -456,7 +468,7 @@ const styles = StyleSheet.create({
   bestSetBadge: {
     alignItems: 'center',
     borderWidth: 1,
-    borderRadius: 6,
+    borderRadius: 10,
     paddingHorizontal: 10,
     paddingVertical: 6,
     minWidth: 72,
@@ -464,3 +476,4 @@ const styles = StyleSheet.create({
   bestSetLabel: { fontSize: 8, letterSpacing: 2, marginBottom: 2 },
   bestSetValue: { fontSize: 12, fontWeight: '800' },
 });
+

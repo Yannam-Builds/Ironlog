@@ -1,9 +1,25 @@
 
-import * as DocumentPicker from 'expo-document-picker';
-import * as FileSystem from 'expo-file-system/legacy';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as DocumentPicker from '../platform/documentPicker';
+import * as FileSystem from '../platform/filesystem';
 import { getExerciseIndex } from '../services/ExerciseLibraryService';
 import { normalizeAliasKey, resolveCanonicalExerciseName } from '../data/exerciseAliases';
+import { exportDatabase } from '../db/repositories/importExportRepository';
+import { createCompletedWorkout } from '../db/repositories/workoutRepository';
+import { getSetting, setSetting } from '../db/repositories/settingsRepository';
+
+async function loadTrainingSnapshotCompat() {
+  const exported = await exportDatabase().catch(() => null);
+  const data = exported?.data || {};
+  return {
+    plans: Array.isArray(data.plans) ? data.plans : [],
+    history: Array.isArray(data.workouts) ? data.workouts : [],
+    bodyWeight: Array.isArray(data.body_measurements)
+      ? data.body_measurements.filter((row) => row?.bodyweight != null).map((row) => ({ weight: row.bodyweight, date: row.measured_at }))
+      : [],
+    bodyMeasurements: Array.isArray(data.body_measurements) ? data.body_measurements : [],
+    customExercises: Array.isArray(data.exercises) ? data.exercises.filter((row) => !!row?.is_custom) : [],
+  };
+}
 
 function lev(a, b) {
   const m = a.length, n = b.length;
@@ -150,9 +166,18 @@ function isoWeek(dateStr) {
 export async function importParsedCSV(parsed) {
   const { sessionList, matchResults } = parsed;
 
-  const raw = await AsyncStorage.getItem('ironlog_history');
-  const existing = raw ? JSON.parse(raw) : [];
-  const existingKeys = new Set(existing.map(h => (h.date?.split('T')[0] || '') + '||' + (h.dayName || '')));
+  const snapshot = await loadTrainingSnapshotCompat().catch(() => null);
+  const existing = Array.isArray(snapshot?.history) ? snapshot.history : [];
+  const existingKeys = new Set(existing.map((h) => {
+    const dateKey = h?.date
+      ? String(h.date).split('T')[0]
+      : h?.started_at
+        ? new Date(Number(h.started_at)).toISOString().split('T')[0]
+        : h?.startedAt
+          ? new Date(Number(h.startedAt)).toISOString().split('T')[0]
+          : '';
+    return `${dateKey}||${h?.dayName || h?.name || 'Workout'}`;
+  }));
 
   const newSessions = [];
   for (const session of sessionList) {
@@ -181,11 +206,11 @@ export async function importParsedCSV(parsed) {
 
   if (newSessions.length === 0) return 0;
 
-  const merged = [...newSessions, ...existing].slice(0, 500);
+  const prIndex = (await getSetting('pr_index_v1')) || {};
+  const volumeIndex = (await getSetting('volume_index_v1')) || {};
+  const lastPerf = (await getSetting('last_performance_v1')) || {};
 
-  // Rebuild indexes
-  const prIndex = {}, volumeIndex = {}, lastPerf = {};
-  for (const session of merged) {
+  for (const session of newSessions) {
     const dateStr = session.date.split('T')[0];
     const weekKey = isoWeek(session.date);
     for (const ex of (session.exercises || [])) {
@@ -208,12 +233,22 @@ export async function importParsedCSV(parsed) {
     }
   }
 
-  await AsyncStorage.multiSet([
-    ['ironlog_history', JSON.stringify(merged)],
-    ['@ironlog/pr_index', JSON.stringify(prIndex)],
-    ['@ironlog/volume_index', JSON.stringify(volumeIndex)],
-    ['@ironlog/lastPerformance', JSON.stringify(lastPerf)],
+  for (const session of newSessions) {
+    await createCompletedWorkout({
+      name: session.dayName || 'Imported Workout',
+      startedAt: new Date(session.date).getTime(),
+      durationSeconds: Number(session.duration || 0),
+      rating: session.rating ?? null,
+      notes: session.summaryText || '',
+      exerciseData: session.exercises || [],
+    });
+  }
+  await Promise.all([
+    setSetting('pr_index_v1', prIndex, 'json'),
+    setSetting('volume_index_v1', volumeIndex, 'json'),
+    setSetting('last_performance_v1', lastPerf, 'json'),
   ]);
 
   return newSessions.length;
 }
+

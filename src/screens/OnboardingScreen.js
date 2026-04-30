@@ -1,12 +1,12 @@
 
-import React, { useContext, useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, Dimensions,
   FlatList, StatusBar,
 } from 'react-native';
 import Reanimated, { useSharedValue, withSpring, useAnimatedStyle } from 'react-native-reanimated';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import { AppContext } from '../context/AppContext';
+import { getSetting, setSetting } from '../db/repositories/settingsRepository';
 import { useTheme } from '../context/ThemeContext';
 import { ONBOARDING_TEMPLATE_ID } from '../data/programTemplates';
 import { APP_VERSION_LABEL } from '../platform/appInfo';
@@ -55,7 +55,7 @@ const SLIDES = [
 ];
 
 export default function OnboardingScreen({ navigation }) {
-  const { completeOnboarding } = useContext(AppContext);
+  const completeOnboarding = async () => { await setSetting('onboarding_complete', true, 'boolean'); };
   const colors = useTheme();
   const flatRef = useRef(null);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -84,7 +84,9 @@ export default function OnboardingScreen({ navigation }) {
   }, [currentIndex]);
 
   const finish = async ({ openStarterProgram = false } = {}) => {
-    await completeOnboarding({ weeklyGoalDays: goalDays });
+    await completeOnboarding();
+    const current = (await getSetting('ironlog_settings')) || {};
+    await setSetting('ironlog_settings', { ...current, weeklyGoalDays: goalDays }, 'json');
     if (openStarterProgram) {
       navigation.reset({
         index: 1,
@@ -298,4 +300,6 @@ const s = StyleSheet.create({
   },
   restoreBtnText: { fontSize: 11, fontWeight: '700', letterSpacing: 1.4 },
 });
+
+
 

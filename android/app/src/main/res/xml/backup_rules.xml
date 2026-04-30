@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  IRONLOG Android Auto-Backup contract
+  - Included: database/, sharedpref/, file/ domains (all app-local user state).
+  - Excluded: file/no_backup/ (runtime/cache-only artifacts that must not restore).
+  - OS restore behavior: Android may restore these paths on reinstall/device-transfer.
+  - App-managed restore behavior: encrypted snapshot restore from Backup Center is still
+    the explicit user-controlled restore flow and should be treated as source-of-truth
+    when users trigger it manually.
+  - Overlap note: OS backup and app-managed encrypted backup can coexist; manual restore
+    takes precedence at the time user runs restore in-app.
+-->
+<full-backup-content>
+  <include domain="database" path="." />
+  <include domain="sharedpref" path="." />
+  <include domain="file" path="." />
+  <exclude domain="file" path="no_backup/" />
+</full-backup-content>

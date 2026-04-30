@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { View, Image, StyleSheet } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { getImageUri } from '../services/ExerciseImageCache';
 import { useTheme } from '../context/ThemeContext';
 
@@ -36,3 +36,4 @@ const s = StyleSheet.create({
   placeholder: { alignItems: 'center', justifyContent: 'center' },
   img: {},
 });
+

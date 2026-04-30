@@ -1,22 +1,45 @@
-import * as Crypto from 'expo-crypto';
+import * as Crypto from '../platform/crypto';
 import { fromByteArray, toByteArray } from 'base64-js';
 import { pbkdf2Async } from '@noble/hashes/pbkdf2.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { gcm } from '@noble/ciphers/aes.js';
 
-const textEncoder = new TextEncoder();
-const textDecoder = new TextDecoder();
+const hasTextEncoder = typeof global.TextEncoder === 'function';
+const hasTextDecoder = typeof global.TextDecoder === 'function';
+const textEncoder = hasTextEncoder ? new global.TextEncoder() : null;
+const textDecoder = hasTextDecoder ? new global.TextDecoder() : null;
 
 function normalizePassword(value) {
   return String(value || '').normalize('NFKC');
 }
 
 export function encodeUtf8(value) {
-  return textEncoder.encode(String(value || ''));
+  const input = String(value || '');
+  if (textEncoder) {
+    return textEncoder.encode(input);
+  }
+  const encoded = unescape(encodeURIComponent(input));
+  const bytes = new Uint8Array(encoded.length);
+  for (let i = 0; i < encoded.length; i += 1) {
+    bytes[i] = encoded.charCodeAt(i);
+  }
+  return bytes;
 }
 
 export function decodeUtf8(value) {
-  return textDecoder.decode(value);
+  const bytes = value instanceof Uint8Array ? value : new Uint8Array(value || []);
+  if (textDecoder) {
+    return textDecoder.decode(bytes);
+  }
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += 1) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  try {
+    return decodeURIComponent(escape(binary));
+  } catch {
+    return binary;
+  }
 }
 
 export function toBase64(bytes) {
@@ -80,3 +103,4 @@ export async function decryptJsonPayload(encrypted, { passphrase, aad }) {
     payloadChecksum,
   };
 }
+

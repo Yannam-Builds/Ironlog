@@ -257,7 +257,16 @@ export function buildFilterChipOptions(exercises = [], options = {}) {
       if (!map.has(key)) map.set(key, tag);
     });
   });
+  // Return only tags that actually resolve from indexed exercises.
+  // This intentionally hides zero-count chips in UI surfaces.
   return sortTags([...map.values()]);
+}
+
+export function getZeroCountMuscleChipWarnings(exercises = []) {
+  const active = new Set(
+    buildFilterChipOptions(exercises, { includeCategory: false, includeEquipment: false }).map((label) => label.toLowerCase())
+  );
+  return MUSCLE_FILTER_OPTIONS.filter((label) => !active.has(label.toLowerCase()));
 }
 
 export function matchesExerciseFilter(exercise, filter, options = {}) {
@@ -273,4 +282,3 @@ export function getExercisePrimaryFocus(exercise) {
 export function getExerciseFilterSummary(exercise, limit = 4) {
   return getExerciseFilterTags(exercise, { includeCategory: false, includeEquipment: false }).slice(0, limit);
 }
-

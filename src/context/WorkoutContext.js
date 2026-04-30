@@ -1,7 +1,8 @@
 
 import React, { createContext, useContext, useReducer, useEffect } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { epley } from '../utils/oneRM';
+import { convertKgToUnit } from '../utils/weightUnits';
+import { getLastPerformanceIndex } from '../services/workoutSessionStore';
 
 const WorkoutContext = createContext();
 
@@ -33,13 +34,18 @@ function reducer(state, action) {
     case 'SET_INPUT': {
       const { exIndex, weight, reps } = action;
       const prev = state.inputs[exIndex] || { weight: '', reps: '' };
+      const nextWeight = weight !== undefined ? weight : prev.weight;
+      const nextReps = reps !== undefined ? reps : prev.reps;
+      if (prev.weight === nextWeight && prev.reps === nextReps) {
+        return state;
+      }
       return {
         ...state,
         inputs: {
           ...state.inputs,
           [exIndex]: {
-            weight: weight !== undefined ? weight : prev.weight,
-            reps: reps !== undefined ? reps : prev.reps,
+            weight: nextWeight,
+            reps: nextReps,
           },
         },
       };
@@ -47,7 +53,8 @@ function reducer(state, action) {
 
     case 'LOG_SET': {
       const { exIndex, set } = action;
-      const orm = set.weight > 0 && set.reps > 0 ? epley(set.weight, set.reps) : 0;
+      const isTimeBased = String(set?.trackingType || '').startsWith('duration');
+      const orm = !isTimeBased && set.weight > 0 && set.reps > 0 ? epley(set.weight, set.reps) : 0;
       const newSet = { id: genId(), orm, type: 'normal', rpe: null, rir: null, note: null, ...set };
       const existing = state.setLog[exIndex] || [];
       return {
@@ -93,10 +100,17 @@ function reducer(state, action) {
       const sets = [...(state.setLog[exIndex] || [])];
       if (!sets[setIndex]) return state;
       const current = sets[setIndex];
+      const isTimeBased = String(current?.trackingType || '').startsWith('duration');
       const nextWeight = Number.isFinite(Number(weight)) ? Number(weight) : Number(current.weight || 0);
       const nextReps = Number.isFinite(Number(reps)) ? Number(reps) : Number(current.reps || 0);
-      const orm = nextWeight > 0 && nextReps > 0 ? epley(nextWeight, nextReps) : 0;
-      sets[setIndex] = { ...current, weight: nextWeight, reps: nextReps, orm };
+      const orm = !isTimeBased && nextWeight > 0 && nextReps > 0 ? epley(nextWeight, nextReps) : 0;
+      sets[setIndex] = {
+        ...current,
+        weight: nextWeight,
+        reps: nextReps,
+        orm,
+        ...(isTimeBased ? { durationSec: nextReps } : {}),
+      };
       return { ...state, setLog: { ...state.setLog, [exIndex]: sets } };
     }
 
@@ -209,11 +223,12 @@ function reducer(state, action) {
     case 'COPY_PREVIOUS': {
       // Pre-fill inputs from ghost data
       const newInputs = { ...state.inputs };
+      const weightUnit = action?.weightUnit || 'kg';
       Object.entries(state.ghostData).forEach(([idx, ghost]) => {
         const firstSet = ghost.sets?.[0];
         if (firstSet) {
           newInputs[idx] = {
-            weight: firstSet.weight > 0 ? String(firstSet.weight) : '',
+            weight: firstSet.weight > 0 ? String(convertKgToUnit(firstSet.weight, weightUnit, weightUnit === 'lbs' ? 0 : 1)) : '',
             reps: firstSet.reps > 0 ? String(firstSet.reps) : '',
           };
         }
@@ -243,8 +258,7 @@ export function WorkoutProvider({ children, exercises }) {
     if (!exercises || exercises.length === 0) return;
     (async () => {
       try {
-        const raw = await AsyncStorage.getItem('@ironlog/lastPerformance');
-        const lastPerf = raw ? JSON.parse(raw) : {};
+        const lastPerf = await getLastPerformanceIndex();
         const ghostData = {};
         exercises.forEach((ex, i) => {
           const id = ex.exerciseId || ex.name;

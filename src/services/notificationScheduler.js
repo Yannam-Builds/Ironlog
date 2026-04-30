@@ -1,4 +1,4 @@
-import * as Notifications from 'expo-notifications';
+import notifee, { AndroidImportance, AndroidCategory, AndroidStyle, TriggerType, AuthorizationStatus } from '@notifee/react-native';
 
 const MAX_DECISION_LOG = 64;
 const DEFAULT_TOPICS = {
@@ -228,10 +228,13 @@ function shouldNudgeForCadence({ history = [], targetDays = 3, sessionsRemaining
 function buildNextReminderDate({
   history = [],
   leadMinutes = 90,
+  preferredMinute = null,
 } = {}) {
   const now = new Date();
-  const usualMinute = inferUsualWorkoutMinute(history);
-  const targetMinute = clamp(usualMinute - leadMinutes, 5 * 60, 22 * 60);
+  const explicitMinute = Number(preferredMinute);
+  const targetMinute = Number.isFinite(explicitMinute)
+    ? clamp(Math.round(explicitMinute), 5 * 60, 22 * 60 + 30)
+    : clamp(inferUsualWorkoutMinute(history) - leadMinutes, 5 * 60, 22 * 60);
 
   const candidate = new Date(now);
   candidate.setHours(Math.floor(targetMinute / 60), targetMinute % 60, 0, 0);
@@ -256,7 +259,11 @@ function buildPlanAwareTrainingCandidate({
   if (!shouldNudgeForCadence({ history, targetDays, sessionsRemaining })) return null;
 
   const leadMinutes = clamp(Number(settings?.reminderLeadMinutes || 90), 60, 120);
-  const triggerDate = buildNextReminderDate({ history, leadMinutes });
+  const triggerDate = buildNextReminderDate({
+    history,
+    leadMinutes,
+    preferredMinute: settings?.dailyReminderTimeMinutes,
+  });
   const remaining = sessionsRemaining;
 
   return {
@@ -329,12 +336,13 @@ function avoidQuietHours(triggerDate, start, end) {
 }
 
 export async function getNotificationPermissionStatus() {
-  const perms = await Notifications.getPermissionsAsync();
-  const granted = !!(perms.granted || perms.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL);
+  const perms = await notifee.getNotificationSettings();
+  const granted = perms.authorizationStatus === AuthorizationStatus.AUTHORIZED
+    || perms.authorizationStatus === AuthorizationStatus.PROVISIONAL;
   return {
     granted,
-    canAskAgain: perms.canAskAgain !== false,
-    status: perms.status || (granted ? 'granted' : 'denied'),
+    canAskAgain: true,
+    status: granted ? 'granted' : 'denied',
     raw: perms,
   };
 }
@@ -342,8 +350,9 @@ export async function getNotificationPermissionStatus() {
 export async function ensureNotificationPermissions() {
   const perms = await getNotificationPermissionStatus();
   if (perms.granted) return true;
-  const requested = await Notifications.requestPermissionsAsync();
-  return !!requested.granted;
+  const requested = await notifee.requestPermission();
+  return requested.authorizationStatus === AuthorizationStatus.AUTHORIZED
+    || requested.authorizationStatus === AuthorizationStatus.PROVISIONAL;
 }
 
 export function buildDefaultNotificationCandidates({
@@ -553,13 +562,22 @@ export async function scheduleSmartNotification({
   const jittered = withJitter(windowed, Number(settings?.deliveryJitterMinutes || profile.deliveryJitterMinutes));
   const triggerDate = avoidQuietHours(jittered, quietBounds.start, quietBounds.end);
 
-  const notificationId = await Notifications.scheduleNotificationAsync({
-    content: {
-      title: chosen.title,
-      body: chosen.body,
-      sound: 'default',
+  const channelId = await notifee.createChannel({
+    id: 'ironlog-smart',
+    name: 'IRONLOG Smart Notifications',
+    importance: AndroidImportance.DEFAULT,
+  });
+
+  const notificationId = await notifee.createTriggerNotification({
+    title: chosen.title,
+    body: chosen.body,
+    android: {
+      channelId,
+      pressAction: { id: 'default' },
     },
-    trigger: triggerDate,
+  }, {
+    type: TriggerType.TIMESTAMP,
+    timestamp: triggerDate.getTime(),
   });
 
   if (typeof updateSettings === 'function') {
@@ -573,4 +591,80 @@ export async function scheduleSmartNotification({
     }));
   }
   return { ...chosen, notificationId, scheduledFor: triggerDate.toISOString() };
+}
+
+export async function sendTestNotification({
+  title = 'IRONLOG test notification',
+  body = 'Your notification pipeline is working.',
+} = {}) {
+  const granted = await ensureNotificationPermissions();
+  if (!granted) return null;
+  const channelId = await notifee.createChannel({
+    id: 'ironlog-smart',
+    name: 'IRONLOG Smart Notifications',
+    importance: AndroidImportance.DEFAULT,
+  });
+  return notifee.displayNotification({
+    title,
+    body,
+    android: {
+      channelId,
+      pressAction: { id: 'default' },
+    },
+  });
+}
+
+const ONGOING_WORKOUT_NOTIFICATION_ID = 'ironlog-ongoing-workout';
+
+export async function showOngoingWorkoutNotification({
+  title = 'Workout in progress',
+  body = '',
+  startedAtMs = Date.now(),
+} = {}) {
+  const granted = await ensureNotificationPermissions();
+  if (!granted) return null;
+
+  const channelId = await notifee.createChannel({
+    id: 'ironlog-workout',
+    name: 'IRONLOG Workout',
+    importance: AndroidImportance.LOW,
+  });
+
+  const compactTitle = String(title || 'Workout in progress').trim().slice(0, 40);
+  const rawBody = String(body || '').trim();
+  // First line is the compact body; full text goes into bigText for expanded view
+  const firstLine = rawBody.split('\n')[0].slice(0, 60);
+  const fullBody = rawBody.slice(0, 200);
+
+  return notifee.displayNotification({
+    id: ONGOING_WORKOUT_NOTIFICATION_ID,
+    title: compactTitle,
+    ...(firstLine ? { body: firstLine } : {}),
+    android: {
+      channelId,
+      pressAction: { id: 'default' },
+      ongoing: true,
+      autoCancel: false,
+      category: AndroidCategory.STOPWATCH,
+      showChronometer: true,
+      chronometerDirection: 'up',
+      showTimestamp: false,
+      timestamp: startedAtMs,
+      onlyAlertOnce: true,
+      localOnly: true,
+      color: '#FF5A1F',
+      smallIcon: 'notification_icon',
+      ...(fullBody ? {
+        style: { type: AndroidStyle.BIGTEXT, text: fullBody },
+      } : {}),
+    },
+  });
+}
+
+export async function clearOngoingWorkoutNotification() {
+  try {
+    await notifee.cancelNotification(ONGOING_WORKOUT_NOTIFICATION_ID);
+  } catch (_) {
+    // ignore
+  }
 }

@@ -47,20 +47,20 @@ export const THEMES = {
     name: 'MONET',
     bg:           isAndroid12 ? PlatformColor('@android:color/system_neutral1_900') : '#1A1A2E',
     card:         isAndroid12 ? PlatformColor('@android:color/system_neutral1_800') : '#252540',
-    cardBorder:   isAndroid12 ? PlatformColor('@android:color/system_neutral2_700') : '#383860',
+    cardBorder:   isAndroid12 ? PlatformColor('@android:color/system_neutral2_600') : '#52527A',
     surface:      isAndroid12 ? PlatformColor('@android:color/system_neutral1_800') : '#252540',
-    accent:       isAndroid12 ? PlatformColor('@android:color/system_accent1_300') : '#D0BCFF',
-    accentSoft:   isAndroid12 ? PlatformColor('@android:color/system_accent1_700') : '#3D3060',
-    accentBorder: isAndroid12 ? PlatformColor('@android:color/system_accent1_600') : '#6040A0',
+    accent:       isAndroid12 ? PlatformColor('@android:color/system_accent1_400') : '#D0BCFF',
+    accentSoft:   isAndroid12 ? PlatformColor('@android:color/system_accent1_100') : '#3D3060',
+    accentBorder: isAndroid12 ? PlatformColor('@android:color/system_accent1_200') : '#6040A0',
     text:         isAndroid12 ? PlatformColor('@android:color/system_neutral1_10')  : '#FFFFFF',
     subtext:      isAndroid12 ? PlatformColor('@android:color/system_neutral2_200') : '#CCCCE0',
-    muted:        isAndroid12 ? PlatformColor('@android:color/system_neutral2_400') : '#9090BB',
-    faint:        isAndroid12 ? PlatformColor('@android:color/system_neutral2_700') : '#383860',
+    muted:        isAndroid12 ? PlatformColor('@android:color/system_neutral2_300') : '#9090BB',
+    faint:        isAndroid12 ? PlatformColor('@android:color/system_neutral2_700') : '#454567',
     tabBg:        isAndroid12 ? PlatformColor('@android:color/system_neutral1_900') : '#1A1A2E',
-    gold: '#F5C842',
-    textOnAccent: '#1A1A2E',
-    onCard: isAndroid12 ? PlatformColor('@android:color/system_neutral1_10') : '#FFFFFF',
-    ghostText: isAndroid12 ? PlatformColor('@android:color/system_neutral2_600') : '#505070',
+    gold:         isAndroid12 ? PlatformColor('@android:color/system_accent3_300') : '#F5C842',
+    textOnAccent: isAndroid12 ? PlatformColor('@android:color/system_neutral1_900') : '#1A1A2E',
+    onCard:       isAndroid12 ? PlatformColor('@android:color/system_neutral1_10') : '#FFFFFF',
+    ghostText:    isAndroid12 ? PlatformColor('@android:color/system_neutral2_500') : '#505070',
   },
   light: {
     name: 'LIGHT',
@@ -84,3 +84,51 @@ export const THEMES = {
 };
 
 export const DEFAULT_THEME = 'amoled';
+
+// Radius scale - use these instead of raw numbers in new UI work.
+export const RADIUS = {
+  xs:   6,
+  sm:   10,
+  md:   14,
+  lg:   18,
+  xl:   24,
+  full: 999,
+};
+
+// Elevation scale - platform-correct shadow presets.
+export const ELEVATION = {
+  card: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  raised: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.14,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  sheet: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 12,
+  },
+};
+
+// Typography scale - prefer these tokens on new or touched surfaces.
+export const TYPE = {
+  display: { fontSize: 32, fontWeight: '900', letterSpacing: -0.5, lineHeight: 36 },
+  title:   { fontSize: 20, fontWeight: '900', letterSpacing: 0.3,  lineHeight: 26 },
+  section: { fontSize: 16, fontWeight: '800', letterSpacing: 0.2,  lineHeight: 22 },
+  body:    { fontSize: 14, fontWeight: '500', letterSpacing: 0,    lineHeight: 20 },
+  meta:    { fontSize: 12, fontWeight: '500', letterSpacing: 0.1,  lineHeight: 16 },
+  eyebrow: { fontSize: 10, fontWeight: '800', letterSpacing: 2.5,  lineHeight: 14 },
+  button:  { fontSize: 12, fontWeight: '800', letterSpacing: 1.5,  lineHeight: 16 },
+  micro:   { fontSize: 9,  fontWeight: '800', letterSpacing: 1.2,  lineHeight: 12 },
+};
+

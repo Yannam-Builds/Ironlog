@@ -98,6 +98,7 @@ export function buildAdaptiveDayTargets({
   day = null,
   history = [],
   goalMode = 'hypertrophy',
+  progressionStyle = 'balanced',
 } = {}) {
   if (!day?.exercises?.length) return [];
   const mode = getGoalModeConfig(goalMode);
@@ -114,6 +115,7 @@ export function buildAdaptiveDayTargets({
           prescribedReps: parseRepTarget(exercise?.reps, 8),
         },
         history,
+        progressionStyle,
       });
       if (!suggestion) return null;
 

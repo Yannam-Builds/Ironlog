@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as FileSystem from 'expo-file-system';
-import * as Sharing from 'expo-sharing';
-import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from '../platform/filesystem';
+import * as Sharing from '../platform/sharing';
+import * as DocumentPicker from '../platform/documentPicker';
 
 const KEYS = {
   PLANS: 'ironlog_plans',
@@ -14,7 +14,7 @@ const KEYS = {
 
 export { KEYS };
 
-// ── Plans ──────────────────────────────────────────────────────────────────
+// --- Plans -------------------------------------------------------------------
 export async function savePlans(plans) {
   try {
     await AsyncStorage.setItem(KEYS.PLANS, JSON.stringify(plans));
@@ -33,7 +33,7 @@ export async function loadPlans() {
   }
 }
 
-// ── History ────────────────────────────────────────────────────────────────
+// --- History -----------------------------------------------------------------
 export async function saveHistory(history) {
   try {
     await AsyncStorage.setItem(KEYS.HISTORY, JSON.stringify(history));
@@ -52,7 +52,7 @@ export async function loadHistory() {
   }
 }
 
-// ── PRs ────────────────────────────────────────────────────────────────────
+// --- PRs ---------------------------------------------------------------------
 export async function savePRs(prs) {
   try {
     await AsyncStorage.setItem(KEYS.PRS, JSON.stringify(prs));
@@ -71,7 +71,7 @@ export async function loadPRs() {
   }
 }
 
-// ── Settings ───────────────────────────────────────────────────────────────
+// --- Settings ----------------------------------------------------------------
 export async function saveSettings(settings) {
   try {
     await AsyncStorage.setItem(KEYS.SETTINGS, JSON.stringify(settings));
@@ -90,7 +90,7 @@ export async function loadSettings() {
   }
 }
 
-// ── Body Weight ────────────────────────────────────────────────────────────
+// --- Body Weight --------------------------------------------------------------
 export async function saveBodyWeight(entries) {
   try {
     await AsyncStorage.setItem(KEYS.BODY_WEIGHT, JSON.stringify(entries));
@@ -109,7 +109,7 @@ export async function loadBodyWeight() {
   }
 }
 
-// ── Export / Import ────────────────────────────────────────────────────────
+// --- Export / Import ----------------------------------------------------------
 export async function exportAllData() {
   try {
     const [plans, history, prs, settings, bodyWeight] = await Promise.all([
@@ -189,3 +189,5 @@ export async function importAllData() {
     return { success: false, error: e.message };
   }
 }
+
+

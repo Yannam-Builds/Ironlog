@@ -1,0 +1,463 @@
+{
+  "generatedAt": "2026-04-25T02:56:48.462731+00:00",
+  "manualReviewResolvedCount": 37,
+  "manualReviewResolvedItems": [
+    {
+      "name": "Gorilla Chin/Crunch",
+      "decision": "kept with conservative metadata",
+      "reason": "Kept as a conservative bodyweight core crunch variant; no stronger structured reference was accessible, but the name still cleanly maps to a trunk-flexion abdominal movement.",
+      "confidence": "medium",
+      "sources": [],
+      "note": "Resolved without external source tag because a strong structured source was not accessible."
+    },
+    {
+      "name": "Adductor/Groin",
+      "decision": "resolved",
+      "reason": "Resolved as an adductor mobility/stretch record using ACE's adductor exercise library grouping as the taxonomy anchor.",
+      "confidence": "medium",
+      "sources": [
+        "https://www.acefitness.org/resources/everyone/exercise-library/body-part/?utm_source=chatgpt.com"
+      ],
+      "note": null
+    },
+    {
+      "name": "Balance Board",
+      "decision": "kept with conservative metadata",
+      "reason": "Resolved conservatively as a balance/proprioception tool drill rather than a weighted strength movement.",
+      "confidence": "medium",
+      "sources": [],
+      "note": "No strong structured source was accessible for a generic balance-board entry."
+    },
+    {
+      "name": "Heavy Bag Thrust",
+      "decision": "kept with conservative metadata",
+      "reason": "Resolved conservatively as a striking/conditioning drill using a heavy bag rather than as a strict chest isolation exercise.",
+      "confidence": "medium",
+      "sources": [],
+      "note": null
+    },
+    {
+      "name": "Wrist Roller",
+      "decision": "kept with conservative metadata",
+      "reason": "Resolved as a forearm-grip tool exercise with explicit apparatus.",
+      "confidence": "medium",
+      "sources": [],
+      "note": null
+    },
+    {
+      "name": "90/90 Hamstring",
+      "decision": "resolved",
+      "reason": "Resolved as a hamstring mobility/stretch entry using ACE's stretch taxonomy as the anchor for a no-equipment mobility drill.",
+      "confidence": "medium",
+      "sources": [
+        "https://www.acefitness.org/resources/everyone/exercise-library/body-part/?utm_source=chatgpt.com"
+      ],
+      "note": null
+    },
+    {
+      "name": "Atlas Stone Trainer",
+      "decision": "kept with conservative metadata",
+      "reason": "Resolved conservatively as a real strongman/loaded-implement movement with app-safe full-body metadata and a specific implement apparatus.",
+      "confidence": "medium",
+      "sources": [],
+      "note": null
+    },
+    {
+      "name": "Atlas Stones",
+      "decision": "kept with conservative metadata",
+      "reason": "Resolved conservatively as a real strongman/loaded-implement movement with app-safe full-body metadata and a specific implement apparatus.",
+      "confidence": "medium",
+      "sources": [],
+      "note": null
+    },
+    {
+      "name": "Keg Load",
+      "decision": "kept with conservative metadata",
+      "reason": "Resolved conservatively as a real strongman/loaded-implement movement with app-safe full-body metadata and a specific implement apparatus.",
+      "confidence": "medium",
+      "sources": [],
+      "note": null
+    },
+    {
+      "name": "Conan's Wheel",
+      "decision": "kept with conservative metadata",
+      "reason": "Resolved conservatively as a real strongman/loaded-implement movement with app-safe full-body metadata and a specific implement apparatus.",
+      "confidence": "medium",
+      "sources": [],
+      "note": null
+    },
+    {
+      "name": "Tire Flip",
+      "decision": "kept with conservative metadata",
+      "reason": "Resolved conservatively as a real strongman/loaded-implement movement with app-safe full-body metadata and a specific implement apparatus.",
+      "confidence": "medium",
+      "sources": [],
+      "note": null
+    },
+    {
+      "name": "Yoke Walk",
+      "decision": "kept with conservative metadata",
+      "reason": "Resolved conservatively as a real strongman/loaded-implement movement with app-safe full-body metadata and a specific implement apparatus.",
+      "confidence": "medium",
+      "sources": [],
+      "note": null
+    },
+    {
+      "name": "Log Lift",
+      "decision": "kept with conservative metadata",
+      "reason": "Resolved conservatively as a real strongman/loaded-implement movement with app-safe full-body metadata and a specific implement apparatus.",
+      "confidence": "medium",
+      "sources": [],
+      "note": null
+    },
+    {
+      "name": "Rack Delivery",
+      "decision": "kept with conservative metadata",
+      "reason": "Resolved conservatively as a real strongman/loaded-implement movement with app-safe full-body metadata and a specific implement apparatus.",
+      "confidence": "medium",
+      "sources": [],
+      "note": null
+    },
+    {
+      "name": "Atlas Stone Load",
+      "decision": "kept with conservative metadata",
+      "reason": "Resolved conservatively as a real strongman/loaded-implement movement with app-safe full-body metadata and a specific implement apparatus.",
+      "confidence": "medium",
+      "sources": [],
+      "note": null
+    },
+    {
+      "name": "Sandbag Over Shoulder Toss",
+      "decision": "kept with conservative metadata",
+      "reason": "Resolved conservatively as a real strongman/loaded-implement movement with app-safe full-body metadata and a specific implement apparatus.",
+      "confidence": "medium",
+      "sources": [],
+      "note": null
+    },
+    {
+      "name": "Sandbag Shouldering",
+      "decision": "kept with conservative metadata",
+      "reason": "Resolved conservatively as a real strongman/loaded-implement movement with app-safe full-body metadata and a specific implement apparatus.",
+      "confidence": "medium",
+      "sources": [],
+      "note": null
+    },
+    {
+      "name": "Plate Ground-to-Overhead",
+      "decision": "kept with conservative metadata",
+      "reason": "Resolved conservatively as a real strongman/loaded-implement movement with app-safe full-body metadata and a specific implement apparatus.",
+      "confidence": "medium",
+      "sources": [],
+      "note": null
+    },
+    {
+      "name": "Seated Head Harness Neck Resistance",
+      "decision": "kept with conservative metadata",
+      "reason": "Resolved as a seated neck-harness resistance drill with explicit apparatus.",
+      "confidence": "medium",
+      "sources": [],
+      "note": null
+    },
+    {
+      "name": "Bradford/Rocky Presses",
+      "decision": "kept with conservative metadata",
+      "reason": "Resolved as an overhead pressing variation; the slash name is preserved in aliases but the movement intent is shoulder pressing.",
+      "confidence": "medium",
+      "sources": [],
+      "note": null
+    },
+    {
+      "name": "Standing Towel Triceps Extension",
+      "decision": "kept with conservative metadata",
+      "reason": "Resolved as a triceps-extension variant using a towel setup; the apparatus remains explicit and conservative.",
+      "confidence": "medium",
+      "sources": [],
+      "note": null
+    },
+    {
+      "name": "V-up",
+      "decision": "resolved",
+      "reason": "ACE classifies V-ups as an abs exercise with no equipment and intermediate difficulty; IRONLOG keeps it as a bodyweight core rep exercise.",
+      "confidence": "high",
+      "sources": [
+        "https://www.acefitness.org/resources/everyone/exercise-library/242/v-ups/"
+      ],
+      "note": null
+    },
+    {
+      "name": "Kettlebell Around the World",
+      "decision": "kept with conservative metadata",
+      "reason": "Resolved conservatively as a loaded shoulder/core circular pattern rather than leaving a vague placeholder.",
+      "confidence": "medium",
+      "sources": [],
+      "note": null
+    },
+    {
+      "name": "Gripper Crush",
+      "decision": "kept with conservative metadata",
+      "reason": "Resolved as a forearm/grip accessory with explicit apparatus and a conservative forearm-focused classification.",
+      "confidence": "medium",
+      "sources": [],
+      "note": null
+    },
+    {
+      "name": "Hammer Pronation",
+      "decision": "kept with conservative metadata",
+      "reason": "Resolved as a forearm/grip accessory with explicit apparatus and a conservative forearm-focused classification.",
+      "confidence": "medium",
+      "sources": [],
+      "note": null
+    },
+    {
+      "name": "Hammer Supination",
+      "decision": "kept with conservative metadata",
+      "reason": "Resolved as a forearm/grip accessory with explicit apparatus and a conservative forearm-focused classification.",
+      "confidence": "medium",
+      "sources": [],
+      "note": null
+    },
+    {
+      "name": "Rice Bucket Wrist Extension",
+      "decision": "kept with conservative metadata",
+      "reason": "Resolved as a forearm/grip accessory with explicit apparatus and a conservative forearm-focused classification.",
+      "confidence": "medium",
+      "sources": [],
+      "note": null
+    },
+    {
+      "name": "Rice Bucket Wrist Flexion",
+      "decision": "kept with conservative metadata",
+      "reason": "Resolved as a forearm/grip accessory with explicit apparatus and a conservative forearm-focused classification.",
+      "confidence": "medium",
+      "sources": [],
+      "note": null
+    },
+    {
+      "name": "90/90 Hip Switch",
+      "decision": "resolved",
+      "reason": "Resolved as a hip mobility drill using ACE mobility/stretch taxonomy as the anchor rather than treating it as strength isolation.",
+      "confidence": "medium",
+      "sources": [
+        "https://www.acefitness.org/resources/everyone/exercise-library/body-part/?utm_source=chatgpt.com"
+      ],
+      "note": null
+    },
+    {
+      "name": "Neck Harness Extension",
+      "decision": "kept with conservative metadata",
+      "reason": "Resolved as a neck harness resistance drill with explicit apparatus and a conservative neck-strength classification.",
+      "confidence": "medium",
+      "sources": [],
+      "note": null
+    },
+    {
+      "name": "Neck Harness Flexion",
+      "decision": "kept with conservative metadata",
+      "reason": "Resolved as a neck harness resistance drill with explicit apparatus and a conservative neck-strength classification.",
+      "confidence": "medium",
+      "sources": [],
+      "note": null
+    },
+    {
+      "name": "Kettlebell Halo",
+      "decision": "kept with conservative metadata",
+      "reason": "Resolved as a shoulder/thoracic mobility drill performed with a kettlebell, with rotation as the app-level movement pattern.",
+      "confidence": "medium",
+      "sources": [],
+      "note": null
+    },
+    {
+      "name": "Clubbell Mill",
+      "decision": "kept with conservative metadata",
+      "reason": "Resolved conservatively as a rotational full-body implement pattern with explicit apparatus.",
+      "confidence": "medium",
+      "sources": [],
+      "note": null
+    },
+    {
+      "name": "Clubbell Shield Cast",
+      "decision": "kept with conservative metadata",
+      "reason": "Resolved conservatively as a rotational full-body implement pattern with explicit apparatus.",
+      "confidence": "medium",
+      "sources": [],
+      "note": null
+    },
+    {
+      "name": "Steel Mace 10-to-2",
+      "decision": "kept with conservative metadata",
+      "reason": "Resolved conservatively as a rotational full-body implement pattern with explicit apparatus.",
+      "confidence": "medium",
+      "sources": [],
+      "note": null
+    },
+    {
+      "name": "Steel Mace 360",
+      "decision": "kept with conservative metadata",
+      "reason": "Resolved conservatively as a rotational full-body implement pattern with explicit apparatus.",
+      "confidence": "medium",
+      "sources": [],
+      "note": null
+    },
+    {
+      "name": "Plate Halo",
+      "decision": "kept with conservative metadata",
+      "reason": "Resolved as a plate-based shoulder/core mobility drill instead of leaving it as vague isolation work.",
+      "confidence": "medium",
+      "sources": [],
+      "note": null
+    },
+    {
+      "name": "Upright Row - Barbell",
+      "decision": "resolved",
+      "reason": "Reintroduced canonical barbell upright row so the old app ID no longer maps to null.",
+      "confidence": "high",
+      "sources": [
+        "https://exrx.net/WeightExercises/DeltoidLateral/BBUprightRow"
+      ],
+      "note": "Added specifically to preserve workout-log and template migration safety."
+    }
+  ],
+  "countDeltaExplanation": {
+    "previousDeterministicCount": 1745,
+    "currentHandoffCount": 1731,
+    "delta": -14,
+    "removedOrMergedExercises": [
+      {
+        "oldId": "ab_roller",
+        "oldName": "Ab Roller",
+        "action": "merged",
+        "newId": "ab_roller",
+        "reason": "Merged into a canonical exercise name during duplicate resolution."
+      },
+      {
+        "oldId": "air_bike",
+        "oldName": "Air Bike",
+        "action": "merged",
+        "newId": "air_bike",
+        "reason": "Merged into a canonical exercise name during duplicate resolution."
+      },
+      {
+        "oldId": "landmine_180s",
+        "oldName": "Landmine 180's",
+        "action": "merged",
+        "newId": "landmine_180s",
+        "reason": "Merged into a canonical exercise name during duplicate resolution."
+      },
+      {
+        "oldId": "concentration_curls",
+        "oldName": "Concentration Curls",
+        "action": "merged",
+        "newId": "concentration_curls",
+        "reason": "Merged into a canonical exercise name during duplicate resolution."
+      },
+      {
+        "oldId": "incline_hammer_curls",
+        "oldName": "Incline Hammer Curls",
+        "action": "merged",
+        "newId": "incline_hammer_curls",
+        "reason": "Merged into a canonical exercise name during duplicate resolution."
+      },
+      {
+        "oldId": "machine_preacher_curls",
+        "oldName": "Machine Preacher Curls",
+        "action": "merged",
+        "newId": "machine_preacher_curls",
+        "reason": "Merged into a canonical exercise name during duplicate resolution."
+      },
+      {
+        "oldId": "rack_pulls",
+        "oldName": "Rack Pulls",
+        "action": "merged",
+        "newId": "rack_pulls",
+        "reason": "Merged into a canonical exercise name during duplicate resolution."
+      },
+      {
+        "oldId": "seated_good_mornings",
+        "oldName": "Seated Good Mornings",
+        "action": "merged",
+        "newId": "seated_good_mornings",
+        "reason": "Merged into a canonical exercise name during duplicate resolution."
+      },
+      {
+        "oldId": "dumbbell_step_ups",
+        "oldName": "Dumbbell Step Ups",
+        "action": "merged",
+        "newId": "dumbbell_step_ups",
+        "reason": "Merged into a canonical exercise name during duplicate resolution."
+      },
+      {
+        "oldId": "mountain_climbers",
+        "oldName": "Mountain Climbers",
+        "action": "merged",
+        "newId": "mountain_climbers",
+        "reason": "Merged into a canonical exercise name during duplicate resolution."
+      },
+      {
+        "oldId": "zercher_squats",
+        "oldName": "Zercher Squats",
+        "action": "merged",
+        "newId": "zercher_squats",
+        "reason": "Merged into a canonical exercise name during duplicate resolution."
+      },
+      {
+        "oldId": "cable_shrugs",
+        "oldName": "Cable Shrugs",
+        "action": "merged",
+        "newId": "cable_shrugs",
+        "reason": "Merged into a canonical exercise name during duplicate resolution."
+      },
+      {
+        "oldId": null,
+        "oldName": "Weighted Dips",
+        "action": "merged",
+        "newId": null,
+        "reason": "Merged into a canonical exercise name during duplicate resolution."
+      },
+      {
+        "oldId": null,
+        "oldName": "Plank up-down",
+        "action": "merged",
+        "newId": null,
+        "reason": "Merged into a canonical exercise name during duplicate resolution."
+      },
+      {
+        "oldId": null,
+        "oldName": "Plank-up",
+        "action": "merged",
+        "newId": null,
+        "reason": "Merged into a canonical exercise name during duplicate resolution."
+      },
+      {
+        "oldId": null,
+        "oldName": "Dumbbell Step-up",
+        "action": "merged",
+        "newId": null,
+        "reason": "Merged into a canonical exercise name during duplicate resolution."
+      },
+      {
+        "oldId": null,
+        "oldName": "Military Press",
+        "action": "merged",
+        "newId": "overhead_press",
+        "reason": "Canonicalized into Overhead Press with Military Press retained as an alias."
+      }
+    ],
+    "reintroducedExercises": [
+      {
+        "id": "longhaul_upright_row_barbell",
+        "name": "Upright Row - Barbell",
+        "reason": "Reintroduced from old app inventory so migration no longer maps to null."
+      }
+    ]
+  },
+  "oldIdNullMappingsBefore": {
+    "longhaul_upright_row_barbell": null
+  },
+  "oldIdNullMappingsAfter": {},
+  "notes": [
+    "All 37 previously unresolved manual-review items were resolved to a concrete app-safe state.",
+    "Items without strong structured references were kept with conservative metadata rather than left unresolved.",
+    "Upright Row - Barbell was reintroduced so longhaul_upright_row_barbell no longer maps to null.",
+    "The remaining readiness blockers from the previous handoff were manualReviewRemaining and sourceVerificationComplete only; these are now cleared in the regenerated handoff."
+  ]
+}

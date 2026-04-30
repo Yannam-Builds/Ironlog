@@ -1,7 +1,7 @@
-import * as DocumentPicker from 'expo-document-picker';
-import * as FileSystem from 'expo-file-system/legacy';
-import * as Sharing from 'expo-sharing';
-import Constants from 'expo-constants';
+import * as DocumentPicker from '../platform/documentPicker';
+import * as FileSystem from '../platform/filesystem';
+import * as Sharing from '../platform/sharing';
+import { APP_VERSION } from '../platform/appInfo';
 import { getExerciseIndex } from './ExerciseLibraryService';
 import { importParsedCSV } from './CSVImport';
 import { normalizeAliasKey, resolveCanonicalExerciseName } from '../data/exerciseAliases';
@@ -240,7 +240,7 @@ export function buildOpenWeightBundleFromHistory(history = []) {
       schema: 'https://openweight.org/schemas/workout-log.schema.json',
       exportedAt: new Date().toISOString(),
       source: 'IRONLOG',
-      appVersion: Constants.expoConfig?.version || '1.1.0',
+      appVersion: APP_VERSION,
     },
     workoutLogs,
     'ironlog:metadata': {
@@ -262,3 +262,5 @@ export async function exportOpenWeightBundleAndShare(history = []) {
   });
   return bundle;
 }
+
+

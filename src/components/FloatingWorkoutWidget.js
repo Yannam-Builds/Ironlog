@@ -1,10 +1,16 @@
 
 import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import ReAnimated, {
+  useSharedValue,
+  withSpring,
+  withTiming,
+  useAnimatedStyle,
+} from 'react-native-reanimated';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useActiveBanner } from '../context/ActiveWorkoutBannerContext';
 import { useTheme } from '../context/ThemeContext';
-import { triggerHaptic } from '../services/hapticsEngine';
+import { haptic } from '../services/hapticsEngine';
 
 function formatElapsed(ms) {
   const s = Math.floor(ms / 1000);
@@ -18,6 +24,20 @@ export default function FloatingWorkoutWidget({ navigation }) {
   const { banner } = useActiveBanner();
   const colors = useTheme();
   const [elapsed, setElapsed] = useState(0);
+
+  const scaleAnim   = useSharedValue(banner ? 1 : 0.85);
+  const opacityAnim = useSharedValue(banner ? 1 : 0);
+
+  useEffect(() => {
+    scaleAnim.value   = withSpring(banner ? 1 : 0.85, { stiffness: 340, damping: 26 });
+    opacityAnim.value = withTiming(banner ? 1 : 0, { duration: 180 });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [!!banner]);
+
+  const wrapStyle = useAnimatedStyle(() => ({
+    opacity: opacityAnim.value,
+    transform: [{ scale: scaleAnim.value }],
+  }));
 
   useEffect(() => {
     if (!banner || !banner.startTime) {
@@ -35,47 +55,55 @@ export default function FloatingWorkoutWidget({ navigation }) {
   const timerDisplay = banner.startTime ? formatElapsed(elapsed) : '--:--';
 
   return (
-    <TouchableOpacity
-      style={[s.pill, { backgroundColor: colors.accent }]}
-      onPress={() => {
-        triggerHaptic('selection').catch(() => {});
-        navigation.navigate('ActiveWorkout', { planIndex: banner.planIndex, dayIndex: banner.dayIndex });
-      }}
-      activeOpacity={0.85}>
-      <View style={s.left}>
-        <Ionicons name="barbell-outline" size={16} color={colors.textOnAccent || '#fff'} />
-        <View>
-          <Text style={[s.name, { color: colors.textOnAccent || '#fff' }]} numberOfLines={1}>{banner.dayName}</Text>
-          <Text style={[s.sub, { color: colors.textOnAccent || 'rgba(255,255,255,0.8)' }]}>WORKOUT IN PROGRESS</Text>
+    <ReAnimated.View style={wrapStyle}>
+      <TouchableOpacity
+        style={[s.pill, {
+          backgroundColor: colors.accent,
+          elevation: 8,
+          shadowColor: colors.accent,
+          shadowOffset: { width: 0, height: 3 },
+          shadowOpacity: 0.35,
+          shadowRadius: 10,
+        }]}
+        onPress={() => {
+        haptic('selection');
+          navigation.navigate('ActiveWorkout', { planIndex: banner.planIndex, dayIndex: banner.dayIndex });
+        }}
+        activeOpacity={0.85}
+      >
+        <View style={s.left}>
+          <Ionicons name="barbell-outline" size={13} color="rgba(255,255,255,0.9)" />
+          <View>
+            <Text style={s.name} numberOfLines={1}>{banner.dayName}</Text>
+            <Text style={s.sub}>IN PROGRESS</Text>
+          </View>
         </View>
-      </View>
-      <View style={s.right}>
-        <Text style={[s.timer, { color: colors.textOnAccent || '#fff' }]}>{timerDisplay}</Text>
-        <Ionicons name="chevron-forward" size={16} color={colors.textOnAccent || '#fff'} style={{ opacity: 0.7 }} />
-      </View>
-    </TouchableOpacity>
+        <View style={s.right}>
+          <Text style={s.timer}>{timerDisplay}</Text>
+          <Ionicons name="chevron-forward" size={12} color="rgba(255,255,255,0.65)" />
+        </View>
+      </TouchableOpacity>
+    </ReAnimated.View>
   );
 }
 
 const s = StyleSheet.create({
   pill: {
-    marginHorizontal: 12,
-    marginBottom: 8,
-    borderRadius: 14,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    marginBottom: 2,
+    alignSelf: 'center',
+    width: '82%',
+    maxWidth: 304,
+    minWidth: 220,
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    elevation: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
   },
-  left: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
-  name: { color: '#fff', fontWeight: '800', fontSize: 14, letterSpacing: 0.5 },
-  sub: { color: 'rgba(255,255,255,0.75)', fontSize: 9, letterSpacing: 2, marginTop: 1 },
-  right: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  timer: { color: '#fff', fontWeight: '900', fontSize: 16, letterSpacing: 1 },
+  left: { flexDirection: 'row', alignItems: 'center', gap: 7, flex: 1, minWidth: 0 },
+  name: { color: '#fff', fontWeight: '800', fontSize: 11, letterSpacing: 0.5 },
+  sub: { color: 'rgba(255,255,255,0.68)', fontSize: 8, letterSpacing: 1.5, marginTop: 1, fontWeight: '700' },
+  right: { flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: 10 },
+  timer: { color: '#fff', fontWeight: '900', fontSize: 12, letterSpacing: 0.5, minWidth: 44, textAlign: 'right' },
 });

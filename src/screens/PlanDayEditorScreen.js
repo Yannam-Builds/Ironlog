@@ -1,16 +1,22 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   TextInput, Modal, Dimensions,
 } from 'react-native';
-const SCREEN_H = Dimensions.get('window').height;
+import { MagicScroll } from '@appandflow/react-native-magic-scroll';
 import CustomAlert from '../components/CustomAlert';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useApp } from '../context/AppContext';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import useWatermelonAppData from '../hooks/useWatermelonAppData';
 import ExerciseCard from '../components/ExerciseCard';
 import { generateId } from '../utils/calculations';
-import { EXERCISES, MUSCLE_GROUPS } from '../data/exerciseLibrary';
-import { getExerciseIndex } from '../services/ExerciseLibraryService';
+import { EXERCISES } from '../data/exerciseLibrary';
+import { getExerciseIndex, saveCustomExercise } from '../services/ExerciseLibraryService';
+import { buildFilterChipOptions, matchesExerciseFilter } from '../utils/exerciseFilters';
+import useKeyboardInset from '../hooks/useKeyboardInset';
+import { buildExerciseSearchIndex, queryExerciseSearch } from '../services/exerciseSearchAdapter';
+import { getFavoriteExerciseIds, setFavoriteExerciseIds } from '../services/favoriteExercisesService';
+
+const SCREEN_H = Dimensions.get('window').height;
 
 const C = {
   BG: '#080808',
@@ -21,10 +27,26 @@ const C = {
   SECONDARY: '#666',
   MUTED: '#333',
   PUSH: '#FF4500',
-  PULL: '#0080FF',
-  LEGS: '#00C170',
   DANGER: '#CC2222',
 };
+
+function normalizeNameKey(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function inferTrackingType(exercise = {}) {
+  const tracking = String(exercise?.trackingType || '').trim().toLowerCase();
+  if (tracking) return tracking;
+  const category = String(exercise?.category || '').toLowerCase();
+  const name = String(exercise?.name || '').toLowerCase();
+  if (/(cardio|conditioning|bike|treadmill|erg|run|row)/.test(`${category} ${name}`)) {
+    return 'duration_distance';
+  }
+  if (/(plank|hold|isometric|mobility|stretch)/.test(`${category} ${name}`)) {
+    return 'duration';
+  }
+  return 'weight_reps';
+}
 
 function EditExerciseModal({ visible, exercise, onSave, onClose }) {
   const [name, setName] = useState(exercise?.name || '');
@@ -35,16 +57,15 @@ function EditExerciseModal({ visible, exercise, onSave, onClose }) {
   const [isHeavy, setIsHeavy] = useState(exercise?.isHeavy || false);
   const [isWarmup, setIsWarmup] = useState(exercise?.isWarmup || false);
 
-  React.useEffect(() => {
-    if (exercise) {
-      setName(exercise.name || '');
-      setSets(String(exercise.sets || 3));
-      setReps(exercise.reps || '10');
-      setRest(String(exercise.defaultRestSeconds || 120));
-      setNotes(exercise.notes || '');
-      setIsHeavy(exercise.isHeavy || false);
-      setIsWarmup(exercise.isWarmup || false);
-    }
+  useEffect(() => {
+    if (!exercise) return;
+    setName(exercise.name || '');
+    setSets(String(exercise.sets || 3));
+    setReps(exercise.reps || '10');
+    setRest(String(exercise.defaultRestSeconds || 120));
+    setNotes(exercise.notes || '');
+    setIsHeavy(exercise.isHeavy || false);
+    setIsWarmup(exercise.isWarmup || false);
   }, [exercise]);
 
   function handleSave() {
@@ -52,9 +73,9 @@ function EditExerciseModal({ visible, exercise, onSave, onClose }) {
     onSave({
       ...exercise,
       name: name.trim(),
-      sets: parseInt(sets) || 3,
+      sets: parseInt(sets, 10) || 3,
       reps: reps.trim() || '10',
-      defaultRestSeconds: parseInt(rest) || 120,
+      defaultRestSeconds: parseInt(rest, 10) || 120,
       notes: notes.trim(),
       isHeavy,
       isWarmup,
@@ -68,42 +89,19 @@ function EditExerciseModal({ visible, exercise, onSave, onClose }) {
           <Text style={modalStyles.title}>EDIT EXERCISE</Text>
           <ScrollView showsVerticalScrollIndicator={false}>
             <Text style={modalStyles.label}>Name</Text>
-            <TextInput
-              style={modalStyles.input}
-              value={name}
-              onChangeText={setName}
-              placeholderTextColor={C.SECONDARY}
-            />
+            <TextInput style={modalStyles.input} value={name} onChangeText={setName} placeholderTextColor={C.SECONDARY} />
             <View style={modalStyles.row}>
               <View style={modalStyles.half}>
                 <Text style={modalStyles.label}>Sets</Text>
-                <TextInput
-                  style={modalStyles.input}
-                  value={sets}
-                  onChangeText={setSets}
-                  keyboardType="numeric"
-                  placeholderTextColor={C.SECONDARY}
-                />
+                <TextInput style={modalStyles.input} value={sets} onChangeText={setSets} keyboardType="numeric" placeholderTextColor={C.SECONDARY} />
               </View>
               <View style={modalStyles.half}>
-                <Text style={modalStyles.label}>Reps</Text>
-                <TextInput
-                  style={modalStyles.input}
-                  value={reps}
-                  onChangeText={setReps}
-                  placeholderTextColor={C.SECONDARY}
-                  placeholder="e.g. 8-12"
-                />
+                <Text style={modalStyles.label}>Reps / Time</Text>
+                <TextInput style={modalStyles.input} value={reps} onChangeText={setReps} placeholderTextColor={C.SECONDARY} placeholder="e.g. 8-12 or 60" />
               </View>
             </View>
             <Text style={modalStyles.label}>Rest (seconds)</Text>
-            <TextInput
-              style={modalStyles.input}
-              value={rest}
-              onChangeText={setRest}
-              keyboardType="numeric"
-              placeholderTextColor={C.SECONDARY}
-            />
+            <TextInput style={modalStyles.input} value={rest} onChangeText={setRest} keyboardType="numeric" placeholderTextColor={C.SECONDARY} />
             <Text style={modalStyles.label}>Notes</Text>
             <TextInput
               style={[modalStyles.input, { height: 80 }]}
@@ -114,21 +112,11 @@ function EditExerciseModal({ visible, exercise, onSave, onClose }) {
               placeholder="Cues, technique notes..."
             />
             <View style={modalStyles.togglesRow}>
-              <TouchableOpacity
-                style={[modalStyles.toggle, isHeavy && modalStyles.toggleActive]}
-                onPress={() => setIsHeavy(!isHeavy)}
-              >
-                <Text style={[modalStyles.toggleText, isHeavy && { color: C.PUSH }]}>
-                  HEAVY
-                </Text>
+              <TouchableOpacity style={[modalStyles.toggle, isHeavy && modalStyles.toggleActive]} onPress={() => setIsHeavy(!isHeavy)}>
+                <Text style={[modalStyles.toggleText, isHeavy && { color: C.PUSH }]}>HEAVY</Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={[modalStyles.toggle, isWarmup && modalStyles.toggleWarmupActive]}
-                onPress={() => setIsWarmup(!isWarmup)}
-              >
-                <Text style={[modalStyles.toggleText, isWarmup && { color: '#888' }]}>
-                  WARM-UP
-                </Text>
+              <TouchableOpacity style={[modalStyles.toggle, isWarmup && modalStyles.toggleWarmupActive]} onPress={() => setIsWarmup(!isWarmup)}>
+                <Text style={[modalStyles.toggleText, isWarmup && { color: '#888' }]}>WARM-UP</Text>
               </TouchableOpacity>
             </View>
           </ScrollView>
@@ -146,27 +134,90 @@ function EditExerciseModal({ visible, exercise, onSave, onClose }) {
   );
 }
 
-function AddFromLibraryModal({ visible, onAdd, onClose }) {
+function AddFromLibraryModal({ visible, onAdd, onClose, onCreateExercise, onQuickAdd }) {
+  const insets = useSafeAreaInsets();
+  const keyboardInset = useKeyboardInset(insets.bottom);
   const [search, setSearch] = useState('');
-  const [filterMuscle, setFilterMuscle] = useState('All');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [filterMuscle, setFilterMuscle] = useState(null);
+  const [scope, setScope] = useState('all');
   const [library, setLibrary] = useState([]);
+  const [chips, setChips] = useState([]);
+  const [favoriteIds, setFavoriteIdsState] = useState([]);
 
   useEffect(() => {
     if (!visible) return;
+    setFilterMuscle(null);
+    setSearch('');
+    setDebouncedSearch('');
+    setScope('all');
     getExerciseIndex()
-      .then((index) => setLibrary(Array.isArray(index) ? index : EXERCISES))
-      .catch(() => setLibrary(EXERCISES));
+      .then((index) => {
+        const source = Array.isArray(index) && index.length ? index : EXERCISES;
+        setLibrary(source);
+        setChips(buildFilterChipOptions(source, { includeCategory: true, includeEquipment: false }));
+      })
+      .catch(() => {
+        setLibrary(EXERCISES);
+        setChips(buildFilterChipOptions(EXERCISES, { includeCategory: true, includeEquipment: false }));
+      });
+    getFavoriteExerciseIds().then((ids) => setFavoriteIdsState(Array.isArray(ids) ? ids : []));
   }, [visible]);
 
+  useEffect(() => {
+    if (!visible) return;
+    const timer = setTimeout(() => setDebouncedSearch(search), 170);
+    return () => clearTimeout(timer);
+  }, [search, visible]);
+
   const source = library.length ? library : EXERCISES;
-  const filtered = source.filter(ex => {
-    const muscleLabel = ex.muscleGroup || ex.primaryMuscle || (ex.primaryMuscles || [])[0] || '';
-    const matchMuscle = filterMuscle === 'All' || String(muscleLabel).toLowerCase() === filterMuscle.toLowerCase();
-    const aliasText = Array.isArray(ex.aliases) ? ex.aliases.join(' ').toLowerCase() : '';
-    const needle = search.toLowerCase();
-    const matchSearch = ex.name.toLowerCase().includes(needle) || aliasText.includes(needle);
-    return matchMuscle && matchSearch;
-  });
+  const favoriteSet = useMemo(() => new Set(favoriteIds), [favoriteIds]);
+  const searchIndex = useMemo(() => buildExerciseSearchIndex(source), [source]);
+  const searchResultIds = useMemo(() => queryExerciseSearch({
+    query: debouncedSearch,
+    index: searchIndex,
+    exercises: source,
+  }), [debouncedSearch, searchIndex, source]);
+  const rankMap = searchResultIds?.rankMap || null;
+
+  const filtered = useMemo(() => source
+    .filter((exercise) => {
+      const muscleMatch = !filterMuscle || matchesExerciseFilter(exercise, filterMuscle, {
+        includeCategory: true,
+        includeEquipment: false,
+      });
+      const scopeMatch = scope === 'favorites' ? favoriteSet.has(exercise.id) : true;
+      const searchMatch = !searchResultIds || searchResultIds.has(exercise.id);
+      return muscleMatch && scopeMatch && searchMatch;
+    })
+    .sort((a, b) => {
+      if (rankMap) {
+        const rankA = rankMap.has(a.id) ? rankMap.get(a.id) : Number.MAX_SAFE_INTEGER;
+        const rankB = rankMap.has(b.id) ? rankMap.get(b.id) : Number.MAX_SAFE_INTEGER;
+        if (rankA !== rankB) return rankA - rankB;
+      }
+      const favDiff = Number(favoriteSet.has(b.id)) - Number(favoriteSet.has(a.id));
+      if (favDiff !== 0) return favDiff;
+      return String(a.name || '').localeCompare(String(b.name || ''));
+    }),
+  [source, filterMuscle, scope, favoriteSet, searchResultIds, rankMap]);
+
+  const searchSeed = String(search || '').trim();
+  const hasExact = useMemo(
+    () => source.some((exercise) => normalizeNameKey(exercise?.name) === normalizeNameKey(searchSeed)),
+    [source, searchSeed]
+  );
+
+  const toggleFavorite = async (exerciseId) => {
+    const id = String(exerciseId || '').trim();
+    if (!id) return;
+    const has = favoriteSet.has(id);
+    const next = has
+      ? favoriteIds.filter((value) => value !== id)
+      : [...favoriteIds, id];
+    setFavoriteIdsState(next);
+    await setFavoriteExerciseIds(next);
+  };
 
   return (
     <Modal visible={visible} transparent animationType="slide">
@@ -175,46 +226,119 @@ function AddFromLibraryModal({ visible, onAdd, onClose }) {
           <View style={libStyles.header}>
             <Text style={libStyles.title}>EXERCISE LIBRARY</Text>
             <TouchableOpacity onPress={onClose}>
-              <Text style={libStyles.closeBtn}>✕</Text>
+              <Text style={libStyles.closeBtn}>X</Text>
             </TouchableOpacity>
           </View>
-          <TextInput
-            style={libStyles.search}
-            value={search}
-            onChangeText={setSearch}
-            placeholder="Search exercises..."
-            placeholderTextColor={C.SECONDARY}
+
+          <MagicScroll.TextInput
+            name="plan_day_editor_library_search"
+            textInputProps={{
+              style: [libStyles.search, keyboardInset > 0 ? { marginBottom: 8 } : null],
+              value: search,
+              onChangeText: setSearch,
+              placeholder: 'Search exercises...',
+              placeholderTextColor: C.SECONDARY,
+              autoCorrect: false,
+              returnKeyType: 'search',
+            }}
           />
-          <View style={{ height: 50, marginBottom: 10 }}>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ alignItems: 'center', paddingHorizontal: 16 }}>
-              {['All', ...MUSCLE_GROUPS].map(m => (
-                <TouchableOpacity
-                  key={m}
-                  style={[libStyles.filterChip, filterMuscle === m && libStyles.filterChipActive]}
-                  onPress={() => setFilterMuscle(m)}
-                >
-                  <Text style={[libStyles.filterText, filterMuscle === m && { color: C.PUSH }]}>
-                    {m}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+
+          <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
+            <TouchableOpacity
+              style={[libStyles.filterChip, scope === 'all' && libStyles.filterChipActive]}
+              onPress={() => setScope('all')}
+            >
+              <Text style={[libStyles.filterText, scope === 'all' && { color: C.PUSH }]}>All</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[libStyles.filterChip, scope === 'favorites' && libStyles.filterChipActive]}
+              onPress={() => setScope((prev) => (prev === 'favorites' ? 'all' : 'favorites'))}
+            >
+              <Text style={[libStyles.filterText, scope === 'favorites' && { color: C.PUSH }]}>? Favorites</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={{ height: 44, marginBottom: 8 }}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={{ alignItems: 'center', paddingHorizontal: 8 }}
+            >
+              {(chips.length ? chips : ['All']).map((muscle) => {
+                const active = filterMuscle === muscle;
+                return (
+                  <TouchableOpacity
+                    key={muscle}
+                    style={[libStyles.filterChip, active && libStyles.filterChipActive]}
+                    onPress={() => setFilterMuscle((prev) => (prev === muscle ? null : muscle))}
+                  >
+                    <Text style={[libStyles.filterText, active && { color: C.PUSH }]}>{muscle}</Text>
+                  </TouchableOpacity>
+                );
+              })}
             </ScrollView>
           </View>
-          <ScrollView style={libStyles.list}>
-            {filtered.map(ex => (
-              <TouchableOpacity
-                key={ex.id}
-                style={libStyles.exRow}
-                onPress={() => onAdd(ex)}
-              >
+
+          <Text style={libStyles.countLabel}>{filtered.length} exercises</Text>
+
+          <ScrollView
+            style={libStyles.list}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{ paddingBottom: Math.max(20, keyboardInset + 14) }}
+          >
+            {filtered.map((exercise) => (
+              <TouchableOpacity key={exercise.id} style={libStyles.exRow} onPress={() => onAdd(exercise)}>
                 <View style={libStyles.exInfo}>
-                  <Text style={libStyles.exName}>{ex.name}</Text>
-                  <Text style={libStyles.exMeta}>{ex.muscleGroup || ex.primaryMuscle || (ex.primaryMuscles || [])[0] || 'Other'} · {ex.equipment || 'Other'}</Text>
+                  <Text style={libStyles.exName}>{exercise.name}</Text>
+                  <Text style={libStyles.exMeta}>
+                    {exercise.muscleGroup || exercise.primaryMuscle || (exercise.primaryMuscles || [])[0] || 'Other'} � {exercise.equipment || 'Other'}
+                  </Text>
                 </View>
-                <Text style={libStyles.addIcon}>+</Text>
+                <View style={libStyles.rowActions}>
+                  <TouchableOpacity
+                    onPress={(event) => {
+                      event?.stopPropagation?.();
+                      toggleFavorite(exercise.id);
+                    }}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Text style={[libStyles.starIcon, favoriteSet.has(exercise.id) && { color: C.PUSH }]}>?</Text>
+                  </TouchableOpacity>
+                  <Text style={libStyles.addIcon}>+</Text>
+                </View>
               </TouchableOpacity>
             ))}
+
+            {!filtered.length ? (
+              <View style={libStyles.emptyWrap}>
+                <Text style={libStyles.emptyText}>No exercises found</Text>
+                {!!searchSeed && (
+                  <View style={libStyles.emptyActions}>
+                    <TouchableOpacity style={libStyles.createBtn} onPress={() => onCreateExercise?.(searchSeed, filterMuscle)}>
+                      <Text style={libStyles.createBtnText}>+ ADD EXERCISE</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={libStyles.quickBtn} onPress={() => onQuickAdd?.(searchSeed, filterMuscle)}>
+                      <Text style={libStyles.quickBtnText}>+ QUICK ADD</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
+            ) : null}
+
+            {!!searchSeed && !hasExact ? (
+              <View style={libStyles.inlineCreateFooter}>
+                <Text style={libStyles.inlineHint}>Can't find it?</Text>
+                <View style={libStyles.inlineCreateActions}>
+                  <TouchableOpacity style={libStyles.inlineCreateBtn} onPress={() => onCreateExercise?.(searchSeed, filterMuscle)}>
+                    <Text style={libStyles.inlineCreateBtnText}>+ Add Exercise</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={libStyles.inlineQuickBtn} onPress={() => onQuickAdd?.(searchSeed, filterMuscle)}>
+                    <Text style={libStyles.inlineQuickText}>+ Quick Add</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : null}
           </ScrollView>
         </View>
       </View>
@@ -224,9 +348,7 @@ function AddFromLibraryModal({ visible, onAdd, onClose }) {
 
 export default function PlanDayEditorScreen({ route, navigation }) {
   const { plan, day } = route.params;
-  // Fallbacks correctly using context if needed...
-  // In the active layout this uses context incorrectly maybe, but reverting it to how it was:
-  const { updatePlanDay } = useApp() || {};
+  const { updatePlanDay } = useWatermelonAppData() || {};
   const [exercises, setExercises] = useState(day.exercises || []);
   const [editingExercise, setEditingExercise] = useState(null);
   const [showLibrary, setShowLibrary] = useState(false);
@@ -234,7 +356,7 @@ export default function PlanDayEditorScreen({ route, navigation }) {
 
   function saveExercises(newExercises) {
     setExercises(newExercises);
-    if(updatePlanDay) updatePlanDay(plan.id, day.id, { exercises: newExercises });
+    if (updatePlanDay) updatePlanDay(plan.id, day.id, { exercises: newExercises });
   }
 
   function handleMoveUp(idx) {
@@ -263,19 +385,21 @@ export default function PlanDayEditorScreen({ route, navigation }) {
   }
 
   function handleEditSave(updated) {
-    const newExercises = exercises.map(ex =>
-      ex.id === updated.id ? updated : ex,
-    );
+    const newExercises = exercises.map((exercise) => (
+      exercise.id === updated.id ? updated : exercise
+    ));
     saveExercises(newExercises);
     setEditingExercise(null);
   }
 
   function handleAddFromLibrary(libEx) {
+    const trackingType = inferTrackingType(libEx);
+    const repsDefault = trackingType === 'weight_reps' ? '10-12' : '60';
     const newEx = {
       id: generateId(),
       name: libEx.name,
       sets: 3,
-      reps: '10-12',
+      reps: repsDefault,
       isHeavy: false,
       isWarmup: false,
       muscleGroup: libEx.muscleGroup,
@@ -283,25 +407,56 @@ export default function PlanDayEditorScreen({ route, navigation }) {
       exerciseId: libEx.id || libEx.exerciseId || libEx.name,
       notes: libEx.cue || '',
       defaultRestSeconds: 120,
+      trackingType,
     };
     saveExercises([...exercises, newEx]);
     setShowLibrary(false);
   }
 
+  const handleQuickAddFromLibrary = useCallback(async (nameSeed, preferredMuscle = null) => {
+    const cleaned = String(nameSeed || '').trim();
+    if (!cleaned) return;
+    try {
+      const custom = {
+        id: `quick_${cleaned.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()}_${Date.now().toString(36)}`,
+        name: cleaned,
+        primaryMuscles: [String(preferredMuscle || 'other').toLowerCase()],
+        secondaryMuscles: [],
+        equipment: 'Other',
+        category: 'strength',
+        force: 'push',
+        instructions: [],
+        isCustom: true,
+      };
+      await saveCustomExercise(custom);
+      handleAddFromLibrary(custom);
+    } catch (error) {
+      if (error?.code === 'DUPLICATE_EXERCISE_NAME') {
+        const index = await getExerciseIndex();
+        const existing = (index || []).find((exercise) => normalizeNameKey(exercise?.name) === normalizeNameKey(cleaned));
+        if (existing) {
+          handleAddFromLibrary(existing);
+          return;
+        }
+      }
+      setAlertConfig({
+        title: 'Quick add unavailable',
+        message: String(error?.message || error || 'Could not add exercise right now.'),
+        buttons: [{ text: 'OK', style: 'default' }],
+      });
+    }
+  }, [exercises]);
+
   function handleAddCustom() {
-    const newEx = {
-      id: generateId(),
-      name: 'New Exercise',
-      sets: 3,
-      reps: '10',
-      isHeavy: false,
-      isWarmup: false,
-      muscleGroup: 'Chest',
-      notes: '',
-      defaultRestSeconds: 120,
-    };
-    saveExercises([...exercises, newEx]);
-    setEditingExercise(newEx);
+    navigation.navigate('CreateExercise');
+  }
+
+  function handleCreateFromPicker(seedName, preferredMuscle = null) {
+    setShowLibrary(false);
+    navigation.navigate('CreateExercise', {
+      initialName: seedName,
+      preferredPrimaryMuscle: preferredMuscle || null,
+    });
   }
 
   return (
@@ -313,14 +468,14 @@ export default function PlanDayEditorScreen({ route, navigation }) {
           <Text style={styles.exerciseCount}>{exercises.length} exercises</Text>
         </View>
 
-        {exercises.map((ex, idx) => (
+        {exercises.map((exercise, idx) => (
           <ExerciseCard
-            key={ex.id}
-            exercise={ex}
+            key={exercise.id}
+            exercise={exercise}
             showControls
             isFirst={idx === 0}
             isLast={idx === exercises.length - 1}
-            onPress={() => setEditingExercise(ex)}
+            onPress={() => setEditingExercise(exercise)}
             onMoveUp={() => handleMoveUp(idx)}
             onMoveDown={() => handleMoveDown(idx)}
             onDelete={() => handleDelete(idx)}
@@ -334,16 +489,10 @@ export default function PlanDayEditorScreen({ route, navigation }) {
         )}
 
         <View style={styles.addButtonsRow}>
-          <TouchableOpacity
-            style={styles.addLibBtn}
-            onPress={() => setShowLibrary(true)}
-          >
+          <TouchableOpacity style={styles.addLibBtn} onPress={() => setShowLibrary(true)}>
             <Text style={styles.addLibBtnText}>+ FROM LIBRARY</Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.addCustomBtn}
-            onPress={handleAddCustom}
-          >
+          <TouchableOpacity style={styles.addCustomBtn} onPress={handleAddCustom}>
             <Text style={styles.addCustomBtnText}>+ CUSTOM</Text>
           </TouchableOpacity>
         </View>
@@ -360,6 +509,8 @@ export default function PlanDayEditorScreen({ route, navigation }) {
         visible={showLibrary}
         onAdd={handleAddFromLibrary}
         onClose={() => setShowLibrary(false)}
+        onCreateExercise={handleCreateFromPicker}
+        onQuickAdd={handleQuickAddFromLibrary}
       />
       <CustomAlert visible={!!alertConfig} title={alertConfig?.title} message={alertConfig?.message} buttons={alertConfig?.buttons || []} onDismiss={() => setAlertConfig(null)} />
     </SafeAreaView>
@@ -376,7 +527,6 @@ const styles = StyleSheet.create({
     color: C.TEXT,
     fontSize: 24,
     fontWeight: '900',
-    fontFamily: 'BarlowCondensed_700Bold',
     letterSpacing: 1,
   },
   exerciseCount: { color: C.SECONDARY, fontSize: 13, marginTop: 4 },
@@ -426,7 +576,6 @@ const modalStyles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 3,
     marginBottom: 16,
-    fontFamily: 'BarlowCondensed_700Bold',
   },
   label: { color: C.SECONDARY, fontSize: 11, letterSpacing: 2, marginBottom: 6, marginTop: 10 },
   input: {
@@ -476,7 +625,7 @@ const libStyles = StyleSheet.create({
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     padding: 16,
-    height: SCREEN_H * 0.85,
+    height: SCREEN_H * 0.86,
     borderTopWidth: 1,
     borderColor: C.BORDER,
   },
@@ -491,7 +640,6 @@ const libStyles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '900',
     letterSpacing: 3,
-    fontFamily: 'BarlowCondensed_700Bold',
   },
   closeBtn: { color: C.SECONDARY, fontSize: 20, padding: 4 },
   search: {
@@ -504,7 +652,6 @@ const libStyles = StyleSheet.create({
     fontSize: 15,
     marginBottom: 10,
   },
-  filters: { flexGrow: 0 },
   filterChip: {
     height: 32,
     paddingHorizontal: 14,
@@ -517,16 +664,66 @@ const libStyles = StyleSheet.create({
   },
   filterChipActive: { borderColor: C.PUSH, backgroundColor: 'rgba(255, 69, 0, 0.1)' },
   filterText: { color: C.SECONDARY, fontSize: 13, fontWeight: '600' },
+  countLabel: { color: C.SECONDARY, fontSize: 11, letterSpacing: 2, marginBottom: 4, marginTop: 2 },
   list: { flex: 1 },
   exRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 12,
+    paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: C.BORDER,
   },
-  exInfo: { flex: 1 },
+  exInfo: { flex: 1, paddingRight: 10 },
   exName: { color: C.TEXT, fontSize: 15, fontWeight: '600' },
   exMeta: { color: C.SECONDARY, fontSize: 12, marginTop: 2 },
-  addIcon: { color: C.PUSH, fontSize: 24, fontWeight: '300', paddingLeft: 12 },
+  rowActions: {
+    width: 72,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 14,
+  },
+  starIcon: { color: C.SECONDARY, fontSize: 22 },
+  addIcon: { color: C.PUSH, fontSize: 24, fontWeight: '300' },
+  emptyWrap: { alignItems: 'center', paddingVertical: 26, gap: 10 },
+  emptyText: { color: C.SECONDARY, fontSize: 13 },
+  emptyActions: { flexDirection: 'row', gap: 10, flexWrap: 'wrap', justifyContent: 'center' },
+  createBtn: {
+    borderWidth: 1,
+    borderColor: C.PUSH,
+    borderRadius: 999,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    backgroundColor: 'rgba(255,69,0,0.1)',
+  },
+  createBtnText: { color: C.PUSH, fontSize: 11, fontWeight: '800', letterSpacing: 1 },
+  quickBtn: {
+    borderWidth: 1,
+    borderColor: C.BORDER,
+    borderRadius: 999,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    backgroundColor: 'transparent',
+  },
+  quickBtnText: { color: C.SECONDARY, fontSize: 11, fontWeight: '800', letterSpacing: 1 },
+  inlineCreateFooter: { marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: C.BORDER },
+  inlineHint: { color: C.SECONDARY, fontSize: 12, marginBottom: 8 },
+  inlineCreateActions: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
+  inlineCreateBtn: {
+    borderWidth: 1,
+    borderColor: C.PUSH,
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    backgroundColor: 'rgba(255,69,0,0.1)',
+  },
+  inlineCreateBtnText: { color: C.PUSH, fontSize: 11, fontWeight: '800' },
+  inlineQuickBtn: {
+    borderWidth: 1,
+    borderColor: C.BORDER,
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  inlineQuickText: { color: C.SECONDARY, fontSize: 11, fontWeight: '700' },
 });

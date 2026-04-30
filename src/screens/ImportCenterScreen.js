@@ -1,17 +1,18 @@
-import React, { useContext, useState } from 'react';
+import React, { useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { AppContext } from '../context/AppContext';
+import Ionicons from 'react-native-vector-icons/Ionicons';
+import useWatermelonAppData from '../hooks/useWatermelonAppData';
 import { useTheme } from '../context/ThemeContext';
 import ImportPreviewModal from '../components/ImportPreviewModal';
 import CustomAlert from '../components/CustomAlert';
 import { pickAndParseCSV, importParsedCSV } from '../services/CSVImport';
 import { pickAndParseOpenWeight, importParsedOpenWeight } from '../services/openweightInterop';
-import { triggerHaptic } from '../services/hapticsEngine';
+import { buildRestoreSummary } from '../services/restoreResultModel';
+import { fireHaptic } from '../services/hapticsEngine';
 
 export default function ImportCenterScreen() {
   const colors = useTheme();
-  const { settings, reloadFromStorage } = useContext(AppContext);
+  const { settings, reloadFromStorage } = useWatermelonAppData();
   const haptic = settings?.hapticFeedback !== false;
   const [parsedPayload, setParsedPayload] = useState(null);
   const [importing, setImporting] = useState(false);
@@ -19,7 +20,7 @@ export default function ImportCenterScreen() {
 
   const runCSVPick = async () => {
     try {
-      triggerHaptic('selection', { enabled: haptic }).catch(() => {});
+      fireHaptic('selection', { enabled: haptic });
       const parsed = await pickAndParseCSV();
       if (!parsed) return;
       setParsedPayload({ ...parsed, sourceLabel: parsed.format === 'hevy' ? 'Hevy CSV' : parsed.format === 'strong' ? 'Strong CSV' : 'IRONLOG CSV', parser: 'csv' });
@@ -30,7 +31,7 @@ export default function ImportCenterScreen() {
 
   const runOpenWeightPick = async () => {
     try {
-      triggerHaptic('selection', { enabled: haptic }).catch(() => {});
+      fireHaptic('selection', { enabled: haptic });
       const parsed = await pickAndParseOpenWeight();
       if (!parsed) return;
       setParsedPayload({ ...parsed, sourceLabel: 'OpenWeight JSON', parser: 'openweight' });
@@ -48,14 +49,19 @@ export default function ImportCenterScreen() {
         : await importParsedCSV(parsedPayload);
       await reloadFromStorage();
       setParsedPayload(null);
-      triggerHaptic('restoreSucceeded', { enabled: haptic }).catch(() => {});
+      fireHaptic('restoreSucceeded', { enabled: haptic });
+      const summary = buildRestoreSummary({
+        sourceLabel: parsedPayload.sourceLabel,
+        counts: { history: importedCount },
+        partialNotes: ['CSV/OpenWeight imports restore workout history only. Plans/settings are unchanged.'],
+      });
       setAlertConfig({
-        title: 'Import complete',
-        message: `Imported ${importedCount} workouts from ${parsedPayload.sourceLabel}.`,
+        title: summary.title,
+        message: summary.message,
         buttons: [{ text: 'OK', style: 'default' }],
       });
     } catch (e) {
-      triggerHaptic('error', { enabled: haptic }).catch(() => {});
+      fireHaptic('error', { enabled: haptic });
       setAlertConfig({ title: 'Import error', message: String(e), buttons: [{ text: 'OK', style: 'default' }] });
     } finally {
       setImporting(false);
@@ -129,3 +135,4 @@ const s = StyleSheet.create({
   noteCard: { borderWidth: 1, padding: 12, flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
   noteText: { flex: 1, fontSize: 11, lineHeight: 16 },
 });
+

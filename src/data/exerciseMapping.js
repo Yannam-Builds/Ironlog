@@ -1,4 +1,4 @@
-// Exercise mapping: existing IRONLOG name → free-exercise-db id
+// Exercise mapping: existing IRONLOG name -> free-exercise-db id
 // confidence: HIGH=exact/near-exact, MED=close match, LOW=best available, null=no match
 // Review all MED and LOW entries before approving.
 
@@ -11,7 +11,7 @@ export const EXERCISE_ID_MAP = {
   'Cable Fly Low to High':       null,                                   // different angle/emphasis
   'Cable Fly':                   'Cable_Fly',                            // HIGH
   'Pec Deck':                    'Pec_Deck_Fly',                         // HIGH
-  'Incline Smith Press':         'Smith_Machine_Bench_Press',            // MED — no incline smith in db
+  'Incline Smith Press':         'Smith_Machine_Bench_Press',            // MED  no incline smith in db
   'Push-Up':                     'Push-Up',                              // HIGH
   'Dips (Chest)':                'Dips_-_Chest_Version',                 // HIGH
 
@@ -20,7 +20,7 @@ export const EXERCISE_ID_MAP = {
   'Weighted Pull-Up':            'Weighted_Pull_Ups',                    // HIGH
   'Chin-Up':                     'Chin-Up',                              // HIGH
   'Lat Pulldown':                'Wide-Grip_Lat_Pulldown',               // HIGH
-  'Single Arm Cable Pulldown':   'Close-Grip_Front_Lat_Pulldown',        // MED — closest in db
+  'Single Arm Cable Pulldown':   'Close-Grip_Front_Lat_Pulldown',        // MED  closest in db
   'Barbell Row':                 'Barbell_Bent_Over_Row',                // HIGH
   'Single Arm DB Row':           'One-Arm_Dumbbell_Row',                 // HIGH
   'Seated Cable Row':            'Seated_Cable_Rows',                    // HIGH
@@ -29,16 +29,16 @@ export const EXERCISE_ID_MAP = {
   'Deadlift':                    'Barbell_Deadlift',                     // HIGH
   'Sumo Deadlift':               'Sumo_Deadlift',                        // HIGH
   'Hyperextension':              'Hyperextensions_With_No_Hyperextension_Bench', // MED
-  'Meadows Row':                 null,                                   // NO MATCH
-  'Chest Supported Row':         'Lying_T-Bar_Row',                      // MED — closest prone row in db
+  'Meadows Row':                 null,                                   // VERIFY: canonical target missing from current free-exercise-db map
+  'Chest Supported Row':         'Lying_T-Bar_Row',                      // MED  closest prone row in db
 
   // SHOULDERS
   'Barbell OHP':                 'Barbell_Shoulder_Press',               // HIGH
   'DB OHP':                      'Dumbbell_Shoulder_Press',              // HIGH
   'Arnold Press':                'Arnold_Dumbbell_Press',                // HIGH
-  'Cable Lateral Raise':         'Cable_Internal_Rotation',              // LOW — no cable lateral in db; use for instructions only
+  'Cable Lateral Raise':         'Cable_Internal_Rotation',              // LOW  no cable lateral in db; use for instructions only
   'DB Lateral Raise':            'Side_Lateral_Raise',                   // HIGH
-  'Lateral Raise Machine':       'Side_Lateral_Raise',                   // MED — no machine version
+  'Lateral Raise Machine':       'Side_Lateral_Raise',                   // MED  no machine version
   'Rear Delt Fly':               'Bent_Over_Dumbbell_Rear_Lateral_Raise', // HIGH
   'Reverse Pec Deck':            'Reverse_Flyes',                        // HIGH
   'DB Shrugs':                   'Dumbbell_Shrug',                       // HIGH
@@ -62,7 +62,7 @@ export const EXERCISE_ID_MAP = {
   'Rope Pushdown':               'Triceps_Pushdown_-_Rope_Attachment',   // HIGH
   'Single Arm Pushdown':         'Triceps_Pushdown',                     // MED
   'Rope Overhead Extension':     'Cable_Rope_Overhead_Triceps_Extension',// HIGH
-  'Single Arm OHE':              'Overhead_Triceps',                     // MED — closest single arm overhead
+  'Single Arm OHE':              'Overhead_Triceps',                     // MED  closest single arm overhead
   'Dips (Triceps)':              'Triceps_Dips',                         // HIGH
   'Diamond Push-Up':             'Close-Grip_Push-Up_off_of_a_Dumbbell', // MED
 
@@ -72,7 +72,7 @@ export const EXERCISE_ID_MAP = {
   'Bulgarian Split Squat':       null,                                   // different movement pattern
   'Romanian Deadlift':           'Romanian_Deadlift',                    // HIGH
   'Leg Press':                   'Leg_Press',                            // HIGH
-  'Leg Press High Feet':         'Leg_Press',                            // MED — same exercise
+  'Leg Press High Feet':         'Leg_Press',                            // MED  same exercise
   'Hack Squat':                  'Hack_Squat',                           // HIGH
   'Leg Extension':               'Leg_Extensions',                       // HIGH
   'Leg Curl Machine':            'Seated_Leg_Curl',                      // HIGH
@@ -80,8 +80,8 @@ export const EXERCISE_ID_MAP = {
   'Hip Thrust':                  'Barbell_Hip_Thrust',                   // HIGH
   'Walking Lunge':               'Barbell_Walking_Lunge',                // HIGH
   'Step Up':                     'Barbell_Step_Ups',                     // HIGH
-  'Lateral Band Walk':           null,                                   // NO MATCH
-  'Single Leg Calf Raise':       'Standing_Calf_Raises',                 // MED — no single leg version
+  'Lateral Band Walk':           null,                                   // VERIFY: canonical target missing from current free-exercise-db map
+  'Single Leg Calf Raise':       'Standing_Calf_Raises',                 // MED  no single leg version
   'Standing Calf Raise':         'Standing_Calf_Raises',                 // HIGH
   'Seated Calf Raise':           'Seated_Calf_Raise',                    // HIGH
 
@@ -92,13 +92,13 @@ export const EXERCISE_ID_MAP = {
   'Plank':                       'Plank',                                // HIGH
   'Side Plank':                  'Side_Plank',                           // HIGH
   'Dragon Flag':                 'Dragon_Flag',                          // HIGH
-  'L-Sit':                       null,                                   // NO MATCH
+  'L-Sit':                       null,                                   // VERIFY: canonical target missing from current free-exercise-db map
   'Toes to Bar':                 null,                                   // different movement
   'Russian Twist':               'Russian_Twist',                        // HIGH
   'Dead Bug':                    'Dead_Bug',                             // HIGH
   'V-Up':                        'V_Up',                                 // HIGH
 
-  // MOBILITY — no matches in strength db
+  // MOBILITY - no matches in strength db
   'Hip 90/90 Stretch':           null,
   "World's Greatest Stretch":    'Worlds_Greatest_Stretch',              // HIGH
   'Ankle Mobility Drill':        null,
@@ -111,9 +111,10 @@ export const EXERCISE_ID_MAP = {
   'Running':                     null,
 
   // COMPOUND NAME (used in default plan)
-  'Weighted Pull-Up or Lat Pulldown': 'Wide-Grip_Lat_Pulldown',          // MED — fallback
+  'Weighted Pull-Up or Lat Pulldown': 'Wide-Grip_Lat_Pulldown',          // MED  fallback
 
   // CANONICAL / LEGACY ALIASES
+  // LEGACY_COMPAT: these entries preserve compatibility with older plan/history labels.
   'Pullups':                     'Pull-Up',
   'Pushups':                     'Push-Up',
   'Seated Cable Rows':           'Seated_Cable_Rows',
@@ -131,3 +132,4 @@ export const EXERCISE_ID_MAP = {
   'Machine Lateral Raise':       'Side_Lateral_Raise',
   'Assisted Pull-Up Machine':    'Assisted_Pull-Up',
 };
+

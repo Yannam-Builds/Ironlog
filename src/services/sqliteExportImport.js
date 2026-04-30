@@ -1,33 +1,48 @@
-import * as FileSystem from 'expo-file-system/legacy';
-import * as Sharing from 'expo-sharing';
-import * as DocumentPicker from 'expo-document-picker';
-import Constants from 'expo-constants';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { loadTrainingSnapshot, replaceTrainingSnapshot } from '../domain/storage/trainingRepository';
+import * as FileSystem from '../platform/filesystem';
+import * as Sharing from '../platform/sharing';
+import * as DocumentPicker from '../platform/documentPicker';
+import { APP_VERSION } from '../platform/appInfo';
+import {
+  exportDatabase,
+  importAnyPayload,
+  detectImportFormat,
+  normalizeLegacyPayload,
+} from '../db/repositories/importExportRepository';
 
 export const SQLITE_EXPORT_SCHEMA = 'IRONLOG_SQLITE_EXPORT_V1';
 
-const LEGACY_MIRROR_KEYS = {
-  plans: 'ironlog_plans',
-  history: 'ironlog_history',
-  bodyWeight: 'ironlog_bw',
-  bodyMeasurements: '@ironlog/bodyMeasurements',
-  customExercises: '@ironlog/customExercises',
-};
+function toLegacyPayload(wmExport) {
+  const data = wmExport?.data || {};
+  return {
+    plans: Array.isArray(data.plans) ? data.plans : [],
+    history: Array.isArray(data.workouts) ? data.workouts : [],
+    bodyWeight: [],
+    bodyMeasurements: Array.isArray(data.body_measurements) ? data.body_measurements : [],
+    customExercises: Array.isArray(data.exercises)
+      ? data.exercises.filter((ex) => !!ex.is_custom)
+      : [],
+  };
+}
 
-const SQLITE_APP_STATE_KEYS = [
-  'ironlog_settings',
-  'ironlog_pb',
-  'ironlog_notes',
-  '@ironlog/gymProfiles',
-  '@ironlog/activeGymProfileId',
-  '@ironlog/onboardingComplete',
-  '@ironlog/manualRecoveryInput',
-  '@ironlog/milestoneUnlocks',
-  '@ironlog/backupConfig',
-  '@ironlog/backupStatus',
-  '@ironlog/notificationSettings',
-];
+function parseAppSettingsRows(rows = []) {
+  const out = {};
+  rows.forEach((row) => {
+    const key = row?.key;
+    if (!key) return;
+    const t = row?.value_type;
+    const raw = row?.value;
+    if (t === 'boolean') out[key] = raw === 'true';
+    else if (t === 'number') out[key] = Number(raw);
+    else if (t === 'json') {
+      try {
+        out[key] = JSON.parse(raw);
+      } catch (_) {
+        out[key] = raw;
+      }
+    } else out[key] = raw;
+  });
+  return out;
+}
 
 function countRows(payload = {}) {
   return {
@@ -39,30 +54,17 @@ function countRows(payload = {}) {
   };
 }
 
-function parseMaybeJson(raw) {
-  if (raw == null) return null;
-  try {
-    return JSON.parse(raw);
-  } catch (_) {
-    return raw;
-  }
-}
-
 export async function buildSQLiteExportBundle() {
-  const snapshot = await loadTrainingSnapshot();
-  const appStatePairs = await AsyncStorage.multiGet(SQLITE_APP_STATE_KEYS);
-  const appState = Object.fromEntries(
-    appStatePairs
-      .filter(([key, raw]) => key && raw != null)
-      .map(([key, raw]) => [key, parseMaybeJson(raw)])
-  );
+  const wmExport = await exportDatabase();
+  const payload = toLegacyPayload(wmExport);
+  const appState = parseAppSettingsRows(wmExport?.data?.app_settings || []);
   return {
     schema: SQLITE_EXPORT_SCHEMA,
     exportedAt: new Date().toISOString(),
-    appVersion: Constants.expoConfig?.version || '1.1.0',
-    payload: snapshot,
+    appVersion: APP_VERSION,
+    payload,
     appState,
-    counts: countRows(snapshot),
+    counts: countRows(payload),
   };
 }
 
@@ -74,7 +76,7 @@ export async function exportSQLiteBundleAndShare() {
   if (!canShare) throw new Error('Sharing is unavailable on this device.');
   await Sharing.shareAsync(filePath, {
     mimeType: 'application/json',
-    dialogTitle: 'Export IRONLOG SQLite Data',
+    dialogTitle: 'Export Ironlog SQLite Data',
   });
   return bundle;
 }
@@ -111,37 +113,17 @@ export function validateSQLiteBundle(bundle) {
   };
 }
 
-export async function importSQLiteBundle(bundle, { mirrorLegacy = true } = {}) {
+export async function importSQLiteBundle(bundle) {
   const validation = validateSQLiteBundle(bundle);
   if (!validation.valid) throw new Error(validation.reason || 'Invalid SQLite export bundle.');
 
-  const payload = bundle.payload || {};
-  await replaceTrainingSnapshot({
-    plans: payload.plans || [],
-    history: payload.history || [],
-    bodyWeight: payload.bodyWeight || [],
-    bodyMeasurements: payload.bodyMeasurements || [],
-    customExercises: payload.customExercises || [],
-  });
-
-  if (mirrorLegacy) {
-    const pairs = [
-      [LEGACY_MIRROR_KEYS.plans, JSON.stringify(payload.plans || [])],
-      [LEGACY_MIRROR_KEYS.history, JSON.stringify(payload.history || [])],
-      [LEGACY_MIRROR_KEYS.bodyWeight, JSON.stringify(payload.bodyWeight || [])],
-      [LEGACY_MIRROR_KEYS.bodyMeasurements, JSON.stringify(payload.bodyMeasurements || [])],
-      [LEGACY_MIRROR_KEYS.customExercises, JSON.stringify(payload.customExercises || [])],
-    ];
-    await AsyncStorage.multiSet(pairs);
-  }
-
-  if (bundle.appState && typeof bundle.appState === 'object') {
-    const statePairs = Object.entries(bundle.appState)
-      .filter(([key]) => SQLITE_APP_STATE_KEYS.includes(key))
-      .map(([key, value]) => [key, JSON.stringify(value)]);
-    if (statePairs.length) {
-      await AsyncStorage.multiSet(statePairs);
-    }
+  // Use shared Watermelon import normalizer so legacy payloads never become runtime storage.
+  const format = detectImportFormat(bundle);
+  if (format === 'unknown') {
+    const normalized = normalizeLegacyPayload(bundle);
+    await importAnyPayload(normalized.payload);
+  } else {
+    await importAnyPayload(bundle);
   }
 
   return validation;

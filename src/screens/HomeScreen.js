@@ -1,16 +1,18 @@
-﻿import React, { useContext, useState, useEffect, useMemo } from 'react';
-import { ActivityIndicator, View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal, Image } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import React, { useState, useEffect, useMemo } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal, Image } from 'react-native';
+import Ionicons from 'react-native-vector-icons/Ionicons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { captureRef } from 'react-native-view-shot';
-import * as Sharing from 'expo-sharing';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { AppContext } from '../context/AppContext';
+import * as Sharing from '../platform/sharing';
+import useWatermelonAppData from '../hooks/useWatermelonAppData';
 import { useTheme } from '../context/ThemeContext';
+import { useActiveBanner } from '../context/ActiveWorkoutBannerContext';
 import useDeferredScreenReady from '../hooks/useDeferredScreenReady';
 import RecoveryHeatmap from '../components/RecoveryHeatmap';
 import { computeStimulusFatigue, analyzeVolume, buildHomeProgramIntelligence } from '../utils/intelligenceEngine';
 import { decayFatigueHourly, computeReadiness, getGroupReadiness } from '../utils/recoveryModel';
 import { getExerciseIndex } from '../services/ExerciseLibraryService';
+import { getSetting as getWatermelonSetting, setSetting as setWatermelonSetting } from '../db/repositories/settingsRepository';
 import { computeMuscleAnalytics } from '../domain/intelligence/trainingAnalyticsEngine';
 import {
   computeConsistencyMetrics,
@@ -22,9 +24,14 @@ import {
 import { computeRecoveryScore } from '../domain/intelligence/recoveryReadinessEngine';
 import { prepareLocalBackupStorage } from '../services/backupService';
 import { ensureNotificationPermissions, getNotificationPermissionStatus } from '../services/notificationScheduler';
-
+import { formatWeightFromKg } from '../utils/weightUnits';
+import { getBottomOverlaySpacing } from '../utils/bottomOverlaySpacing';
+import { withAlpha } from '../utils/colorUtils';
+import { TYPE, RADIUS } from '../utils/themes';
+import { SkeletonCard } from '../components/ui/Skeleton';
+import { APP_VERSION_LABEL } from '../platform/appInfo';
 const ONBOARDING_KEY = '@ironlog/onboardingComplete';
-const FEATURE_SETUP_KEY = '@ironlog/v110FeatureSetupSeen';
+const FEATURE_SETUP_KEY = 'feature_setup_seen_v110';
 
 function getStreak(history) {
   if (!history.length) return 0;
@@ -36,6 +43,42 @@ function getStreak(history) {
   for (const d of days) {
     const diff = (new Date(prev) - new Date(d)) / 86400000;
     if (diff <= 1) { streak++; prev = d; } else break;
+  }
+  return streak;
+}
+
+function getWeekKey(dateString) {
+  const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) return '';
+  // ISO week key
+  const utcDate = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = utcDate.getUTCDay() || 7;
+  utcDate.setUTCDate(utcDate.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(utcDate.getUTCFullYear(), 0, 1));
+  const weekNo = Math.ceil((((utcDate - yearStart) / 86400000) + 1) / 7);
+  return `${utcDate.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`;
+}
+
+function getGoalStreak(history, weeklyGoalDays) {
+  const target = Math.max(1, Math.min(7, Number(weeklyGoalDays) || 4));
+  if (!Array.isArray(history) || history.length === 0) return 0;
+  const byWeek = new Map();
+  history.forEach((session) => {
+    const weekKey = getWeekKey(session?.date);
+    if (!weekKey) return;
+    const dayKey = String(session?.date || '').slice(0, 10);
+    if (!byWeek.has(weekKey)) byWeek.set(weekKey, new Set());
+    byWeek.get(weekKey).add(dayKey);
+  });
+  const sortedWeeks = Array.from(byWeek.keys()).sort().reverse();
+  let streak = 0;
+  for (const week of sortedWeeks) {
+    const count = byWeek.get(week)?.size || 0;
+    if (count >= target) {
+      streak += 1;
+    } else if (streak > 0) {
+      break;
+    }
   }
   return streak;
 }
@@ -160,13 +203,22 @@ function computeSetBasedGroupReadiness(history) {
   return readiness;
 }
 
+const MILESTONE_ICON = (key) => {
+  if (/ton|volume|lifted/i.test(key)) return '🏋️';
+  if (/pr|record|best/i.test(key)) return '🏅';
+  if (/streak/i.test(key)) return '🔥';
+  return '⚡';
+};
+
 export default function HomeScreen({ navigation }) {
   const {
     plans, history, bodyWeight, pb, exerciseMap, settings, onboardingComplete, completeOnboarding,
     manualRecoveryInput, engagementSnapshot, milestoneUnlocks, backupStatus,
     updateNotificationPreferences,
-  } = useContext(AppContext);
+  } = useWatermelonAppData();
   const colors = useTheme();
+  const insets = useSafeAreaInsets();
+  const { banner } = useActiveBanner();
   const insightsReady = useDeferredScreenReady({ minDelayMs: 16 });
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showFeatureSetup, setShowFeatureSetup] = useState(false);
@@ -203,7 +255,7 @@ export default function HomeScreen({ navigation }) {
     (async () => {
       const [permissionStatus, setupSeen, backupDirectory] = await Promise.all([
         getNotificationPermissionStatus().catch(() => null),
-        AsyncStorage.getItem(FEATURE_SETUP_KEY).catch(() => null),
+        getWatermelonSetting(FEATURE_SETUP_KEY).catch(() => null),
         prepareLocalBackupStorage().catch(() => null),
       ]);
       if (!mounted) return;
@@ -225,7 +277,7 @@ export default function HomeScreen({ navigation }) {
   };
 
   const finishFeatureSetup = async () => {
-    await AsyncStorage.setItem(FEATURE_SETUP_KEY, '1');
+    await setWatermelonSetting(FEATURE_SETUP_KEY, '1', 'string');
     setShowFeatureSetup(false);
   };
 
@@ -242,7 +294,8 @@ export default function HomeScreen({ navigation }) {
     }
   };
 
-  const streak = getStreak(history);
+  const weeklyGoalDays = Math.max(1, Math.min(7, Number(settings?.weeklyGoalDays) || 4));
+  const goalStreak = getGoalStreak(history, weeklyGoalDays);
   const thisWeek = new Date(); thisWeek.setDate(thisWeek.getDate() - 7);
   const weekSessions = history.filter(h => new Date(h.date) > thisWeek);
   const hitDays = new Set(weekSessions.map(h => h.dayId));
@@ -255,14 +308,14 @@ export default function HomeScreen({ navigation }) {
   const { recommendation, volumeStatus, groupReadiness, readiness, muscleAnalytics } = useMemo(() => {
     if (!insightsReady) return { recommendation: null, volumeStatus: {}, groupReadiness: {}, readiness: {}, muscleAnalytics: null };
     if (!history || history.length === 0) return { recommendation: null, volumeStatus: {}, groupReadiness: {}, readiness: {}, muscleAnalytics: null };
-    
+
     const totalFatigue = {};
     const totalStimulus = {};
-    
+
     history.forEach(h => {
       const diffHours = (new Date() - new Date(h.date)) / 3600000;
       if (diffHours > 240) return; // ignore > 10 days
-  
+
       const sessionWorkouts = [];
       (h.exercises || []).forEach(ex => {
         const wsets = (ex.sets || []).filter(st => st.type !== 'warmup' && st.reps > 0);
@@ -276,7 +329,7 @@ export default function HomeScreen({ navigation }) {
            });
         });
       });
-  
+
       if (exerciseMap) {
         const { stimulus, fatigue } = computeStimulusFatigue(sessionWorkouts, exerciseMap);
         const decayed = decayFatigueHourly(fatigue, diffHours);
@@ -347,10 +400,11 @@ export default function HomeScreen({ navigation }) {
       day: nextDay,
       history,
       goalMode: activePlan?.goalMode || settings?.goalMode || 'hypertrophy',
+      progressionStyle: settings?.progressionStyle,
     })
       .map((suggestion) => ({ exercise: { name: suggestion.exerciseName }, suggestion }))
       .slice(0, 3);
-  }, [activePlan?.goalMode, history, insightsReady, nextDay, settings?.goalMode]);
+  }, [activePlan?.goalMode, history, insightsReady, nextDay, settings?.goalMode, settings?.progressionStyle]);
 
   const programInsights = useMemo(() => {
     if (!insightsReady) return null;
@@ -391,6 +445,8 @@ export default function HomeScreen({ navigation }) {
     [groupReadiness, manualRecoveryInput]
   );
 
+  const scoreColor = (recoveryScore?.score ?? 0) >= 70 ? '#00C170' : (recoveryScore?.score ?? 0) >= 40 ? '#FFD700' : '#FF4500';
+
   const openRecommendedTemplate = () => {
     if (!recommendation?.recommendedTemplateId) return;
     navigation.navigate('ProgramPicker', {
@@ -416,10 +472,17 @@ export default function HomeScreen({ navigation }) {
   };
 
   return (
-    <ScrollView style={[s.container, { backgroundColor: colors.bg }]} contentContainerStyle={{ paddingBottom: 40 }}>
+    <ScrollView
+      style={[s.container, { backgroundColor: colors.bg }]}
+      contentContainerStyle={{
+        paddingBottom: getBottomOverlaySpacing({
+          safeAreaBottom: insets.bottom,
+          includeWorkoutPill: !!banner,
+          extra: 24,
+        }),
+      }}>
       {/* Header */}
       <View style={[s.header, { borderBottomColor: colors.faint }]}>
-        <Text style={[s.appSub, { color: colors.muted }]}>IRONLOG</Text>
         <View style={{ flexDirection: 'row', alignItems: 'flex-end' }}>
           <Text style={[s.appName, { color: colors.text }]}>IRON</Text>
           <Text style={[s.appName, { color: colors.accent }]}>LOG</Text>
@@ -431,20 +494,11 @@ export default function HomeScreen({ navigation }) {
 
       {/* TRAINING INTELLIGENCE */}
       {!insightsReady && history?.length ? (
-        <View style={[s.intelCard, { backgroundColor: colors.card, borderColor: colors.cardBorder, flexDirection: 'row', alignItems: 'center', gap: 10 }]}>
-          <ActivityIndicator size="small" color={colors.accent} />
-          <View style={{ flex: 1 }}>
-            <Text style={[s.intelSup, { color: colors.muted, marginBottom: 2 }]}>PREPARING LIVE INSIGHTS</Text>
-            <Text style={[s.intelReason, { color: colors.subtext, marginTop: 0 }]}>Loading progression, recovery, and muscle analytics after the transition settles.</Text>
-          </View>
-        </View>
+        <SkeletonCard style={{ marginHorizontal: 16, marginTop: 12 }} />
       ) : null}
-      {(recommendation || nextTargets.length > 0 || muscleAnalytics?.focusInsight) && (
-        <TouchableOpacity
-          activeOpacity={recommendation?.recommendedTemplateId ? 0.82 : 1}
-          disabled={!recommendation?.recommendedTemplateId}
-          onPress={openRecommendedTemplate}
-          style={[s.intelCard, { backgroundColor: colors.accent + '15', borderColor: colors.accent + '40' }]}>
+      {(recommendation || nextTargets.length > 0) && (
+        <View
+          style={[s.intelCard, { backgroundColor: withAlpha(colors.accent, 0.08), borderColor: withAlpha(colors.accent, 0.25) }]}>
           <Text style={[s.intelSup, { color: colors.accent }]}>TRAINING INTELLIGENCE</Text>
           <Text style={[s.intelMain, { color: colors.text }]}>
             {nextDay ? `${nextDay.name} is lined up with live next-session targets.` : recommendation?.headline}
@@ -452,7 +506,7 @@ export default function HomeScreen({ navigation }) {
           {nextTargets.length > 0 ? (
             <View style={{ marginTop: 12, gap: 8 }}>
               {nextTargets.map(({ exercise, suggestion }) => (
-                <View key={exercise.id || exercise.name} style={[s.targetPreviewRow, { borderColor: colors.accent + '33' }]}>
+                <View key={exercise.id || exercise.name} style={[s.targetPreviewRow, { borderColor: withAlpha(colors.accent, 0.2), backgroundColor: colors.card }]}>
                   <Text style={[s.targetPreviewName, { color: colors.text }]} numberOfLines={1}>{exercise.name}</Text>
                   <Text style={[s.targetPreviewVal, { color: suggestion.action === 'reduce' ? '#FF8E8E' : colors.accent }]}>
                     {suggestion.targetWeight}kg x {suggestion.targetReps}
@@ -461,61 +515,29 @@ export default function HomeScreen({ navigation }) {
               ))}
             </View>
           ) : null}
-          {plateauCallout ? (
-            <Text style={[s.intelReason, { color: colors.subtext }]}>
-              Plateau watch: {plateauCallout.reason} - {plateauCallout.recommendation}.
-            </Text>
-          ) : null}
-          {deloadCallout ? (
-            <Text style={[s.intelReason, { color: '#FF8E8E' }]}>
-              Deload watch: {deloadCallout.reason}.
-            </Text>
-          ) : null}
-          {muscleAnalytics?.focusInsight ? (
-            <Text style={[s.intelReason, { color: colors.muted }]}>Focus: {muscleAnalytics.focusInsight}</Text>
-          ) : null}
-          {programInsights?.projectedProgress ? (
-            <Text style={[s.intelReason, { color: colors.subtext }]}>Program: {programInsights.projectedProgress}</Text>
-          ) : null}
-          {programInsights?.recommendedReschedule ? (
-            <Text style={[s.intelReason, { color: colors.muted }]}>Reschedule: {programInsights.recommendedReschedule}</Text>
-          ) : null}
           {activePlan ? (
             <TouchableOpacity
               onPress={() => navigation.navigate('ProgramInsights')}
-              style={[s.programCta, { borderColor: colors.accent + '66', backgroundColor: colors.bg + '66' }]}>
+              style={[s.programCta, { borderColor: withAlpha(colors.accent, 0.4), backgroundColor: withAlpha(colors.bg, 0.4) }]}>
               <Text style={[s.programCtaText, { color: colors.accent }]}>OPEN PROGRAM INSIGHTS</Text>
               <Ionicons name="arrow-forward" size={13} color={colors.accent} />
             </TouchableOpacity>
           ) : null}
-          <View style={s.metricRow}>
-            <Text style={[s.metricChip, { color: colors.text, borderColor: colors.faint }]}>
-              {consistencyMetrics.workoutsPerWeek} workouts/week
-            </Text>
-            <Text style={[s.metricChip, { color: colors.text, borderColor: colors.faint }]}>
-              {consistencyMetrics.adherenceToProgram}% adherence
-            </Text>
-            <Text style={[s.metricChip, { color: colors.text, borderColor: colors.faint }]}>
-              {consistencyMetrics.exerciseRepeatConsistency}% repeat consistency
-            </Text>
-          </View>
-          {!!recommendation?.reason && (
-            <Text style={[s.intelReason, { color: colors.subtext }]}>Reason: {recommendation.reason}</Text>
-          )}
-          {!!recommendation?.findings?.[0] && (
-            <Text style={[s.intelReason, { color: colors.muted, marginTop: 6 }]}>
-              Insight: {recommendation.findings[0]}
-            </Text>
-          )}
-          {!!recommendation.recommendedTemplateId && (
-            <View style={{ marginTop: 8, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Text style={{ fontSize: 11, color: colors.muted, marginTop: 8 }}>
+            {consistencyMetrics?.workoutsPerWeek ?? consistencyMetrics.workoutsPerWeek} sessions/wk · {consistencyMetrics?.adherenceToProgram ?? consistencyMetrics.adherenceToProgram}% adherence
+          </Text>
+          {!!recommendation?.recommendedTemplateId && (
+            <TouchableOpacity
+              onPress={openRecommendedTemplate}
+              style={{ marginTop: 8, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
               <Ionicons name="sparkles-outline" size={13} color={colors.accent} />
               <Text style={{ fontSize: 11, color: colors.accent, fontWeight: '700', letterSpacing: 0.2 }}>
-                Tap to open recommended plan
+                Open recommended plan
               </Text>
-            </View>
+              <Ionicons name="arrow-forward" size={11} color={colors.accent} />
+            </TouchableOpacity>
           )}
-        </TouchableOpacity>
+        </View>
       )}
 
       {/* Weekly summary */}
@@ -529,21 +551,21 @@ export default function HomeScreen({ navigation }) {
           <Text style={[s.intelReason, { color: colors.text, marginTop: 2 }]}>{engagementSnapshot.weeklySummary.summaryLine}</Text>
           <View style={s.summaryGrid}>
             <View style={s.summaryRow}>
-              <View style={[s.summaryCard, { borderColor: colors.faint }]}>
+              <View style={[s.summaryCard, { borderColor: colors.faint, backgroundColor: colors.surface }]}>
                 <Text style={[s.summaryCardText, { color: colors.text }]}>{engagementSnapshot.weeklySummary.workouts} workouts</Text>
               </View>
-              <View style={[s.summaryCard, { borderColor: colors.faint }]}>
+              <View style={[s.summaryCard, { borderColor: colors.faint, backgroundColor: colors.surface }]}>
                 <Text style={[s.summaryCardText, { color: colors.text }]}>{engagementSnapshot.weeklySummary.totalSets} sets</Text>
               </View>
-              <View style={[s.summaryCard, { borderColor: colors.faint }]}>
+              <View style={[s.summaryCard, { borderColor: colors.faint, backgroundColor: colors.surface }]}>
                 <Text style={[s.summaryCardText, { color: colors.text }]}>{Math.round(engagementSnapshot.weeklySummary.totalVolume / 1000 * 10) / 10}t volume</Text>
               </View>
             </View>
             <View style={s.summaryRow}>
-              <View style={[s.summaryCard, { borderColor: colors.faint }]}>
+              <View style={[s.summaryCard, { borderColor: colors.faint, backgroundColor: colors.surface }]}>
                 <Text style={[s.summaryCardText, { color: colors.text }]}>Train streak {engagementSnapshot?.streaks?.training?.current || 0}d</Text>
               </View>
-              <View style={[s.summaryCard, { borderColor: colors.faint }]}>
+              <View style={[s.summaryCard, { borderColor: colors.faint, backgroundColor: colors.surface }]}>
                 <Text style={[s.summaryCardText, { color: colors.text }]}>BW streak {engagementSnapshot?.streaks?.bodyweight?.current || 0}d</Text>
               </View>
               <View style={[s.summaryCard, { borderColor: 'transparent', backgroundColor: 'transparent' }]} />
@@ -553,16 +575,16 @@ export default function HomeScreen({ navigation }) {
         </View>
       ) : null}
 
-      {/* Stats row */}
-      <View style={[s.statsRow, { borderBottomColor: colors.faint }]}>
+      {/* Stats row — FIX 06/13 */}
+      <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingVertical: 8 }}>
         {[
-          { val: weekSessions.length + '/7', label: 'THIS WEEK' },
-          { val: `${streak} ${streak === 1 ? 'day' : 'days'}`, label: 'STREAK' },
+          { val: `${weekSessions.length}/${weeklyGoalDays}`, label: 'THIS WEEK' },
+          { val: `${goalStreak} ${goalStreak === 1 ? 'week' : 'weeks'}`, label: 'GOAL STREAK' },
           { val: avgDur + 'm', label: 'AVG TIME' },
-        ].map((st, i) => (
-          <View key={st.label} style={[s.statBox, i < 2 && { borderRightWidth: 1, borderRightColor: colors.faint }]}>
-            <Text style={[s.statVal, { color: colors.text }]}>{st.val}</Text>
-            <Text style={[s.statLabel, { color: colors.muted }]}>{st.label}</Text>
+        ].map((stat) => (
+          <View key={stat.label} style={{ flex: 1, backgroundColor: colors.card, borderRadius: 12, paddingVertical: 12, paddingHorizontal: 10, borderWidth: 1, borderColor: colors.cardBorder, alignItems: 'center' }}>
+            <Text style={{ fontSize: 20, fontWeight: '900', color: stat.label === 'STREAK' ? colors.accent : colors.text }}>{stat.val}</Text>
+            <Text style={{ fontSize: 8, letterSpacing: 2, color: colors.muted, marginTop: 4 }}>{stat.label}</Text>
           </View>
         ))}
       </View>
@@ -584,11 +606,13 @@ export default function HomeScreen({ navigation }) {
         </View>
       )}
 
-      {/* Body weight */}
-      <TouchableOpacity style={[s.bwRow, { borderBottomColor: colors.faint }]} onPress={() => navigation.navigate('BodyWeight')}>
+      {/* Body weight — FIX 14 */}
+      <TouchableOpacity style={[s.bwRow, { backgroundColor: colors.card, borderColor: colors.cardBorder }]} onPress={() => navigation.navigate('BodyWeight')}>
         <Text style={[s.bwLabel, { color: colors.muted }]}>BODY WEIGHT</Text>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Text style={[s.bwVal, { color: colors.text }]}>{latestBW ? latestBW.weight + ' kg' : '-- kg'}</Text>
+          <Text style={[s.bwVal, { color: colors.text }]}>
+            {latestBW ? formatWeightFromKg(latestBW.weight, settings?.weightUnit || 'kg') : `-- ${settings?.weightUnit || 'kg'}`}
+          </Text>
           <Ionicons name="chevron-forward" size={18} color={colors.muted} />
         </View>
       </TouchableOpacity>
@@ -596,23 +620,35 @@ export default function HomeScreen({ navigation }) {
       {/* Recovery heatmap */}
       <RecoveryHeatmap navigation={navigation} groupReadiness={groupReadiness} />
       <TouchableOpacity
-        style={[s.intelCard, { backgroundColor: colors.card, borderColor: colors.cardBorder, marginTop: 10 }]}
+        style={[s.intelCard, { backgroundColor: withAlpha(scoreColor, 0.10), borderColor: withAlpha(scoreColor, 0.35), marginTop: 10 }]}
         onPress={() => navigation.navigate('RecoveryMap')}
       >
-        <Text style={[s.intelSup, { color: colors.muted }]}>READINESS</Text>
-        <Text style={[s.intelMain, { color: recoveryScore.state === 'fatigued' ? '#FF8E8E' : recoveryScore.state === 'recovering' ? '#FFD166' : '#6FE0A4' }]}>
-          Recovery {recoveryScore.score}
-        </Text>
-        <Text style={[s.intelReason, { color: colors.subtext }]}>{recoveryScore.explanation}</Text>
+        <Text style={[s.intelSup, { color: scoreColor }]}>READINESS</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4 }}>
+          <Text style={{ fontSize: 36, fontWeight: '900', color: scoreColor }}>{recoveryScore?.score ?? 0}</Text>
+          <Text style={[s.intelReason, { color: colors.subtext, flex: 1 }]}>{recoveryScore.explanation}</Text>
+        </View>
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={[s.intelCard, { backgroundColor: colors.card, borderColor: colors.cardBorder, marginTop: 10, flexDirection: 'row', alignItems: 'center', paddingVertical: 13 }]}
+        onPress={() => navigation.navigate('TrainingIntelligence')}
+      >
+        <Ionicons name="person-outline" size={18} color={colors.accent} style={{ marginRight: 10 }} />
+        <View style={{ flex: 1 }}>
+          <Text style={[s.intelSup, { color: colors.muted }]}>ATHLETE PROFILE</Text>
+          <Text style={{ fontSize: 13, fontWeight: '700', color: colors.text }}>Volume · PR Velocity · Balance</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={16} color={colors.muted} />
       </TouchableOpacity>
 
       {Object.keys(milestoneUnlocks || {}).length ? (
         <View style={{ paddingHorizontal: 16, paddingTop: 6 }}>
           <Text style={[s.chipsLabel, { color: colors.muted }]}>MILESTONES</Text>
+          {/* FIX 04 — Milestone badges */}
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
             {Object.values(milestoneUnlocks).slice(-4).reverse().map((milestone) => (
-              <View key={milestone.key} style={[s.metricChip, { borderColor: colors.accent + '66', backgroundColor: colors.accentSoft }]}>
-                <Text style={{ color: colors.accent, fontSize: 10, fontWeight: '800', letterSpacing: 0.8 }}>{milestone.label}</Text>
+              <View key={milestone.key} style={{ backgroundColor: colors.card, borderRadius: RADIUS.sm, paddingVertical: 7, paddingHorizontal: 12, borderWidth: 1, borderColor: colors.cardBorder, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={{ color: colors.text, fontWeight: '700', fontSize: 12 }}>{MILESTONE_ICON(milestone.key || milestone.type || '')} {milestone.label}</Text>
               </View>
             ))}
           </View>
@@ -644,7 +680,8 @@ export default function HomeScreen({ navigation }) {
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                       <Text style={[s.dayLabel, { color: day.color }]}>{day.label || `D${i + 1}`}</Text>
                       <Text style={[s.dayName, { color: colors.text }]}>{day.name}</Text>
-                      {hasPb && <View style={[s.pbBadge, { borderColor: (colors.gold || '#FFD700') + '44', backgroundColor: (colors.gold || '#FFD700') + '11' }]}><Text style={[s.pbBadgeText, { color: colors.gold || '#FFD700' }]}>PB</Text></View>}
+                      {/* FIX 05 — PR badge uses accent color */}
+                      {hasPb && <View style={[s.pbBadge, { borderColor: withAlpha(colors.accent, 0.3), backgroundColor: withAlpha(colors.accent, 0.08) }]}><Text style={[s.pbBadgeText, { color: colors.accent }]}>PB</Text></View>}
                     </View>
                     {day.tag ? <Text style={[s.dayTag, { color: colors.subtext }]}>{day.tag}</Text> : null}
                     <Text style={[s.dayMeta, { color: colors.muted }]}>{dayExerciseCount} exercises · {lastDate}</Text>
@@ -660,7 +697,7 @@ export default function HomeScreen({ navigation }) {
       <Modal visible={showFeatureSetup} transparent animationType="fade">
         <View style={s.overlay}>
           <View style={[s.onboardCard, { backgroundColor: colors.card, borderColor: colors.cardBorder, gap: 14 }]}>
-            <Text style={[s.onboardTitle, { color: colors.text, fontSize: 28, lineHeight: 32 }]}>NEW IN{'\n'}IRONLOG 1.1.0</Text>
+            <Text style={[s.onboardTitle, { color: colors.text, fontSize: 28, lineHeight: 32 }]}>NEW IN{'\n'}IRONLOG {String(APP_VERSION_LABEL || '').toUpperCase()}</Text>
             <Text style={[s.onboardSub, { color: colors.muted }]}>
               Smart notifications, encrypted backups, and optional Google Drive backup are ready. We only ask for what these features actually need.
             </Text>
@@ -754,61 +791,70 @@ export default function HomeScreen({ navigation }) {
 
 const s = StyleSheet.create({
   container: { flex: 1 },
-  header: { padding: 24, paddingTop: 56, borderBottomWidth: 1 },
+  header: { paddingHorizontal: 20, paddingBottom: 18, paddingTop: 56, borderBottomWidth: 1 },
   appSub: { fontSize: 10, letterSpacing: 4, marginBottom: 4 },
-  appName: { fontSize: 42, fontWeight: '900', letterSpacing: -2, lineHeight: 44 },
-  appTagline: { fontSize: 13, marginTop: 4 },
-  intelCard: { margin: 16, marginBottom: 0, padding: 16, borderWidth: 1, borderLeftWidth: 4 },
-  intelSup: { fontSize: 9, fontWeight: '800', letterSpacing: 3, marginBottom: 4 },
-  intelMain: { fontSize: 20, fontWeight: '900', letterSpacing: -0.5 },
-  intelSub: { fontSize: 12, marginTop: 2 },
-  intelReason: { fontSize: 11, marginTop: 8, lineHeight: 15 },
-  targetPreviewRow: { borderWidth: 1, padding: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10 },
+  appName: { ...TYPE.display, fontSize: 38, lineHeight: 42, letterSpacing: -1.7 },
+  appTagline: { fontSize: 13, marginTop: 2, lineHeight: 19 },
+  intelCard: { marginHorizontal: 16, marginTop: 12, marginBottom: 0, padding: 16, borderWidth: 1, borderLeftWidth: 4, borderRadius: 10 },
+  intelSup: { ...TYPE.eyebrow, marginBottom: 4 },
+  intelMain: { fontSize: 21, fontWeight: '900', letterSpacing: -0.4, lineHeight: 24 },
+  intelSub: { fontSize: 12, marginTop: 3, lineHeight: 17 },
+  intelReason: { fontSize: 11, marginTop: 8, lineHeight: 16 },
+  targetPreviewRow: { borderWidth: 1, padding: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10, borderRadius: RADIUS.sm },
   targetPreviewName: { flex: 1, fontSize: 13, fontWeight: '700' },
   targetPreviewVal: { fontSize: 13, fontWeight: '900' },
   metricRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
-  metricChip: { borderWidth: 1, paddingHorizontal: 8, paddingVertical: 5, fontSize: 10, letterSpacing: 0.4 },
+  // FIX 15 — borderRadius on metricChip
+  metricChip: { borderWidth: 1, paddingHorizontal: 8, paddingVertical: 5, fontSize: 10, letterSpacing: 0.4, borderRadius: RADIUS.xs },
   summaryGrid: { marginTop: 10, gap: 8 },
   summaryRow: { flexDirection: 'row', gap: 8 },
-  summaryCard: { flex: 1, borderWidth: 1, minHeight: 36, justifyContent: 'center', paddingHorizontal: 8, paddingVertical: 6 },
+  // FIX 11 — summaryCard gets borderRadius; backgroundColor applied inline
+  summaryCard: { flex: 1, borderWidth: 1, minHeight: 36, justifyContent: 'center', paddingHorizontal: 8, paddingVertical: 6, borderRadius: RADIUS.xs },
   summaryCardText: { fontSize: 11, fontWeight: '700', textAlign: 'center' },
-  programCta: { marginTop: 10, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'flex-start' },
+  // FIX 15 — borderRadius on programCta
+  programCta: { marginTop: 10, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'flex-start', borderRadius: RADIUS.xs },
   programCtaText: { fontSize: 10, fontWeight: '800', letterSpacing: 1.2 },
-  weeklyShareBtn: { position: 'absolute', right: 12, top: 10, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 5, flexDirection: 'row', alignItems: 'center', gap: 6 },
+  // FIX 15 — borderRadius on weeklyShareBtn
+  weeklyShareBtn: { position: 'absolute', right: 12, top: 10, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 5, flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: RADIUS.xs },
   weeklyShareText: { fontSize: 9, fontWeight: '800', letterSpacing: 1 },
-  statsRow: { flexDirection: 'row', borderBottomWidth: 1 },
-  statBox: { flex: 1, padding: 16, alignItems: 'center' },
+  statsRow: { flexDirection: 'row', borderTopWidth: 1, borderBottomWidth: 1, marginTop: 12 },
+  statBox: { flex: 1, paddingVertical: 14, paddingHorizontal: 10, alignItems: 'center' },
   statVal: { fontSize: 20, fontWeight: '900' },
   statLabel: { fontSize: 8, letterSpacing: 2, marginTop: 4 },
-  chipsRow: { padding: 16, borderBottomWidth: 1, gap: 8 },
+  chipsRow: { paddingHorizontal: 16, paddingVertical: 14, gap: 8 },
   chipsLabel: { fontSize: 9, letterSpacing: 4, marginBottom: 8 },
-  chip: { paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1 },
-  chipText: { fontSize: 10, fontWeight: '700', letterSpacing: 2 },
-  bwRow: { padding: 16, borderBottomWidth: 1 },
+  chip: { paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderRadius: 999 },
+  chipText: { fontSize: 10, fontWeight: '700', letterSpacing: 1.4 },
+  // FIX 14 — bwRow proper card style; backgroundColor/borderColor applied inline
+  bwRow: { marginHorizontal: 16, marginVertical: 6, padding: 14, borderRadius: RADIUS.md, borderWidth: 1 },
   bwLabel: { fontSize: 9, letterSpacing: 4, marginBottom: 4 },
-  bwVal: { fontSize: 28, fontWeight: '900' },
-  daysSection: { padding: 16, gap: 10 },
+  // FIX 14 — bwVal fontSize 28, letterSpacing -0.5
+  bwVal: { fontSize: 28, fontWeight: '900', letterSpacing: -0.5 },
+  daysSection: { padding: 16, gap: 10, paddingTop: 18 },
   daysLabel: { fontSize: 9, letterSpacing: 4, marginBottom: 4 },
-  emptyCard: { padding: 32, borderWidth: 1, borderStyle: 'dashed', alignItems: 'center', gap: 10 },
+  emptyCard: { padding: 30, borderWidth: 1, borderStyle: 'dashed', alignItems: 'center', gap: 10, borderRadius: 10 },
   emptyTitle: { fontSize: 13, fontWeight: '800', letterSpacing: 2 },
   emptyHint: { fontSize: 12, textAlign: 'center' },
-  dayCard: { padding: 16, borderWidth: 1, borderLeftWidth: 3 },
+  dayCard: { padding: 16, borderWidth: 1, borderLeftWidth: 3, borderRadius: 10 },
   dayLabel: { fontSize: 10, letterSpacing: 2, fontWeight: '700' },
-  dayName: { fontSize: 22, fontWeight: '900', letterSpacing: -1 },
+  dayName: { fontSize: 21, fontWeight: '900', letterSpacing: -0.8 },
   dayTag: { fontSize: 13, marginTop: 2 },
   dayMeta: { fontSize: 11, marginTop: 4 },
-  pbBadge: { borderWidth: 1, paddingHorizontal: 6, paddingVertical: 2 },
+  // FIX 15 — borderRadius on pbBadge
+  pbBadge: { borderWidth: 1, paddingHorizontal: 6, paddingVertical: 2, borderRadius: RADIUS.xs },
   pbBadgeText: { fontSize: 8, fontWeight: '700', letterSpacing: 1 },
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', padding: 28 },
-  onboardCard: { padding: 32, borderWidth: 1, alignItems: 'center', gap: 16 },
+  // FIX 16 — onboarding border radii
+  onboardCard: { padding: 32, borderWidth: 1, alignItems: 'center', gap: 16, borderRadius: RADIUS.xl },
   onboardTitle: { fontSize: 32, fontWeight: '900', letterSpacing: -1, textAlign: 'center', lineHeight: 36 },
   onboardSub: { fontSize: 14, textAlign: 'center', lineHeight: 22 },
-  onboardBtn: { width: '100%', padding: 18, alignItems: 'center', marginTop: 8 },
+  onboardBtn: { width: '100%', padding: 18, alignItems: 'center', marginTop: 8, borderRadius: RADIUS.md },
   onboardBtnText: { color: '#fff', fontWeight: '800', fontSize: 14, letterSpacing: 2 },
-  setupRow: { width: '100%', borderWidth: 1, padding: 12, flexDirection: 'row', gap: 12, alignItems: 'center' },
+  // FIX 16 — setupRow and setupBtn border radii; FIX 15 — targetPreviewRow gets card bg via inline
+  setupRow: { width: '100%', borderWidth: 1, padding: 12, flexDirection: 'row', gap: 12, alignItems: 'center', borderRadius: RADIUS.sm },
   setupTitle: { fontSize: 13, fontWeight: '800', letterSpacing: 0.4 },
   setupHint: { fontSize: 11, lineHeight: 16, marginTop: 4 },
-  setupBtn: { minWidth: 88, paddingHorizontal: 12, paddingVertical: 10, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  setupBtn: { minWidth: 88, paddingHorizontal: 12, paddingVertical: 10, borderWidth: 1, alignItems: 'center', justifyContent: 'center', borderRadius: RADIUS.sm },
   setupBtnText: { fontSize: 10, fontWeight: '800', letterSpacing: 1.2 },
   setupFootnote: { width: '100%', fontSize: 11, lineHeight: 16, textAlign: 'center' },
   restoreBtn: { width: '100%', padding: 14, alignItems: 'center', borderWidth: 1 },
@@ -816,4 +862,3 @@ const s = StyleSheet.create({
   onboardSkip: { paddingVertical: 8 },
   onboardSkipText: { fontSize: 13 },
 });
-

@@ -1,6 +1,8 @@
-import React, { useContext, useState } from 'react';
+import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
-import { AppContext } from '../context/AppContext';
+import * as DocumentPicker from '../platform/documentPicker';
+import * as FileSystem from '../platform/filesystem';
+import useWatermelonAppData from '../hooks/useWatermelonAppData';
 import { useTheme } from '../context/ThemeContext';
 import { importBackup } from '../utils/backup';
 import {
@@ -8,19 +10,24 @@ import {
   pickSQLiteBundleFile,
   validateSQLiteBundle,
 } from '../services/sqliteExportImport';
+import { normalizeBackupImport } from '../services/backupImportNormalizer';
+import { buildRestoreSummary } from '../services/restoreResultModel';
 import CustomAlert from '../components/CustomAlert';
 
 export default function RestoreDataScreen({ navigation }) {
   const colors = useTheme();
-  const { restoreData, reloadFromStorage, completeOnboarding } = useContext(AppContext);
+  const { restoreData, reloadFromStorage, completeOnboarding } = useWatermelonAppData();
   const [busy, setBusy] = useState(false);
   const [alertConfig, setAlertConfig] = useState(null);
 
-  const finishRestore = async (message) => {
+  const finishRestore = async (messageOrSummary) => {
+    const message = typeof messageOrSummary === 'string'
+      ? messageOrSummary
+      : messageOrSummary?.message || 'Restore finished.';
     await reloadFromStorage();
     await completeOnboarding();
     setAlertConfig({
-      title: 'Restore complete',
+      title: messageOrSummary?.title || 'Restore complete',
       message,
       buttons: [{ text: 'Continue', style: 'default', onPress: () => navigation.reset({ index: 0, routes: [{ name: 'Tabs' }] }) }],
     });
@@ -32,10 +39,53 @@ export default function RestoreDataScreen({ navigation }) {
     try {
       const data = await importBackup();
       if (!data) return;
-      await restoreData(data);
-      await finishRestore('Encrypted backup imported successfully.');
+      if (data?.manifest && data?.encryptedPayload) {
+        setAlertConfig({
+          title: 'Encrypted container detected',
+          message: 'This is an encrypted snapshot container. Restore it from Backup Center with your passphrase.',
+          buttons: [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Open Backup Center', style: 'default', onPress: () => navigation.navigate('BackupCenter') },
+          ],
+        });
+        return;
+      }
+      const normalized = normalizeBackupImport(data);
+      const result = await restoreData(normalized.payload);
+      const summary = buildRestoreSummary({
+        sourceLabel: 'Backup file',
+        counts: result,
+        unsupportedFields: normalized.unsupportedFields,
+      });
+      await finishRestore(summary);
     } catch (e) {
       setAlertConfig({ title: 'Restore failed', message: String(e), buttons: [{ text: 'OK', style: 'default' }] });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const restoreFromUniversalJson = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const picked = await DocumentPicker.getDocumentAsync({
+        type: ['application/json', 'text/plain', '*/*'],
+        copyToCacheDirectory: true,
+      });
+      if (picked.canceled || !picked.assets?.[0]) return;
+      const raw = await FileSystem.readAsStringAsync(picked.assets[0].uri, { encoding: 'utf8' });
+      const parsed = JSON.parse(raw);
+      const normalized = normalizeBackupImport(parsed);
+      const result = await restoreData(normalized.payload);
+      const summary = buildRestoreSummary({
+        sourceLabel: `JSON (${normalized.format})`,
+        counts: result,
+        unsupportedFields: normalized.unsupportedFields,
+      });
+      await finishRestore(summary);
+    } catch (e) {
+      setAlertConfig({ title: 'Import failed', message: String(e?.message || e), buttons: [{ text: 'OK', style: 'default' }] });
     } finally {
       setBusy(false);
     }
@@ -52,8 +102,12 @@ export default function RestoreDataScreen({ navigation }) {
         setAlertConfig({ title: 'Invalid export', message: validation.reason || 'Unsupported file format.', buttons: [{ text: 'OK', style: 'default' }] });
         return;
       }
-      await importSQLiteBundle(bundle);
-      await finishRestore(`Imported ${validation.counts?.history || 0} workouts from SQLite export.`);
+      const imported = await importSQLiteBundle(bundle);
+      const summary = buildRestoreSummary({
+        sourceLabel: 'SQLite export',
+        counts: imported?.counts || validation?.counts || {},
+      });
+      await finishRestore(summary);
     } catch (e) {
       setAlertConfig({ title: 'Restore failed', message: String(e), buttons: [{ text: 'OK', style: 'default' }] });
     } finally {
@@ -93,10 +147,20 @@ export default function RestoreDataScreen({ navigation }) {
       </View>
 
       <View style={[s.card, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+        <Text style={[s.cardTitle, { color: colors.text }]}>Universal JSON import</Text>
+        <Text style={[s.cardBody, { color: colors.subtext }]}>Import any IRONLOG backup JSON: plain backup, SQLite export, or old-format files.</Text>
+        <TouchableOpacity
+          disabled={busy}
+          style={[s.primaryBtn, { backgroundColor: colors.accent, opacity: busy ? 0.6 : 1 }]}
+          onPress={restoreFromUniversalJson}
+        >
+          <Text style={s.primaryText}>{busy ? 'WORKING...' : 'IMPORT BACKUP JSON'}</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={[s.card, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
         <Text style={[s.cardTitle, { color: colors.text }]}>Switching from another app?</Text>
-        <Text style={[s.cardBody, { color: colors.subtext }]}>
-          Open Import Center for Strong CSV, Hevy CSV, or OpenWeight JSON migration.
-        </Text>
+        <Text style={[s.cardBody, { color: colors.subtext }]}>Open Import Center for Strong CSV, Hevy CSV, or OpenWeight JSON migration.</Text>
         <TouchableOpacity
           disabled={busy}
           style={[s.secondaryBtn, { borderColor: colors.accent, opacity: busy ? 0.6 : 1 }]}
@@ -119,13 +183,13 @@ const s = StyleSheet.create({
   content: { padding: 20, gap: 14, paddingBottom: 40 },
   header: { fontSize: 24, fontWeight: '900', letterSpacing: 1.3, marginTop: 12 },
   sub: { fontSize: 13, lineHeight: 19 },
-  card: { borderWidth: 1, padding: 16, gap: 8 },
+  card: { borderWidth: 1, borderRadius: 14, padding: 16, gap: 8 },
   cardTitle: { fontSize: 15, fontWeight: '800', letterSpacing: 0.6 },
   cardBody: { fontSize: 12, lineHeight: 18 },
-  primaryBtn: { marginTop: 6, paddingVertical: 14, alignItems: 'center' },
+  primaryBtn: { marginTop: 6, paddingVertical: 14, alignItems: 'center', borderRadius: 10 },
   primaryText: { color: '#fff', fontSize: 12, fontWeight: '900', letterSpacing: 1.5 },
-  secondaryBtn: { marginTop: 6, paddingVertical: 14, alignItems: 'center', borderWidth: 1 },
+  secondaryBtn: { marginTop: 6, paddingVertical: 14, alignItems: 'center', borderWidth: 1, borderRadius: 10 },
   secondaryText: { fontSize: 12, fontWeight: '900', letterSpacing: 1.5 },
-  skipBtn: { marginTop: 4, borderWidth: 1, paddingVertical: 12, alignItems: 'center' },
+  skipBtn: { marginTop: 4, borderWidth: 1, borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
   skipText: { fontSize: 11, fontWeight: '700', letterSpacing: 1.2 },
 });
