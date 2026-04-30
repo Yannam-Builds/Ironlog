@@ -1,4 +1,3 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from '../platform/filesystem';
 import * as Sharing from '../platform/sharing';
 import * as DocumentPicker from '../platform/documentPicker';
@@ -6,6 +5,7 @@ import * as SecureStore from '../platform/secureStore';
 import * as Crypto from '../platform/crypto';
 import { APP_VERSION } from '../platform/appInfo';
 import { exportDatabase, importDatabase } from '../db/repositories/importExportRepository';
+import { getSetting, setSetting, removeSetting } from '../db/repositories/settingsRepository';
 import {
   ACTIVE_WORKOUT_SESSION_PREFIX,
   BACKUP_CONFIG_KEY,
@@ -108,17 +108,22 @@ function normalizeSnapshotRecord(record) {
 }
 
 async function readJsonStorage(key, fallback) {
-  const raw = await AsyncStorage.getItem(key);
-  if (!raw) return fallback;
   try {
-    return JSON.parse(raw);
+    const value = await getSetting(key);
+    if (value == null) return fallback;
+    // getSetting returns parsed JSON for 'json' type, plain string otherwise
+    if (typeof value === 'object') return value;
+    if (typeof value === 'string') {
+      try { return JSON.parse(value); } catch (_) { return value; }
+    }
+    return value;
   } catch (_) {
     return fallback;
   }
 }
 
 async function writeJsonStorage(key, value) {
-  await AsyncStorage.setItem(key, JSON.stringify(value));
+  await setSetting(key, value, 'json');
   return value;
 }
 
@@ -216,21 +221,71 @@ export async function saveNotificationSettings(nextSettings) {
 }
 
 export async function getOrCreateDeviceId() {
-  const existing = await AsyncStorage.getItem(BACKUP_DEVICE_ID_KEY);
-  if (existing) return existing;
+  const existing = await getSetting(BACKUP_DEVICE_ID_KEY);
+  if (existing) return String(existing);
   const generated = Crypto.randomUUID();
-  await AsyncStorage.setItem(BACKUP_DEVICE_ID_KEY, generated);
+  await setSetting(BACKUP_DEVICE_ID_KEY, generated, 'string');
   return generated;
 }
 
 export async function getManagedStorageMap() {
-  const dynamicKeys = (await AsyncStorage.getAllKeys())
-    .filter((key) => key.startsWith(ACTIVE_WORKOUT_SESSION_PREFIX))
-    .sort();
-  const staticKeys = Object.values(BACKUP_MANAGED_KEYS).flat();
-  const keys = [...new Set([...staticKeys, ...dynamicKeys])];
-  const pairs = keys.length ? await AsyncStorage.multiGet(keys) : [];
-  return Object.fromEntries(pairs.filter(([key, raw]) => key && raw != null));
+  // All training data lives in WatermelonDB — build map from WM export + app_settings table
+  const map = {};
+  try {
+    const exported = await exportDatabase();
+    const data = exported?.data || {};
+
+    // Plans
+    if (Array.isArray(data.plans) && data.plans.length > 0) {
+      map['ironlog_plans'] = JSON.stringify(data.plans);
+    }
+
+    // History: workouts with nested exercises+sets (reconstructed for backup compatibility)
+    if (Array.isArray(data.workouts) && data.workouts.length > 0) {
+      const exercisesByWorkout = {};
+      (data.workout_exercises || []).forEach((we) => {
+        if (!exercisesByWorkout[we.workout_id]) exercisesByWorkout[we.workout_id] = [];
+        exercisesByWorkout[we.workout_id].push(we);
+      });
+      const setsByExercise = {};
+      (data.workout_sets || []).forEach((ws) => {
+        if (!setsByExercise[ws.workout_exercise_id]) setsByExercise[ws.workout_exercise_id] = [];
+        setsByExercise[ws.workout_exercise_id].push(ws);
+      });
+      const history = data.workouts.map((workout) => ({
+        ...workout,
+        exercises: (exercisesByWorkout[workout.id] || []).map((we) => ({
+          ...we,
+          sets: setsByExercise[we.id] || [],
+        })),
+      }));
+      map['ironlog_history'] = JSON.stringify(history);
+    }
+
+    // Body measurements / body weight
+    if (Array.isArray(data.body_measurements) && data.body_measurements.length > 0) {
+      const bwRows = data.body_measurements.filter((r) => r.measurement_type === 'body_weight');
+      const measRows = data.body_measurements.filter((r) => r.measurement_type !== 'body_weight');
+      if (bwRows.length > 0) map['ironlog_bw'] = JSON.stringify(bwRows);
+      if (measRows.length > 0) map['@ironlog/bodyMeasurements'] = JSON.stringify(measRows);
+    }
+
+    // Custom exercises
+    if (Array.isArray(data.exercises)) {
+      const custom = data.exercises.filter((e) => e.is_custom);
+      if (custom.length > 0) map['@ironlog/customExercises'] = JSON.stringify(custom);
+    }
+
+    // app_settings → all @ironlog/* keys (active sessions, PRs, gym profiles, etc.)
+    if (Array.isArray(data.app_settings)) {
+      data.app_settings.forEach((row) => {
+        if (row.key && row.value != null) {
+          map[row.key] = typeof row.value === 'string' ? row.value : JSON.stringify(row.value);
+        }
+      });
+    }
+  } catch (_) {}
+  return map;
 }
 
 function buildDomainsFromStorage(storageMap) {
@@ -557,7 +612,7 @@ export async function queueBackup(reason) {
 }
 
 export async function clearQueuedBackup() {
-  await AsyncStorage.removeItem(BACKUP_QUEUE_KEY);
+  await removeSetting(BACKUP_QUEUE_KEY);
   await saveBackupStatus({ queuedReason: null });
 }
 
@@ -810,24 +865,7 @@ export async function restoreBackupContainer(source, options = {}) {
     });
   }
 
-  const currentStorageMap = await getManagedStorageMap();
-  const removalKeys = keysForDomains(selectedDomains, currentStorageMap);
-  if (removalKeys.length) {
-    await AsyncStorage.multiRemove(removalKeys);
-  }
-
-  const nextPairs = [];
-  selectedDomains.forEach((domainId) => {
-    const items = normalizedDomains?.[domainId]?.items || {};
-    Object.entries(items).forEach(([key, rawValue]) => {
-      if (rawValue != null) nextPairs.push([key, rawValue]);
-    });
-  });
-  if (nextPairs.length) {
-    await AsyncStorage.multiSet(nextPairs);
-  }
-
-  // App runtime now reads core training data from SQLite.
+  // App runtime reads core training data from WatermelonDB (SQLite).
   // Keep SQLite in sync with restored snapshot domains so restore is immediately visible.
   const sqliteRelevantDomains = new Set(['plans', 'history', 'metrics', 'customExercises']);
   const shouldSyncSqlite = selectedDomains.some((domainId) => sqliteRelevantDomains.has(domainId));

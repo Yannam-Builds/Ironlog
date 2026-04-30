@@ -1,4 +1,4 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getSetting, setSetting } from '../db/repositories/settingsRepository';
 
 const FAVORITE_EXERCISES_KEY = '@ironlog/favoriteExerciseIds';
 
@@ -8,9 +8,7 @@ function normalizeIds(ids = []) {
 
 export async function getFavoriteExerciseIds() {
   try {
-    const raw = await AsyncStorage.getItem(FAVORITE_EXERCISES_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
+    const parsed = await getSetting(FAVORITE_EXERCISES_KEY);
     return normalizeIds(Array.isArray(parsed) ? parsed : []);
   } catch {
     return [];
@@ -19,7 +17,7 @@ export async function getFavoriteExerciseIds() {
 
 export async function setFavoriteExerciseIds(ids = []) {
   const normalized = normalizeIds(ids);
-  await AsyncStorage.setItem(FAVORITE_EXERCISES_KEY, JSON.stringify(normalized));
+  await setSetting(FAVORITE_EXERCISES_KEY, normalized, 'json');
   return normalized;
 }
 
@@ -32,4 +30,3 @@ export async function toggleFavoriteExerciseId(exerciseId) {
     : [...current, id];
   return setFavoriteExerciseIds(next);
 }
-

@@ -1,5 +1,4 @@
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { EXERCISES as BUNDLED_EXERCISES } from '../data/exerciseLibrary';
 import { EXERCISE_LIBRARY_ADDITIONS } from '../data/exerciseLibraryAdditions';
 import { EXERCISE_ID_MAP } from '../data/exerciseMapping';
@@ -11,8 +10,9 @@ import {
   getExercisesSnapshot as wmGetExercisesSnapshot,
 } from '../db/repositories/exerciseRepository';
 
-const LIBRARY_KEY = '@ironlog/exerciseLibrary';
-const INDEX_KEY = '@ironlog/exerciseIndex';
+// In-memory cache for the bundled index so we never rebuild it twice per session.
+let _bundledIndexCache = null;
+
 const FETCH_URL = 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/dist/exercises.json';
 
 const VALID_EQUIPMENT = new Set(['Barbell', 'Dumbbell', 'Cable', 'Machine', 'Bodyweight', 'Band', 'Kettlebell', 'Conditioning', 'Other']);
@@ -506,48 +506,36 @@ function shouldRebuildIndex(index) {
 
 async function rebuildLibraryAndIndexFromBundled() {
   const bundled = buildFromBundled();
-  const customRaw = await AsyncStorage.getItem('@ironlog/customExercises');
-  const custom = customRaw ? JSON.parse(customRaw) : [];
-  const full = [...bundled, ...custom];
+  // Custom exercises live in WatermelonDB (exercises table, isCustom=true) — no AsyncStorage needed
+  const wmCustom = await wmGetExercisesSnapshot();
+  const customExercises = Array.isArray(wmCustom) ? wmCustom.filter((e) => e.isCustom) : [];
+  const full = customExercises.length > 0 ? mergeWithDB(bundled, customExercises) : bundled;
   const index = buildIndex(full);
-  await AsyncStorage.multiSet([
-    [LIBRARY_KEY, JSON.stringify(full)],
-    [INDEX_KEY, JSON.stringify(index)],
-  ]);
+  _bundledIndexCache = index;
   return index;
 }
 
 export async function initExerciseLibrary(onStatus) {
-  // Already bootstrapped - instant return
-  const existing = await AsyncStorage.getItem(INDEX_KEY);
-  if (existing) {
-    let parsed = null;
-    try {
-      parsed = JSON.parse(existing);
-    } catch (error) {
-      console.warn('Exercise library index was corrupt; rebuilding from bundled v2 library:', error);
-      await AsyncStorage.multiRemove([INDEX_KEY, LIBRARY_KEY]);
-      onStatus && onStatus('repairing');
-      return rebuildLibraryAndIndexFromBundled();
-    }
-    if (!shouldRebuildIndex(parsed)) return parsed;
+  // If we have a valid in-memory cache, return immediately
+  if (_bundledIndexCache && Array.isArray(_bundledIndexCache) && _bundledIndexCache.length > 0) {
+    if (!shouldRebuildIndex(_bundledIndexCache)) return _bundledIndexCache;
+  }
+
+  // Try WatermelonDB first (seeded on first launch)
+  const wmIndex = await wmGetExercisesSnapshot();
+  if (Array.isArray(wmIndex) && wmIndex.length > 0) {
+    _bundledIndexCache = wmIndex;
+    if (!shouldRebuildIndex(wmIndex)) return wmIndex;
     onStatus && onStatus('optimizing');
     return rebuildLibraryAndIndexFromBundled();
   }
 
   onStatus && onStatus('setting_up');
-  const bundled = buildFromBundled();
-  const index = buildIndex(bundled);
-
-  // Save bundled exercises immediately - never block on network
-  await AsyncStorage.multiSet([
-    [LIBRARY_KEY, JSON.stringify(bundled)],
-    [INDEX_KEY, JSON.stringify(index)],
-  ]);
+  const index = await rebuildLibraryAndIndexFromBundled();
   onStatus && onStatus('done');
 
   // Bundled library is the v2 Codex-verified set (1,731 exercises).
-  // No network fetch needed.
+  // No network fetch needed — WM seeding handles persistence.
 
   return index;
 }
@@ -561,26 +549,17 @@ async function _fetchAndMerge(bundled) {
     if (!response.ok) return;
     const dbExercises = await response.json();
     const merged = mergeWithDB(bundled, dbExercises);
-    const customRaw = await AsyncStorage.getItem('@ironlog/customExercises');
-    const custom = customRaw ? JSON.parse(customRaw) : [];
-    const full = [...merged, ...custom];
-    const index = buildIndex(full);
-    await AsyncStorage.multiSet([
-      [LIBRARY_KEY, JSON.stringify(full)],
-      [INDEX_KEY, JSON.stringify(index)],
-    ]);
+    const index = buildIndex(merged);
+    // WatermelonDB is the source of truth — update in-memory cache only
+    _bundledIndexCache = index;
   } catch (_) {}
 }
 
 export async function getExerciseIndex() {
   const wmIndex = await wmGetExercisesSnapshot();
   if (Array.isArray(wmIndex) && wmIndex.length > 0) return wmIndex;
-  const raw = await AsyncStorage.getItem(INDEX_KEY);
-  if (!raw) return initExerciseLibrary();
-  try {
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-  } catch (_) {}
+  // Fall back to in-memory cache or rebuild from bundled
+  if (_bundledIndexCache && _bundledIndexCache.length > 0) return _bundledIndexCache;
   return initExerciseLibrary();
 }
 
@@ -591,11 +570,10 @@ export async function getExerciseById(id) {
     const found = wmIndex.find((exercise) => exercise.id === canonicalId || toArray(exercise.aliases).includes(id));
     if (found) return found;
   }
-  const raw = await AsyncStorage.getItem(LIBRARY_KEY);
-  if (!raw) return null;
-  const lib = JSON.parse(raw);
+  // Fall back to in-memory bundled cache
+  const cache = _bundledIndexCache || buildIndex(buildFromBundled());
   const canonicalId = LEGACY_EXERCISE_ID_ALIASES[id] || id;
-  return lib.find((exercise) => exercise.id === canonicalId || toArray(exercise.aliases).includes(id)) || null;
+  return cache.find((exercise) => exercise.id === canonicalId || toArray(exercise.aliases).includes(id)) || null;
 }
 
 export async function getExerciseByName(name) {
@@ -610,12 +588,11 @@ export async function getExerciseByName(name) {
     });
     if (found) return found;
   }
-  const raw = await AsyncStorage.getItem(LIBRARY_KEY);
-  if (!raw) return null;
-  const lib = JSON.parse(raw);
+  // Fall back to in-memory bundled cache
+  const cache = _bundledIndexCache || buildIndex(buildFromBundled());
   const canonical = resolveCanonicalExerciseName(name);
   const key = normalizeAliasKey(canonical);
-  return lib.find((exercise) => {
+  return cache.find((exercise) => {
     if (resolveCanonicalExerciseName(exercise.name) === canonical) return true;
     const aliases = toArray(exercise.aliases).map((alias) => normalizeAliasKey(alias));
     return aliases.includes(key);
@@ -654,7 +631,6 @@ export async function deleteCustomExercise(id) {
 }
 
 export async function retryLibraryFetch() {
-  // Clear index to force re-init on next call
-  await AsyncStorage.removeItem(INDEX_KEY);
-  await AsyncStorage.removeItem(LIBRARY_KEY);
+  // Invalidate in-memory cache so the next getExerciseIndex() call re-fetches from WatermelonDB
+  _bundledIndexCache = null;
 }
