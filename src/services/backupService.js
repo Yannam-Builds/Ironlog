@@ -4,7 +4,7 @@ import * as DocumentPicker from '../platform/documentPicker';
 import * as SecureStore from '../platform/secureStore';
 import * as Crypto from '../platform/crypto';
 import { APP_VERSION } from '../platform/appInfo';
-import { exportDatabase, importDatabase } from '../db/repositories/importExportRepository';
+import { exportDatabase, importAnyPayload } from '../db/repositories/importExportRepository';
 import { getSetting, setSetting, removeSetting } from '../db/repositories/settingsRepository';
 import {
   ACTIVE_WORKOUT_SESSION_PREFIX,
@@ -62,7 +62,7 @@ async function loadTrainingSnapshotCompat() {
 }
 
 async function replaceTrainingSnapshotCompat(snapshot = {}) {
-  await importDatabase({
+  await importAnyPayload({
     plans: Array.isArray(snapshot?.plans) ? snapshot.plans : [],
     history: Array.isArray(snapshot?.history) ? snapshot.history : [],
     bodyWeight: Array.isArray(snapshot?.bodyWeight) ? snapshot.bodyWeight : [],
