@@ -156,6 +156,7 @@ export default function useWatermelonAppData() {
   const [manualPb, setManualPb] = useState({});
   const [exerciseNotes, setExerciseNotes] = useState({});
   const [onboardingComplete, setOnboardingComplete] = useState(false);
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [milestoneUnlocks, setMilestoneUnlocks] = useState({});
   const [backupConfig, setBackupConfig] = useState(DEFAULT_BACKUP_CONFIG);
   const [backupStatus, setBackupStatus] = useState(DEFAULT_BACKUP_STATUS);
@@ -209,6 +210,7 @@ export default function useWatermelonAppData() {
         if (milestones && typeof milestones === 'object') setMilestoneUnlocks(milestones);
         if (savedPb && typeof savedPb === 'object') setManualPb(savedPb);
       } catch (_) {}
+      if (mounted) setSettingsLoaded(true);
       refreshBackupState().catch(() => {});
     })();
     return () => { mounted = false; };
@@ -416,7 +418,7 @@ export default function useWatermelonAppData() {
     bodyWeight,
     exerciseNotes,
     settings,
-    initialized: !home.loading && !plansHook.loading && !historyHook.loading,
+    initialized: !home.loading && !plansHook.loading && !historyHook.loading && settingsLoaded,
     manualRecoveryInput: manualRecovery.manualRecoveryInput,
     milestoneUnlocks,
     engagementSnapshot,
