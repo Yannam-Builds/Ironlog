@@ -216,6 +216,16 @@ export default function useWatermelonAppData() {
     return () => { mounted = false; };
   }, [refreshBackupState]);
 
+  // One-time migration: if onboarding_complete was never written to WM (users upgrading from the
+  // old AsyncStorage build), but they have existing plans, treat them as onboarded and persist it.
+  useEffect(() => {
+    if (!settingsLoaded || onboardingComplete) return;
+    if (plans && plans.length > 0) {
+      setSetting(ONBOARDING_KEY, true, 'boolean').catch(() => {});
+      setOnboardingComplete(true);
+    }
+  }, [settingsLoaded, onboardingComplete, plans]);
+
   const flagDirty = useCallback(async (reason = 'data_changed') => {
     try {
       await setBackupDirtyFlag(reason);

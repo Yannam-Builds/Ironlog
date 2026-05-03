@@ -26,7 +26,7 @@ import { prepareLocalBackupStorage } from '../services/backupService';
 import { ensureNotificationPermissions, getNotificationPermissionStatus } from '../services/notificationScheduler';
 import { formatWeightFromKg } from '../utils/weightUnits';
 import { getBottomOverlaySpacing } from '../utils/bottomOverlaySpacing';
-import { withAlpha } from '../utils/colorUtils';
+import { textOnColor, withAlpha } from '../utils/colorUtils';
 import { TYPE, RADIUS } from '../utils/themes';
 import { SkeletonCard } from '../components/ui/Skeleton';
 import { APP_VERSION_LABEL } from '../platform/appInfo';
@@ -217,6 +217,7 @@ export default function HomeScreen({ navigation }) {
     updateNotificationPreferences,
   } = useWatermelonAppData();
   const colors = useTheme();
+  const primaryTextColor = textOnColor(colors.accent, colors.textOnAccent);
   const insets = useSafeAreaInsets();
   const { banner } = useActiveBanner();
   const insightsReady = useDeferredScreenReady({ minDelayMs: 16 });
@@ -244,11 +245,16 @@ export default function HomeScreen({ navigation }) {
   }, [insightsReady]);
 
   useEffect(() => {
-    // Show onboarding if not complete AND user has no workout history (fresh start)
-    if (!onboardingComplete && (!history || history.length === 0)) {
+    // Show onboarding only for truly new users: no completed flag AND no plans AND no history.
+    // Having plans means the user already set up the app (onboarding_complete may not have been
+    // migrated from the old AsyncStorage store, so we treat existing data as onboarded).
+    const isNewUser = !onboardingComplete
+      && (!plans || plans.length === 0)
+      && (!history || history.length === 0);
+    if (isNewUser) {
       setShowOnboarding(true);
     }
-  }, [onboardingComplete, history]);
+  }, [onboardingComplete, history, plans]);
 
   useEffect(() => {
     let mounted = true;
@@ -714,7 +720,7 @@ export default function HomeScreen({ navigation }) {
           <View style={[s.onboardCard, { backgroundColor: colors.card, borderColor: colors.cardBorder, gap: 14 }]}>
             <Text style={[s.onboardTitle, { color: colors.text, fontSize: 28, lineHeight: 32 }]}>NEW IN{'\n'}IRONLOG {String(APP_VERSION_LABEL || '').toUpperCase()}</Text>
             <Text style={[s.onboardSub, { color: colors.muted }]}>
-              Smart notifications, encrypted backups, and optional Google Drive backup are ready. We only ask for what these features actually need.
+              Smart notifications and encrypted local backups are ready. We only ask for what these features actually need.
             </Text>
             <View style={[s.setupRow, { borderColor: colors.faint }]}>
               <View style={{ flex: 1 }}>
@@ -748,9 +754,9 @@ export default function HomeScreen({ navigation }) {
             </View>
             <View style={[s.setupRow, { borderColor: colors.faint }]}>
               <View style={{ flex: 1 }}>
-                <Text style={[s.setupTitle, { color: colors.text }]}>Google Drive backup</Text>
+                <Text style={[s.setupTitle, { color: colors.text }]}>Backup center</Text>
                 <Text style={[s.setupHint, { color: colors.subtext }]}>
-                  Optional. Open Backup Center to connect Drive and choose `AppData` or folder sync.
+                  Optional. Open Backup Center for encrypted snapshots, scheduling, and export.
                 </Text>
               </View>
               <TouchableOpacity
@@ -761,7 +767,7 @@ export default function HomeScreen({ navigation }) {
                 }}
               >
                 <Text style={[s.setupBtnText, { color: colors.accent }]}>
-                  {backupStatus?.driveLinked ? 'OPEN' : 'SET UP'}
+                  OPEN
                 </Text>
               </TouchableOpacity>
             </View>
@@ -769,7 +775,7 @@ export default function HomeScreen({ navigation }) {
               No microphone, overlay, or broad storage permission is required for this setup.
             </Text>
             <TouchableOpacity style={[s.onboardBtn, { backgroundColor: colors.accent }]} onPress={finishFeatureSetup}>
-              <Text style={s.onboardBtnText}>CONTINUE</Text>
+              <Text style={[s.onboardBtnText, { color: primaryTextColor }]}>CONTINUE</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -785,7 +791,7 @@ export default function HomeScreen({ navigation }) {
             </Text>
             <TouchableOpacity style={[s.onboardBtn, { backgroundColor: colors.accent }]}
               onPress={() => dismissOnboarding(true)}>
-              <Text style={s.onboardBtnText}>CREATE A PLAN</Text>
+              <Text style={[s.onboardBtnText, { color: primaryTextColor }]}>CREATE A PLAN</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[s.restoreBtn, { borderColor: colors.faint }]}
               onPress={() => {
@@ -864,7 +870,7 @@ const s = StyleSheet.create({
   onboardTitle: { fontSize: 32, fontWeight: '900', letterSpacing: -1, textAlign: 'center', lineHeight: 36 },
   onboardSub: { fontSize: 14, textAlign: 'center', lineHeight: 22 },
   onboardBtn: { width: '100%', padding: 18, alignItems: 'center', marginTop: 8, borderRadius: RADIUS.md },
-  onboardBtnText: { color: '#fff', fontWeight: '800', fontSize: 14, letterSpacing: 2 },
+  onboardBtnText: { fontWeight: '800', fontSize: 14, letterSpacing: 2 },
   // FIX 16 — setupRow and setupBtn border radii; FIX 15 — targetPreviewRow gets card bg via inline
   setupRow: { width: '100%', borderWidth: 1, padding: 12, flexDirection: 'row', gap: 12, alignItems: 'center', borderRadius: RADIUS.sm },
   setupTitle: { fontSize: 13, fontWeight: '800', letterSpacing: 0.4 },

@@ -2872,7 +2872,7 @@ function WorkoutContent({ plan, day, planIndex, dayIndex, navigation }) {
                   if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(uri, { mimeType: 'image/png' });
                 } catch (e) { setAlertConfig({ title: 'Share failed', message: String(e), buttons: [{ text: 'OK', style: 'default' }] }); }
               }}>
-              <Ionicons name="share-outline" size={16} color="#fff" />
+              <Ionicons name="share-outline" size={16} color={colors.textOnAccent || '#fff'} />
               <Text style={{ color: colors.textOnAccent || '#fff', fontWeight: '800', fontSize: 13, letterSpacing: 2 }}>SHARE</Text>
             </TouchableOpacity>
           </View>
@@ -2934,8 +2934,8 @@ export default function ActiveWorkoutScreen({ route, navigation }) {
 
   if (!day) {
     return (
-      <View style={[s.container, { backgroundColor: colors.bg }]}>
-        <Text style={{ color: colors.text, padding: 20 }}>Workout not found.</Text>
+      <View style={{ flex: 1, backgroundColor: colors.bg, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+        <Text style={{ color: colors.text, fontSize: 16 }}>Workout not found.</Text>
       </View>
     );
   }
