@@ -26,7 +26,7 @@
 
 - `v1.0.0`, `v1.1.0-beta`, and `v1.1.0` are now **Legacy Alpha** releases.
 - Legacy releases are **unsupported** and receive no fixes.
-- IronlogDB will be back soon with the best possible feature set: faster logging, stronger restore/import, and a cleaner WatermelonDB-first runtime.
+- Ironlog will be back soon with the best possible feature set: faster logging, stronger restore/import, and a cleaner WatermelonDB-first runtime.
 
 ## Featured Screens
 
@@ -127,7 +127,7 @@ See the full 23-shot gallery in [features/README.md](features/README.md), browse
 
 ## Themes
 
-IronlogDB is not locked to one visual style. The current Android build ships with an AMOLED-first look, a full light theme, and Monet-inspired variants while keeping the same layout, contrast hierarchy, and training density across all of them.
+Ironlog is not locked to one visual style. The current Android build ships with an AMOLED-first look, a full light theme, and Monet-inspired variants while keeping the same layout, contrast hierarchy, and training density across all of them.
 
 ## What Comes Next
 
@@ -147,7 +147,7 @@ IronlogDB is not locked to one visual style. The current Android build ships wit
 
 Public APKs on [GitHub Releases](https://github.com/Yannam-Builds/Ironlog/releases) are Legacy Alpha and unsupported.
 
-IronlogDB will return soon with the best possible feature set on the WatermelonDB line.
+Ironlog will return soon with the best possible feature set on the WatermelonDB line.
 
 ## Build From Source
 
@@ -201,7 +201,7 @@ Key files:
 
 ## License
 
-IronlogDB is source-available, not OSI open source.
+Ironlog is source-available, not OSI open source.
 
 It is released under the [IronLog Personal Use License](LICENSE) for personal and non-commercial use.
 
