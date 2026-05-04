@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="assets/github-logo-v3.png" width="140" alt="IronLog logo" style="margin-bottom: 6px;" />
+  <img src="assets/github-logo-v3.png" width="140" alt="IronLog logo" style="margin-bottom: 2px;" />
 
   <h1>Ironlog</h1>
 
