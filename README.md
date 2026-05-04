@@ -1,7 +1,7 @@
 <div align="center">
   <img src="assets/github-logo.png" width="140" alt="IronLog logo" />
 
-  <h1>IronlogDB</h1>
+  <h1>Ironlog</h1>
 
   <p><strong>Offline-first Android workout tracker with live next-session targets, muscle analytics, premium themes, and local-first backups.</strong></p>
 
