@@ -12,8 +12,8 @@ export async function shareBackupFile(filePath, fileName) {
   await Share.open({
     url: `file://${filePath}`,
     type: 'application/json',
-    filename: fileName || 'ironlogdb_backup.json',
-    title: 'Save IronlogDB backup',
+    filename: fileName || 'ironlog_backup.json',
+    title: 'Save Ironlog backup',
     failOnCancel: false,
   });
 }

@@ -1,18 +1,26 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Status-bar / notification small icon — IronLog logo (white, monochrome)  -->
-<!-- Content bounding box: x 267.5–986.5 (w=719), y 205.5–1032.5 (h=827)     -->
-<!-- Scale = 24/827 ≈ 0.02902  |  Translate centers content in 24dp canvas    -->
+<!--
+  Adaptive icon foreground — IronLog logo
+  Source viewBox: 1254 × 1254
+  Safe zone: 66dp centred in 108dp viewport
+  Scale = 66 / 1254 ≈ 0.05263  |  Translate = (108 − 66) / 2 = 21 dp
+
+  fillColor="#FFFFFF" so the glyph is white on the dark (#080808) background
+  for normal (non-themed) launches. Android's Monet engine ignores the fill
+  colour and re-tints only the alpha channel for themed icons, so this is
+  correct for both modes.
+-->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="24dp"
-    android:height="24dp"
-    android:viewportWidth="24"
-    android:viewportHeight="24">
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
 
     <group
-        android:scaleX="0.02902"
-        android:scaleY="0.02902"
-        android:translateX="-6.196"
-        android:translateY="-5.964">
+        android:scaleX="0.05263"
+        android:scaleY="0.05263"
+        android:translateX="21"
+        android:translateY="21">
         <path
             android:fillColor="#FFFFFF"
             android:fillType="evenOdd"

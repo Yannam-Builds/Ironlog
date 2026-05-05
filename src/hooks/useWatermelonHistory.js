@@ -40,7 +40,7 @@ export default function useWatermelonHistory() {
   useEffect(() => {
     const sub = combineLatest([
       WORKOUTS.query(Q.where('status', 'completed'), Q.sortBy('started_at', Q.desc)).observe(),
-      WORKOUT_EXERCISES.query().observe(),
+      WORKOUT_EXERCISES.query(Q.on('workouts', Q.where('status', 'completed'))).observe(),
       WORKOUT_SETS.query().observe(),
       EXERCISES.query().observe(),
     ]).subscribe(([workouts, workoutExercises, workoutSets, exercises]) => {

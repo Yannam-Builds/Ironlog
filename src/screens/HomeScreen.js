@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal, Image } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -214,14 +214,15 @@ export default function HomeScreen({ navigation }) {
   const {
     plans, history, bodyWeight, pb, exerciseMap, settings, onboardingComplete, completeOnboarding,
     manualRecoveryInput, engagementSnapshot, milestoneUnlocks, backupStatus,
-    updateNotificationPreferences,
+    updateNotificationPreferences, initialized,
   } = useWatermelonAppData();
   const colors = useTheme();
   const primaryTextColor = textOnColor(colors.accent, colors.textOnAccent);
   const insets = useSafeAreaInsets();
   const { banner } = useActiveBanner();
-  const insightsReady = useDeferredScreenReady({ minDelayMs: 16 });
+  const insightsReady = useDeferredScreenReady({ minDelayMs: 16, stayReady: true });
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const onboardingShownRef = useRef(false);
   const [showFeatureSetup, setShowFeatureSetup] = useState(false);
   const [libraryIndex, setLibraryIndex] = useState([]);
   const [weeklyShareNode, setWeeklyShareNode] = useState(null);
@@ -245,16 +246,24 @@ export default function HomeScreen({ navigation }) {
   }, [insightsReady]);
 
   useEffect(() => {
-    // Show onboarding only for truly new users: no completed flag AND no plans AND no history.
-    // Having plans means the user already set up the app (onboarding_complete may not have been
-    // migrated from the old AsyncStorage store, so we treat existing data as onboarded).
-    const isNewUser = !onboardingComplete
-      && (!plans || plans.length === 0)
-      && (!history || history.length === 0);
+    // Wait until WatermelonDB settings + plans + history have all hydrated before
+    // making any decision. Otherwise the modal flashes on every remount because
+    // the hook's initial state is { onboardingComplete: false, plans: [], history: [] }.
+    if (!initialized) return;
+
+    if (onboardingShownRef.current) return;
+    onboardingShownRef.current = true;
+
+    const hasData = (plans && plans.length > 0) || (history && history.length > 0);
+    const isNewUser = !onboardingComplete && !hasData;
+
     if (isNewUser) {
       setShowOnboarding(true);
+    } else if (!onboardingComplete && hasData) {
+      // Existing-data user without the flag — persist it so we never check again.
+      completeOnboarding().catch(() => {});
     }
-  }, [onboardingComplete, history, plans]);
+  }, [initialized, onboardingComplete, history, plans, completeOnboarding]);
 
   useEffect(() => {
     let mounted = true;
@@ -794,8 +803,8 @@ export default function HomeScreen({ navigation }) {
               <Text style={[s.onboardBtnText, { color: primaryTextColor }]}>CREATE A PLAN</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[s.restoreBtn, { borderColor: colors.faint }]}
-              onPress={() => {
-                setShowOnboarding(false);
+              onPress={async () => {
+                await dismissOnboarding(false);
                 navigation.navigate('RestoreData');
               }}>
               <Text style={[s.restoreBtnText, { color: colors.muted }]}>RESTORE PREVIOUS DATA</Text>

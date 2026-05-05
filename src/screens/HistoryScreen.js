@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { Modal, TextInput, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FlashList } from '@shopify/flash-list';
@@ -81,7 +81,7 @@ export default function HistoryScreen({ navigation }) {
     ],
   });
 
-  const renderHistoryCard = ({ item: h, index: i }) => {
+  const renderHistoryCard = useCallback(({ item: h, index: i }) => {
     const date = new Date(h.date);
     const dateStr = date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' });
     const timeStr = date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
@@ -126,7 +126,8 @@ export default function HistoryScreen({ navigation }) {
         </View>
       </TouchableOpacity>
     );
-  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [colors, history]);
 
   return (
     <View style={[s.container, { backgroundColor: colors.bg }]}>

@@ -346,7 +346,7 @@ export default function PlanEditorScreen({ route, navigation }) {
     <View style={{ flex: 1 }}>
       <Text style={[ls.exName, { color: colors.text }]} numberOfLines={1}>{ex.name}</Text>
       <Text style={[ls.exMeta, { color: colors.muted }]} numberOfLines={1}>
-        {getExerciseFilterSummary(ex).join(', ')}{ex.equipment ? ` · ${toTitleCase(ex.equipment)}` : ''}
+        {getExerciseFilterSummary(ex).join(', ')}{ex.equipment ? ` Â· ${toTitleCase(ex.equipment)}` : ''}
       </Text>
     </View>
     <View style={ls.rowActions}>
@@ -387,9 +387,9 @@ const renderExercise = (dayIdx) => ({ item: ex, drag, isActive, getIndex }) => {
                 </View>
               ) : null}
             </View>
-            <Text style={[ls.exMeta, { color: colors.muted }]}>{ex.sets} sets · {ex.reps} reps · {ex.primary}</Text>
+            <Text style={[ls.exMeta, { color: colors.muted }]}>{ex.sets} sets Â· {ex.reps} reps Â· {ex.primary}</Text>
           </View>
-          {/* Explicit edit menu button — replace, superset, remove */}
+          {/* Explicit edit menu button Â· replace, superset, remove */}
           <TouchableOpacity
             onPress={() => onExLongPress(dayIdx, exIdx)}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
@@ -471,7 +471,7 @@ const renderExercise = (dayIdx) => ({ item: ex, drag, isActive, getIndex }) => {
               value={dayName} onChangeText={setDayName} autoFocus />
             <TextInput
               style={[ls.input, { color: colors.text, borderColor: colors.faint, marginTop: 10 }]}
-              placeholder="Tag (e.g. Chest · Shoulders)" placeholderTextColor={colors.muted}
+              placeholder="Tag (e.g. Chest Â· Shoulders)" placeholderTextColor={colors.muted}
               value={dayTag} onChangeText={setDayTag} />
             <View style={{ flexDirection: 'row', gap: 10, marginTop: 16 }}>
               <TouchableOpacity style={[ls.cancelBtn, { borderColor: colors.faint }]} onPress={() => setShowAddDay(false)}>
@@ -517,7 +517,7 @@ const renderExercise = (dayIdx) => ({ item: ex, drag, isActive, getIndex }) => {
               value={editDayName} onChangeText={setEditDayName} autoFocus />
             <TextInput
               style={[ls.input, { color: colors.text, borderColor: colors.faint, marginTop: 10 }]}
-              placeholder="Tag (e.g. Chest · Shoulders)" placeholderTextColor={colors.muted}
+              placeholder="Tag (e.g. Chest Â· Shoulders)" placeholderTextColor={colors.muted}
               value={editDayTag} onChangeText={setEditDayTag} />
             <View style={{ flexDirection: 'row', gap: 10, marginTop: 16 }}>
               <TouchableOpacity style={[ls.cancelBtn, { borderColor: colors.faint }]} onPress={() => setShowEditDay(false)}>

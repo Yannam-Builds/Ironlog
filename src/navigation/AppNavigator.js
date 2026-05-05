@@ -14,6 +14,7 @@ import {
 import PagerView from 'react-native-pager-view';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DefaultTheme, NavigationContainer } from '@react-navigation/native';
+import { navigationRef } from './navigationRef';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import useWatermelonAppData from '../hooks/useWatermelonAppData';
@@ -225,7 +226,7 @@ const headerOpts = (colors) => ({
 function ThemedStatusBar() {
   const colors  = useTheme();
   const isLight = colors.bg === '#f2f2f7';
-  const bgColor = typeof colors.bg === 'string' ? colors.bg : '#000000';
+  const bgColor = typeof colors.bg === 'string' ? colors.bg : '#0A0A0A';
   return (
     <StatusBar
       barStyle={isLight ? 'dark-content' : 'light-content'}
@@ -276,6 +277,25 @@ export default function AppNavigator() {
   const colors = useTheme();
   const [splashDone, setSplashDone] = React.useState(false);
 
+  // Memoize theme + header options so re-renders from unrelated state don't
+  // re-create these objects. Must be called unconditionally (before early returns).
+  const navTheme = useMemo(() => ({
+    ...NAV_THEME,
+    colors: {
+      ...NAV_THEME.colors,
+      primary:      colors.text,
+      background:   colors.bg,
+      card:         colors.bg,
+      text:         colors.text,
+      border:       colors.faint,
+      notification: colors.accent,
+    },
+  }), [colors.accent, colors.bg, colors.faint, colors.text]);
+
+  const baseHeaderOpts = useMemo(() => headerOpts(colors), [colors]);
+
+  const screenContentStyle = useMemo(() => ({ backgroundColor: colors.bg }), [colors.bg]);
+
   if (!splashDone) {
     return <SplashScreen onFinish={() => setSplashDone(true)} />;
   }
@@ -288,23 +308,10 @@ export default function AppNavigator() {
     );
   }
 
-  const navTheme = {
-    ...NAV_THEME,
-    colors: {
-      ...NAV_THEME.colors,
-      primary:      colors.text,
-      background:   colors.bg,
-      card:         colors.bg,
-      text:         colors.text,
-      border:       colors.faint,
-      notification: colors.accent,
-    },
-  };
-
   return (
     <AppErrorBoundary>
     <GlassModeProvider>
-      <NavigationContainer theme={navTheme}>
+      <NavigationContainer ref={navigationRef} theme={navTheme}>
         <ThemedStatusBar />
         <Stack.Navigator
           screenOptions={{
@@ -313,38 +320,47 @@ export default function AppNavigator() {
             gestureEnabled:           true,
             fullScreenGestureEnabled: true,
             freezeOnBlur:             true,
-            contentStyle:             { backgroundColor: colors.bg },
+            contentStyle:             screenContentStyle,
           }}
           initialRouteName={onboardingComplete ? 'Tabs' : 'Onboarding'}
         >
           <Stack.Screen name="Onboarding"  component={OnboardingScreen} />
-          <Stack.Screen name="Tabs"        component={Tabs} />
+          <Stack.Screen name="Tabs"        component={Tabs} options={{ animation: 'none' }} />
           <Stack.Screen
             name="ActiveWorkout"
             component={ActiveWorkoutScreen}
-            options={{ gestureEnabled: false, animation: 'fade' }}
+            options={{
+              gestureEnabled:    false,
+              animation:         'none',
+              presentation:      'transparentModal',
+              // Keep Tabs mounted underneath so the home screen idles with no
+              // re-render cost while the workout overlays it. freezeOnBlur is
+              // already true at the navigator level → Tabs won't tick while
+              // ActiveWorkout is on top.
+              contentStyle:      { backgroundColor: 'transparent' },
+            }}
           />
-          <Stack.Screen name="PlanEditor"           component={PlanEditorScreen}          options={{ ...headerOpts(colors), title: 'EDIT PLAN'         }} />
-          <Stack.Screen name="ExerciseLibrary"      component={ExerciseLibraryScreen}     options={{ ...headerOpts(colors), title: 'EXERCISE LIBRARY'  }} />
-          <Stack.Screen name="BodyWeight"           component={BodyWeightScreen}          options={{ ...headerOpts(colors), title: 'BODY WEIGHT'        }} />
-          <Stack.Screen name="CreateExercise"       component={CreateExerciseScreen}      options={{ ...headerOpts(colors), title: 'CREATE EXERCISE'    }} />
-          <Stack.Screen name="ProgressPhotos"       component={ProgressPhotosScreen}      options={{ ...headerOpts(colors), title: 'PROGRESS PHOTOS'    }} />
-          <Stack.Screen name="ProgramPicker"        component={ProgramPickerScreen}       options={{ ...headerOpts(colors), title: 'PROGRAMS'           }} />
-          <Stack.Screen name="ExerciseProgress"     component={ExerciseProgressScreen}    options={{ ...headerOpts(colors), title: 'PROGRESS'           }} />
-          <Stack.Screen name="WorkoutCalendar"      component={WorkoutCalendarScreen}     options={{ ...headerOpts(colors), title: 'CALENDAR'           }} />
-          <Stack.Screen name="VolumeAnalytics"      component={VolumeAnalyticsScreen}     options={{ ...headerOpts(colors), title: 'VOLUME ANALYTICS'   }} />
-          <Stack.Screen name="RecoveryMap"          component={RecoveryMapScreen}         options={{ ...headerOpts(colors), title: 'MUSCLE RECOVERY'    }} />
-          <Stack.Screen name="ProgramInsights"      component={ProgramInsightsScreen}     options={{ ...headerOpts(colors), title: 'PROGRAM INSIGHTS'   }} />
-          <Stack.Screen name="BodyMeasurements"     component={BodyMeasurementsScreen}    options={{ ...headerOpts(colors), title: 'BODY TRACKER'       }} />
-          <Stack.Screen name="GymProfiles"          component={GymProfilesScreen}         options={{ ...headerOpts(colors), title: 'GYM PROFILES'       }} />
-          <Stack.Screen name="GymProfileEditor"     component={GymProfileEditorScreen}    options={{ ...headerOpts(colors), title: 'EDIT PROFILE'       }} />
-          <Stack.Screen name="BackupCenter"         component={BackupCenterScreen}        options={{ ...headerOpts(colors), title: 'BACKUP CENTER'      }} />
-          <Stack.Screen name="Privacy"              component={PrivacyScreen}             options={{ ...headerOpts(colors), title: 'PRIVACY'            }} />
-          <Stack.Screen name="RestoreData"          component={RestoreDataScreen}         options={{ ...headerOpts(colors), title: 'RESTORE DATA'       }} />
-          <Stack.Screen name="ImportCenter"         component={ImportCenterScreen}        options={{ ...headerOpts(colors), title: 'IMPORT CENTER'      }} />
-          <Stack.Screen name="AIPlan"               component={AIPlanScreen}              options={{ ...headerOpts(colors), title: 'AI PLAN CREATOR'    }} />
-          <Stack.Screen name="TrainingIntelligence" component={TrainingIntelligenceScreen} options={{ ...headerOpts(colors), title: 'ATHLETE PROFILE'  }} />
-          <Stack.Screen name="DataPortability"       component={DataPortabilityScreen}       options={{ ...headerOpts(colors), title: 'BACKUP & EXPORT'  }} />
+          <Stack.Screen name="PlanEditor"           component={PlanEditorScreen}          options={{ ...baseHeaderOpts, title: 'EDIT PLAN'         }} />
+          <Stack.Screen name="ExerciseLibrary"      component={ExerciseLibraryScreen}     options={{ ...baseHeaderOpts, title: 'EXERCISE LIBRARY'  }} />
+          <Stack.Screen name="BodyWeight"           component={BodyWeightScreen}          options={{ ...baseHeaderOpts, title: 'BODY WEIGHT'        }} />
+          <Stack.Screen name="CreateExercise"       component={CreateExerciseScreen}      options={{ ...baseHeaderOpts, title: 'CREATE EXERCISE'    }} />
+          <Stack.Screen name="ProgressPhotos"       component={ProgressPhotosScreen}      options={{ ...baseHeaderOpts, title: 'PROGRESS PHOTOS'    }} />
+          <Stack.Screen name="ProgramPicker"        component={ProgramPickerScreen}       options={{ ...baseHeaderOpts, title: 'PROGRAMS'           }} />
+          <Stack.Screen name="ExerciseProgress"     component={ExerciseProgressScreen}    options={{ ...baseHeaderOpts, title: 'PROGRESS'           }} />
+          <Stack.Screen name="WorkoutCalendar"      component={WorkoutCalendarScreen}     options={{ ...baseHeaderOpts, title: 'CALENDAR'           }} />
+          <Stack.Screen name="VolumeAnalytics"      component={VolumeAnalyticsScreen}     options={{ ...baseHeaderOpts, title: 'VOLUME ANALYTICS'   }} />
+          <Stack.Screen name="RecoveryMap"          component={RecoveryMapScreen}         options={{ ...baseHeaderOpts, title: 'MUSCLE RECOVERY'    }} />
+          <Stack.Screen name="ProgramInsights"      component={ProgramInsightsScreen}     options={{ ...baseHeaderOpts, title: 'PROGRAM INSIGHTS'   }} />
+          <Stack.Screen name="BodyMeasurements"     component={BodyMeasurementsScreen}    options={{ ...baseHeaderOpts, title: 'BODY TRACKER'       }} />
+          <Stack.Screen name="GymProfiles"          component={GymProfilesScreen}         options={{ ...baseHeaderOpts, title: 'GYM PROFILES'       }} />
+          <Stack.Screen name="GymProfileEditor"     component={GymProfileEditorScreen}    options={{ ...baseHeaderOpts, title: 'EDIT PROFILE'       }} />
+          <Stack.Screen name="BackupCenter"         component={BackupCenterScreen}        options={{ ...baseHeaderOpts, title: 'BACKUP CENTER'      }} />
+          <Stack.Screen name="Privacy"              component={PrivacyScreen}             options={{ ...baseHeaderOpts, title: 'PRIVACY'            }} />
+          <Stack.Screen name="RestoreData"          component={RestoreDataScreen}         options={{ ...baseHeaderOpts, title: 'RESTORE DATA'       }} />
+          <Stack.Screen name="ImportCenter"         component={ImportCenterScreen}        options={{ ...baseHeaderOpts, title: 'IMPORT CENTER'      }} />
+          <Stack.Screen name="AIPlan"               component={AIPlanScreen}              options={{ ...baseHeaderOpts, title: 'AI PLAN CREATOR'    }} />
+          <Stack.Screen name="TrainingIntelligence" component={TrainingIntelligenceScreen} options={{ ...baseHeaderOpts, title: 'ATHLETE PROFILE'  }} />
+          <Stack.Screen name="DataPortability"       component={DataPortabilityScreen}       options={{ ...baseHeaderOpts, title: 'BACKUP & EXPORT'  }} />
         </Stack.Navigator>
       </NavigationContainer>
     </GlassModeProvider>

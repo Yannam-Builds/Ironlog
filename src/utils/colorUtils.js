@@ -27,3 +27,26 @@ export function withAlpha(color, alpha, fallback = '#FF4500') {
 
   return `${fallback}${aHex}`;
 }
+
+export function resolveColor(color, fallback = '#FF4500') {
+  return withAlpha(color, 1, fallback).slice(0, 7);
+}
+
+export function pickContrastText(hexColor, fallback = '#FFFFFF') {
+  const m = /^#?([0-9a-f]{6})$/i.exec(String(hexColor || ''));
+  if (!m) return fallback;
+  const n = parseInt(m[1], 16);
+  const r = (n >> 16) & 0xff;
+  const g = (n >> 8) & 0xff;
+  const b = n & 0xff;
+  const luma = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+  return luma > 0.62 ? '#111111' : '#FFFFFF';
+}
+
+export function textOnColor(background, preferredText, fallbackText = '#FFFFFF') {
+  const bgHex = resolveColor(background, '#FF4500');
+  const preferredHex = preferredText ? resolveColor(preferredText, fallbackText) : fallbackText;
+  return preferredHex.toLowerCase() === bgHex.toLowerCase()
+    ? pickContrastText(bgHex, fallbackText)
+    : preferredHex;
+}

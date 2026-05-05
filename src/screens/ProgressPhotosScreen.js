@@ -173,9 +173,9 @@ function CompareSlider({ uriA, dateA, uriB, dateB }) {
 
   return (
     <View style={{ width: SLIDER_W, height: SLIDER_H, overflow: 'hidden', borderRadius: 10 }}>
-      {/* Photo A — fills full width */}
+      {/* Photo A Â· fills full width */}
       <Image source={{ uri: uriA }} style={{ position: 'absolute', width: SLIDER_W, height: SLIDER_H, resizeMode: 'cover' }} />
-      {/* Photo B — clipped to right of divider */}
+      {/* Photo B Â· clipped to right of divider */}
       <View style={{ position: 'absolute', left: divX, right: 0, top: 0, bottom: 0, overflow: 'hidden' }}>
         <Image source={{ uri: uriB }} style={{ position: 'absolute', right: 0, width: SLIDER_W, height: SLIDER_H, resizeMode: 'cover' }} />
       </View>
@@ -492,7 +492,7 @@ export default function ProgressPhotosScreen() {
           <Text style={[ps.statsLabel, { color: colors.muted }]}>STORAGE</Text>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
             <Text style={{ color: colors.text, fontSize: 14 }}>
-              {photoDays.length} photo{photoDays.length !== 1 ? 's' : ''} · {formatBytes(totalSize)}
+              {photoDays.length} photo{photoDays.length !== 1 ? 's' : ''} Â· {formatBytes(totalSize)}
             </Text>
           </View>
         </View>

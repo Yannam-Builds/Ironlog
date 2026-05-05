@@ -13,9 +13,11 @@ import {
 import { normalizeBackupImport } from '../services/backupImportNormalizer';
 import { buildRestoreSummary } from '../services/restoreResultModel';
 import CustomAlert from '../components/CustomAlert';
+import { textOnColor } from '../utils/colorUtils';
 
 export default function RestoreDataScreen({ navigation }) {
   const colors = useTheme();
+  const primaryTextColor = textOnColor(colors.accent, colors.textOnAccent);
   const { restoreData, reloadFromStorage, completeOnboarding } = useWatermelonAppData();
   const [busy, setBusy] = useState(false);
   const [alertConfig, setAlertConfig] = useState(null);
@@ -130,7 +132,7 @@ export default function RestoreDataScreen({ navigation }) {
           style={[s.primaryBtn, { backgroundColor: colors.accent, opacity: busy ? 0.6 : 1 }]}
           onPress={restoreFromEncryptedBackup}
         >
-          <Text style={s.primaryText}>{busy ? 'WORKING...' : 'IMPORT ENCRYPTED BACKUP'}</Text>
+          <Text style={[s.primaryText, { color: primaryTextColor }]}>{busy ? 'WORKING...' : 'IMPORT ENCRYPTED BACKUP'}</Text>
         </TouchableOpacity>
       </View>
 
@@ -154,7 +156,7 @@ export default function RestoreDataScreen({ navigation }) {
           style={[s.primaryBtn, { backgroundColor: colors.accent, opacity: busy ? 0.6 : 1 }]}
           onPress={restoreFromUniversalJson}
         >
-          <Text style={s.primaryText}>{busy ? 'WORKING...' : 'IMPORT BACKUP JSON'}</Text>
+          <Text style={[s.primaryText, { color: primaryTextColor }]}>{busy ? 'WORKING...' : 'IMPORT BACKUP JSON'}</Text>
         </TouchableOpacity>
       </View>
 
@@ -180,14 +182,14 @@ export default function RestoreDataScreen({ navigation }) {
 
 const s = StyleSheet.create({
   container: { flex: 1 },
-  content: { padding: 20, gap: 14, paddingBottom: 40 },
+  content: { padding: 20, gap: 14, paddingBottom: 72 },
   header: { fontSize: 24, fontWeight: '900', letterSpacing: 1.3, marginTop: 12 },
   sub: { fontSize: 13, lineHeight: 19 },
   card: { borderWidth: 1, borderRadius: 14, padding: 16, gap: 8 },
   cardTitle: { fontSize: 15, fontWeight: '800', letterSpacing: 0.6 },
   cardBody: { fontSize: 12, lineHeight: 18 },
   primaryBtn: { marginTop: 6, paddingVertical: 14, alignItems: 'center', borderRadius: 10 },
-  primaryText: { color: '#fff', fontSize: 12, fontWeight: '900', letterSpacing: 1.5 },
+  primaryText: { fontSize: 12, fontWeight: '900', letterSpacing: 1.5 },
   secondaryBtn: { marginTop: 6, paddingVertical: 14, alignItems: 'center', borderWidth: 1, borderRadius: 10 },
   secondaryText: { fontSize: 12, fontWeight: '900', letterSpacing: 1.5 },
   skipBtn: { marginTop: 4, borderWidth: 1, borderRadius: 10, paddingVertical: 12, alignItems: 'center' },

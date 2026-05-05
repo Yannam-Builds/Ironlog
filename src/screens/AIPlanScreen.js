@@ -15,6 +15,7 @@ import { getSetting } from '../db/repositories/settingsRepository';
 import { getExerciseIndex, saveCustomExercise } from '../services/ExerciseLibraryService';
 import CustomAlert from '../components/CustomAlert';
 import { fireHaptic } from '../services/hapticsEngine';
+import { textOnColor } from '../utils/colorUtils';
 
 const MUSCLE_OPTIONS = ['Chest', 'Back', 'Shoulders', 'Biceps', 'Triceps', 'Quads', 'Hamstrings', 'Glutes', 'Calves', 'Core', 'Forearms', 'Traps', 'Cardio'];
 const EQUIP_OPTIONS = ['Barbell', 'Dumbbell', 'Cable', 'Machine', 'Bodyweight', 'Band', 'Kettlebell', 'Other'];
@@ -713,6 +714,7 @@ export default function AIPlanScreen({ navigation }) {
 function makeStyles(colors) {
   const CARD_RADIUS = 18;
   const BTN_RADIUS = 999;
+  const primaryTextColor = textOnColor(colors.accent, colors.textOnAccent);
   return StyleSheet.create({
     container: { flex: 1 },
     content: { padding: 16, gap: 0 },
@@ -729,7 +731,7 @@ function makeStyles(colors) {
     stepNumText: { fontSize: 12, fontWeight: '900' },
     stepRowText: { flex: 1, fontSize: 13, lineHeight: 18 },
     primaryBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 16, borderRadius: BTN_RADIUS },
-    primaryBtnText: { color: '#fff', fontSize: 13, fontWeight: '900', letterSpacing: 1.5 },
+    primaryBtnText: { color: primaryTextColor, fontSize: 13, fontWeight: '900', letterSpacing: 1.5 },
     secondaryBtn: { borderWidth: 1.5, paddingVertical: 14, borderRadius: BTN_RADIUS, alignItems: 'center' },
     secondaryBtnText: { fontSize: 12, fontWeight: '900', letterSpacing: 1 },
     quizBlock: { borderWidth: 1, borderRadius: CARD_RADIUS, padding: 14, gap: 10 },

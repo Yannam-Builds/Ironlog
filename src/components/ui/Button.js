@@ -22,7 +22,7 @@ import {
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '../../context/ThemeContext';
-import { withAlpha } from '../../utils/colorUtils';
+import { textOnColor, withAlpha } from '../../utils/colorUtils';
 import { RADIUS } from '../../utils/themes';
 
 const SIZES = {
@@ -80,7 +80,7 @@ export default function Button({
     default: // primary
       bgColor     = colors.accent;
       borderColor = colors.accent;
-      labelColor  = colors.textOnAccent || '#fff';
+      labelColor  = textOnColor(colors.accent, colors.textOnAccent);
   }
 
   if (isDisabled) {

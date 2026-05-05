@@ -1,6 +1,8 @@
 <resources>
   <color name="splashscreen_background">#080808</color>
   <color name="iconBackground">#080808</color>
+  <!-- Alias used by adaptive icon; matches the near-black brand background -->
+  <color name="ic_launcher_background">#080808</color>
   <color name="colorPrimary">#023c69</color>
   <color name="notification_icon_color">#FF4500</color>
 </resources>

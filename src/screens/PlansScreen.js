@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { View, Text, StyleSheet, TextInput, Modal, Alert, TouchableOpacity } from 'react-native';
 import { TouchableOpacity as RNGHTouchableOpacity } from 'react-native-gesture-handler';
 import CustomAlert from '../components/CustomAlert';
@@ -201,7 +201,7 @@ export default function PlansScreen({ navigation }) {
     });
   };
 
-  const renderPlan = ({ item: plan, drag, isActive }) => (
+  const renderPlan = useCallback(({ item: plan, drag, isActive }) => (
     <ScaleDecorator activeScale={0.97}>
       <View
         style={[
@@ -213,7 +213,7 @@ export default function PlansScreen({ navigation }) {
           <View style={{ flex: 1 }}>
             <Text style={[s.planName, { color: colors.text }]}>{plan.name}</Text>
             <Text style={[s.planMeta, { color: colors.muted }]}>
-              {plan.days.length} days · {plan.days.reduce((a, d) => a + (d.exercises || []).filter(e => !e.isWarmup).length, 0)} exercises
+              {plan.days.length} days Â· {plan.days.reduce((a, d) => a + (d.exercises || []).filter(e => !e.isWarmup).length, 0)} exercises
             </Text>
           </View>
           <View style={{ flexDirection: 'row', gap: 16, alignItems: 'center' }}>
@@ -234,7 +234,13 @@ export default function PlansScreen({ navigation }) {
         </View>
       </View>
     </ScaleDecorator>
-  );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  ), [colors, navigation]);
+
+  const onDragEnd = useCallback(({ data }) => {
+    fireHaptic('selection', { enabled: haptic });
+    savePlans(data);
+  }, [haptic, savePlans]);
 
   return (
     <View style={[s.container, { backgroundColor: colors.bg }]}>
@@ -245,10 +251,7 @@ export default function PlansScreen({ navigation }) {
         nestedScrollEnabled={true}
         // Keep plan reordering from stealing horizontal PagerView tab swipes.
         activationDistance={28}
-        onDragEnd={({ data }) => {
-          fireHaptic('selection', { enabled: haptic });
-          savePlans(data);
-        }}
+        onDragEnd={onDragEnd}
         contentContainerStyle={{ padding: 16, gap: 12, paddingBottom: 80 }}
         ListHeaderComponent={
           <View style={{ gap: 10, marginBottom: 4 }}>
@@ -268,7 +271,7 @@ export default function PlansScreen({ navigation }) {
               style={[s.browseBtn, { backgroundColor: colors.card, borderRadius: 14, borderWidth: 1, borderColor: colors.cardBorder }]}
               onPress={() => navigation.navigate('AIPlan')}>
               <Ionicons name="sparkles" size={18} color={colors.text} />
-              <Text style={[s.browseText, { color: colors.text }]}>? CREATE WITH AI</Text>
+              <Text style={[s.browseText, { color: colors.text }]}>CREATE WITH AI</Text>
             </TouchableOpacity>
           </View>
         }

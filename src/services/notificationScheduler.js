@@ -1,4 +1,6 @@
-import notifee, { AndroidImportance, AndroidCategory, AndroidStyle, TriggerType, AuthorizationStatus } from '@notifee/react-native';
+import notifee, { AndroidImportance, AndroidCategory, AndroidStyle, TriggerType, AuthorizationStatus, EventType } from '@notifee/react-native';
+import { navigationRef } from '../navigation/navigationRef';
+import { NOTIF_ACTIONS, emitNotifAction, storePendingAction } from './workoutNotificationBridge';
 
 const MAX_DECISION_LOG = 64;
 const DEFAULT_TOPICS = {
@@ -274,6 +276,10 @@ function buildPlanAwareTrainingCandidate({
     score: 100,
     windows: [{ start: 10, end: 21 }],
     triggerDate,
+    actions: [
+      { title: 'START WORKOUT', pressAction: { id: NOTIF_ACTIONS.START_WORKOUT } },
+      { title: 'SNOOZE 1HR',   pressAction: { id: NOTIF_ACTIONS.SNOOZE_1HR   } },
+    ],
   };
 }
 
@@ -573,7 +579,9 @@ export async function scheduleSmartNotification({
     body: chosen.body,
     android: {
       channelId,
+      smallIcon: 'notification_icon',
       pressAction: { id: 'default' },
+      ...(Array.isArray(chosen.actions) && chosen.actions.length ? { actions: chosen.actions } : {}),
     },
   }, {
     type: TriggerType.TIMESTAMP,
@@ -609,6 +617,8 @@ export async function sendTestNotification({
     body,
     android: {
       channelId,
+      smallIcon: 'notification_icon',
+      color: '#FF5A1F',
       pressAction: { id: 'default' },
     },
   });
@@ -654,6 +664,9 @@ export async function showOngoingWorkoutNotification({
       localOnly: true,
       color: '#FF5A1F',
       smallIcon: 'notification_icon',
+      actions: [
+        { title: 'FINISH', pressAction: { id: NOTIF_ACTIONS.FINISH_WORKOUT } },
+      ],
       ...(fullBody ? {
         style: { type: AndroidStyle.BIGTEXT, text: fullBody },
       } : {}),
@@ -667,4 +680,183 @@ export async function clearOngoingWorkoutNotification() {
   } catch (_) {
     // ignore
   }
+}
+
+// ── Rest-timer notification ───────────────────────────────────────────────────
+
+const REST_TIMER_NOTIFICATION_ID = 'ironlog-rest-timer';
+
+export async function showRestTimerNotification({ secondsRemaining = 90 } = {}) {
+  const granted = await ensureNotificationPermissions();
+  if (!granted) return null;
+
+  const channelId = await notifee.createChannel({
+    id: 'ironlog-rest',
+    name: 'IRONLOG Rest Timer',
+    importance: AndroidImportance.DEFAULT,
+  });
+
+  return notifee.displayNotification({
+    id: REST_TIMER_NOTIFICATION_ID,
+    title: 'Rest timer',
+    android: {
+      channelId,
+      smallIcon: 'notification_icon',
+      color: '#FF5A1F',
+      ongoing: true,
+      autoCancel: false,
+      onlyAlertOnce: true,
+      showChronometer: true,
+      chronometerDirection: 'down',
+      timestamp: Date.now() + secondsRemaining * 1000,
+      showTimestamp: false,
+      localOnly: true,
+      pressAction: { id: 'default' },
+      actions: [
+        { title: 'SKIP', pressAction: { id: NOTIF_ACTIONS.SKIP_REST } },
+        { title: '+30S', pressAction: { id: NOTIF_ACTIONS.ADD_30S   } },
+      ],
+    },
+  });
+}
+
+export async function clearRestTimerNotification() {
+  try {
+    await notifee.cancelNotification(REST_TIMER_NOTIFICATION_ID);
+  } catch (_) {
+    // ignore
+  }
+}
+
+// ── Post-workout notification ─────────────────────────────────────────────────
+
+export async function showPostWorkoutNotification({ summary = '' } = {}) {
+  const granted = await ensureNotificationPermissions();
+  if (!granted) return null;
+
+  const channelId = await notifee.createChannel({
+    id: 'ironlog-smart',
+    name: 'IRONLOG Smart Notifications',
+    importance: AndroidImportance.DEFAULT,
+  });
+
+  return notifee.displayNotification({
+    title: 'Workout saved',
+    body: summary || 'Great session. Log your body weight to keep your trends accurate.',
+    android: {
+      channelId,
+      smallIcon: 'notification_icon',
+      color: '#FF5A1F',
+      pressAction: { id: 'default' },
+      actions: [
+        { title: 'LOG WEIGHT', pressAction: { id: NOTIF_ACTIONS.LOG_WEIGHT } },
+      ],
+    },
+  });
+}
+
+// ── PR notification ───────────────────────────────────────────────────────────
+
+export async function showPRNotification({ exerciseName = '', delta = '', unit = '' } = {}) {
+  const granted = await ensureNotificationPermissions();
+  if (!granted) return null;
+
+  const channelId = await notifee.createChannel({
+    id: 'ironlog-achievement',
+    name: 'IRONLOG Achievements',
+    importance: AndroidImportance.HIGH,
+  });
+
+  const label = exerciseName ? exerciseName.slice(0, 30) : 'New PR';
+  const body  = delta ? `${delta} ${unit} — your best ever.` : 'Your best ever lift on this exercise.';
+
+  return notifee.displayNotification({
+    title: `🏆 PR: ${label}`,
+    body,
+    android: {
+      channelId,
+      smallIcon: 'notification_icon',
+      color: '#FF5A1F',
+      pressAction: { id: 'default' },
+      actions: [
+        {
+          title: 'VIEW PROGRESS',
+          pressAction: { id: NOTIF_ACTIONS.VIEW_PROGRESS, launchActivity: 'default' },
+        },
+      ],
+    },
+  });
+}
+
+// ── Unified notification action handler ───────────────────────────────────────
+// Called from:
+//  • App.js  notifee.onForegroundEvent  (app is visible)
+//  • index.js notifee.onBackgroundEvent (app is in background / headless)
+
+export async function handleNotificationAction(actionId, detail = {}, { isForeground = false } = {}) {
+  switch (actionId) {
+
+    case NOTIF_ACTIONS.SKIP_REST:
+    case NOTIF_ACTIONS.ADD_30S:
+    case NOTIF_ACTIONS.FINISH_WORKOUT:
+      // Workout-screen actions — send via DeviceEventEmitter when foreground,
+      // otherwise persist for ActiveWorkoutScreen's AppState 'active' listener.
+      if (isForeground) {
+        emitNotifAction(actionId);
+      } else {
+        await storePendingAction(actionId);
+      }
+      break;
+
+    case NOTIF_ACTIONS.START_WORKOUT:
+      // Bring the app to foreground and navigate to home (user starts workout manually).
+      if (isForeground && navigationRef.isReady()) {
+        navigationRef.navigate('Tabs');
+      } else {
+        await storePendingAction(actionId);
+      }
+      break;
+
+    case NOTIF_ACTIONS.SNOOZE_1HR:
+      // Just persist; the pending-action consumer in AppNavigator can update settings.
+      await storePendingAction(actionId);
+      break;
+
+    case NOTIF_ACTIONS.LOG_WEIGHT:
+      if (isForeground && navigationRef.isReady()) {
+        navigationRef.navigate('BodyWeight');
+      } else {
+        await storePendingAction(actionId);
+      }
+      break;
+
+    case NOTIF_ACTIONS.VIEW_PROGRESS: {
+      const exerciseName = detail?.notification?.android?.actions?.[0]
+        ? undefined  // not stored per-action; use notification body fallback
+        : undefined;
+      if (isForeground && navigationRef.isReady()) {
+        if (exerciseName) {
+          navigationRef.navigate('ExerciseProgress', { exerciseName });
+        } else {
+          navigationRef.navigate('Stats');
+        }
+      } else {
+        await storePendingAction(actionId);
+      }
+      break;
+    }
+
+    default:
+      break;
+  }
+}
+
+// ── Foreground event watcher (call once from App.js) ─────────────────────────
+
+export function registerForegroundNotifHandler() {
+  return notifee.onForegroundEvent(({ type, detail }) => {
+    if (type === EventType.ACTION_PRESS && detail?.pressAction?.id) {
+      handleNotificationAction(detail.pressAction.id, detail, { isForeground: true });
+    }
+  });
 }

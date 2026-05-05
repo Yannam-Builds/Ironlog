@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { AppState, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { enableFreeze, enableScreens } from 'react-native-screens';
@@ -11,6 +11,9 @@ import { ThemeProvider } from './src/context/ThemeContext';
 import { ActiveWorkoutBannerProvider } from './src/context/ActiveWorkoutBannerContext';
 import AppNavigator from './src/navigation/AppNavigator';
 import LibrarySetupScreen from './src/screens/LibrarySetupScreen';
+import { registerForegroundNotifHandler, handleNotificationAction } from './src/services/notificationScheduler';
+import { consumePendingAction } from './src/services/workoutNotificationBridge';
+import { navigationRef } from './src/navigation/navigationRef';
 // WatermelonDB bootstrap — database singleton is created on import
 import './src/db/database';
 import { seedExercisesIfNeeded, backfillExerciseMusclesIfNeeded } from './src/db/repositories/exerciseRepository';
@@ -48,6 +51,26 @@ export default function App() {
       await bootstrap();
     })();
   }, [bootAttempt, bootstrap]);
+
+  // Register foreground notification action handler once on mount.
+  useEffect(() => {
+    const unsubscribe = registerForegroundNotifHandler();
+    return () => { if (typeof unsubscribe === 'function') unsubscribe(); };
+  }, []);
+
+  // Handle pending notification actions that were stored while app was backgrounded.
+  // This fires when the user taps a background notification and the app resumes.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', async (nextState) => {
+      if (nextState === 'active') {
+        const pending = await consumePendingAction();
+        if (pending?.actionId) {
+          handleNotificationAction(pending.actionId, pending, { isForeground: true });
+        }
+      }
+    });
+    return () => sub.remove();
+  }, []);
 
   useEffect(() => {
     if (ready) {

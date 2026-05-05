@@ -58,9 +58,9 @@ export default function DataPortabilityScreen() {
       const payload = await exportDatabase();
       const json = JSON.stringify(payload, null, 2);
       const date = new Date().toISOString().split('T')[0];
-      const uri = FileSystem.documentDirectory + `ironlogdb_backup_${date}.json`;
+      const uri = FileSystem.documentDirectory + `ironlog_backup_${date}.json`;
       await FileSystem.writeAsStringAsync(uri, json, { encoding: 'utf8' });
-      await Sharing.shareAsync(uri, { mimeType: 'application/json', dialogTitle: 'Save IronlogDB backup' });
+      await Sharing.shareAsync(uri, { mimeType: 'application/json', dialogTitle: 'Save Ironlog backup' });
       fireHaptic('backupSucceeded', { enabled: haptic });
       showInfoToast('Export ready', 'Pick Google Drive, Files, or any app to save your backup.');
     } catch (error) {
@@ -118,7 +118,7 @@ export default function DataPortabilityScreen() {
       <View style={[styles.section, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
         <Text style={[styles.sectionTitle, { color: colors.muted }]}>IMPORT A BACKUP</Text>
         <Text style={[styles.body, { color: colors.subtext }]}>
-          Pick a .json backup previously exported from IronlogDB. Only the current backup format is accepted. Your existing data will be replaced.
+          Pick a .json backup previously exported from Ironlog. Current Watermelon and supported legacy backup formats are accepted. Your existing data will be replaced.
         </Text>
         <ActionCard
           icon="download-outline"
@@ -129,9 +129,9 @@ export default function DataPortabilityScreen() {
           disabled={busy}
           colors={colors}
         />
-        <View style={[styles.warningBox, { borderColor: '#886020', backgroundColor: '#21190D' }]}>
-          <Text style={[styles.warningTitle, { color: '#F8DDA0' }]}>This replaces your current data</Text>
-          <Text style={[styles.warningText, { color: '#F8DDA0' }]}>
+        <View style={[styles.warningBox, { borderColor: withAlpha('#FF9500', 0.36), backgroundColor: withAlpha('#FF9500', 0.11) }]}>
+          <Text style={[styles.warningTitle, { color: '#FF9500' }]}>This replaces your current data</Text>
+          <Text style={[styles.warningText, { color: colors.subtext }]}>
             Import overwrites your local database. Export a fresh backup first if you want to be safe.
           </Text>
         </View>

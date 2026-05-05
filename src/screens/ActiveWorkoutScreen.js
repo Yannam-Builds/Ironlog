@@ -4,6 +4,7 @@ import {
   View, Text, ScrollView, TextInput, FlatList,
   StyleSheet, Modal, AppState, Animated, Easing,
   TouchableOpacity, Linking, Keyboard, InteractionManager,
+  Dimensions,
 } from 'react-native';
 import { KeyboardToolbar } from 'react-native-keyboard-controller';
 import { BottomSheetModal, BottomSheetView, BottomSheetBackdrop, BottomSheetFlatList } from '@gorhom/bottom-sheet';
@@ -21,7 +22,7 @@ import ReAnimated, {
   runOnJS,
   Easing as ReaEasing,
 } from 'react-native-reanimated';
-// Reanimated v4: Easing.cubic/sine are not available � use bezier equivalents
+// Reanimated v4: Easing.cubic/sine are not available · use bezier equivalents
 const EASE_OUT_CUBIC = ReaEasing.bezier(0.33, 1, 0.68, 1);
 const EASE_INOUT_SINE = ReaEasing.bezier(0.45, 0, 0.55, 1);
 
@@ -71,8 +72,17 @@ import {
 import { buildExerciseSearchIndex, queryExerciseSearch } from '../services/exerciseSearchAdapter';
 import { resolveExerciseProfile } from '../domain/intelligence/exerciseProfileEngine';
 import { formatVolumeFromKg, formatWeightFromKg, convertKgToUnit } from '../utils/weightUnits';
-import { showOngoingWorkoutNotification, clearOngoingWorkoutNotification } from '../services/notificationScheduler';
-// toastService not needed here � PRHud handles PR notifications, InlineToast handles set feedback
+import {
+  showOngoingWorkoutNotification,
+  clearOngoingWorkoutNotification,
+  showRestTimerNotification,
+  clearRestTimerNotification,
+  showPostWorkoutNotification,
+  showPRNotification,
+} from '../services/notificationScheduler';
+import { DeviceEventEmitter } from 'react-native';
+import { NOTIF_ACTIONS, consumePendingAction } from '../services/workoutNotificationBridge';
+// toastService not needed here· PRHud handles PR notifications, InlineToast handles set feedback
 import {
   getFavoriteExerciseIds,
   setFavoriteExerciseIds,
@@ -311,7 +321,7 @@ const rt = StyleSheet.create({
   btnText: { fontSize: 11, fontWeight: '700', color: '#888', letterSpacing: 0.8 },
 });
 
-// Isolated rest-timer panel � owns its own displaySecs state so the 500ms
+// Isolated rest-timer panel · owns its own displaySecs state so the 500ms
 // tick only re-renders this component, not the entire WorkoutContent tree.
 const RestTimerPanel = React.memo(function RestTimerPanel({
   restTimer, accent, cardBg, faint, mutedColor,
@@ -455,7 +465,7 @@ function PlateModal({ visible, targetKg, barWeight, onClose, weightUnit = 'kg' }
   );
 }
 
-//  REST OVERRIDE MODAL � animated drum / barrel picker
+//  REST OVERRIDE MODAL · animated drum / barrel picker
 
 const DRUM_ITEM_H = 54;
 const DRUM_VISIBLE = 3; // items shown (centre = selected)
@@ -568,7 +578,7 @@ function RestOverrideModal({ visible, current, onSave, onClose, colors }) {
     }
   }, [visible, current]);
 
-  const minutesData = useMemo(() => Array.from({ length: 21 }, (_, i) => i), []); // 0�20 min
+  const minutesData = useMemo(() => Array.from({ length: 21 }, (_, i) => i), []); // 0·20 min
   const secondsData = useMemo(() => [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55], []);
 
   // Scroll to the closest second bucket when secs changes (preset buttons)
@@ -943,7 +953,7 @@ function SwapModal({ visible, exercise, onSwap, onClose, colors, mode = 'swap', 
         </TouchableOpacity>
       </View>
 
-      {/* Muscle chips � use RNGH ScrollView so horizontal swipe isn't captured by BottomSheetFlatList */}
+      {/* Muscle chips · use RNGH ScrollView so horizontal swipe isn't captured by BottomSheetFlatList */}
       {muscles.length > 0 && (
         <View style={{ height: 40, marginBottom: 10 }}>
           <RNGHScrollView
@@ -998,7 +1008,7 @@ function SwapModal({ visible, exercise, onSwap, onClose, colors, mode = 'swap', 
             <View style={{ flex: 1 }}>
               <Text style={{ fontSize: 14, fontWeight: '600', color: colors.text }} numberOfLines={1}>{ex.name}</Text>
               <Text style={{ fontSize: 11, color: colors.muted, marginTop: 2 }} numberOfLines={1}>
-                {getExerciseFilterSummary(ex).join(', ')}{ex.equipment ? ` � ${toTitleCase(ex.equipment)}` : ''}
+                {getExerciseFilterSummary(ex).join(', ')}{ex.equipment ? ` · ${toTitleCase(ex.equipment)}` : ''}
               </Text>
               {!isLibraryMode && ex.substitutionReason ? (
                 <Text style={{ fontSize: 10, color: colors.accent, marginTop: 2 }} numberOfLines={1}>
@@ -1144,7 +1154,7 @@ const ExerciseCard = React.memo(function ExerciseCard({
   setFocusedField,
   haptic,
 }) {
-  // Local note state � prevents Android cursor-jump on parent re-renders.
+  // Local note state · prevents Android cursor-jump on parent re-renders.
   // We hold text locally while focused; sync from prop only when not editing.
   const [localNote, setLocalNote] = useState(exerciseNote || '');
   const [localWeight, setLocalWeight] = useState(inp.weight || '');
@@ -1218,7 +1228,7 @@ const ExerciseCard = React.memo(function ExerciseCard({
                 ) : null}
                 {allSameOrLess ? (
                   <View style={{ backgroundColor: colors.faint, borderWidth: 1, borderColor: colors.gold || colors.accent, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999 }}>
-                    <Text style={{ fontSize: 8, color: colors.gold || colors.accent, fontWeight: '700', letterSpacing: 1 }}>? OVERLOAD</Text>
+                    <Text style={{ fontSize: 8, color: colors.gold || colors.accent, fontWeight: '700', letterSpacing: 1 }}>OVERLOAD</Text>
                   </View>
                 ) : null}
                 {suggestion ? (
@@ -1234,13 +1244,13 @@ const ExerciseCard = React.memo(function ExerciseCard({
                 ) : null}
               </View>
               <Text style={{ fontSize: 11, color: colors.muted, marginTop: 3, lineHeight: 15 }}>
-                {ex.primary || (ex.primaryMuscles || [])[0] || '-'} � {originalEx.sets}x{timeBased ? `${originalEx.reps}s` : originalEx.reps}
+                {ex.primary || (ex.primaryMuscles || [])[0] || '-'} · {originalEx.sets}x{timeBased ? `${originalEx.reps}s` : originalEx.reps}
               </Text>
               {suggestion ? (
                 <Text style={{ fontSize: 10, marginTop: 4, lineHeight: 14, color: suggestion.action === 'reduce' ? '#FF8E8E' : colors.subtext }}>
                   Next target {Number(suggestion.targetWeight || 0) > 0 ? formatWeightFromKg(suggestion.targetWeight, settings?.weightUnit || 'kg') : 'BW'} x {Math.max(1, Number(suggestion.targetReps || 0))}
-                  {suggestion.plateauSignal ? ` � Plateau: ${suggestion.plateauSignal.recommendation}` : ''}
-                  {suggestion.deloadSignal ? ` � ${suggestion.deloadSignal.recommendation}` : ''}
+                  {suggestion.plateauSignal ? ` · Plateau: ${suggestion.plateauSignal.recommendation}` : ''}
+                  {suggestion.deloadSignal ? ` · ${suggestion.deloadSignal.recommendation}` : ''}
                 </Text>
               ) : null}
             </View>
@@ -1277,7 +1287,7 @@ const ExerciseCard = React.memo(function ExerciseCard({
                 }
               }}
             >
-              <Text style={{ fontSize: 8, letterSpacing: 2, color: colors.muted, marginBottom: 4 }}>LAST � {ghost.date} � tap to fill</Text>
+              <Text style={{ fontSize: 8, letterSpacing: 2, color: colors.muted, marginBottom: 4 }}>LAST · {ghost.date} · tap to fill</Text>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
                 {ghost.sets.map((gs, gi) => <Text key={gi} style={{ fontSize: 12, color: colors.subtext, fontWeight: '600' }}>{gs.weight > 0 ? formatWeightFromKg(gs.weight, settings?.weightUnit || 'kg') : 'BW'}x{gs.reps}</Text>)}
               </View>
@@ -1395,7 +1405,7 @@ const ExerciseCard = React.memo(function ExerciseCard({
             onPress={() => { fireHaptic('selection', { enabled: haptic }); onEditRest(exIndex); }}
           >
             <Ionicons name="timer-outline" size={12} color={colors.muted} />
-            <Text style={{ fontSize: 10, color: colors.muted, letterSpacing: 0.8 }}>{restSec}s rest � tap to change</Text>
+            <Text style={{ fontSize: 10, color: colors.muted, letterSpacing: 0.8 }}>{restSec}s rest · tap to change</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -1484,10 +1494,39 @@ function WorkoutContent({ plan, day, planIndex, dayIndex, navigation }) {
     overflow: 'hidden',
     transform: [{ translateY: (1 - restPanelAnim.value) * 12 }],
   }));
+
+  // ── Slide up / slide down animation ──────────────────────────────────────
+  // Enter: slides up from below the screen (pill tap).
+  // Minimize: slides back down off the bottom.
+  const SCREEN_H     = Dimensions.get('window').height;
+  const SLIDE_CFG    = { damping: 28, stiffness: 300, mass: 0.9 };
+  const screenTransY = useSharedValue(SCREEN_H);
+  const screenAnimStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: screenTransY.value }],
+  }));
+
+  useEffect(() => {
+    screenTransY.value = withSpring(0, SLIDE_CFG);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // goBack() dismisses the overlay without touching Tabs
+  const navigateToTabs = useCallback(() => navigation.goBack(), [navigation]);
+  const handleMinimize = useCallback(() => {
+    fireHaptic('selection', { enabled: haptic });
+    screenTransY.value = withSpring(
+      SCREEN_H,
+      SLIDE_CFG,
+      (finished) => { if (finished) runOnJS(navigateToTabs)(); },
+    );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [haptic, navigateToTabs]);
+  // ─────────────────────────────────────────────────────────────────────────
+
   const inputRefs = useRef({});
   const shareCardRef = useRef(null);
   const flatListRef = useRef(null);
-  // Pre-filter history for this day once � avoids O(n) per renderItem per frame
+  // Pre-filter history for this day once · avoids O(n) per renderItem per frame
   const dayHistory = useMemo(
     () => history.filter(h => h.dayId === day.id).slice(0, 3),
     [history, day.id]
@@ -1604,7 +1643,7 @@ function WorkoutContent({ plan, day, planIndex, dayIndex, navigation }) {
     };
   }, [sessionKey, plan?.id, day?.id, dispatch]);
 
-  // Ongoing system notification � updates title + body as sets are logged.
+  // Ongoing system notification · updates title + body as sets are logged.
   useEffect(() => {
     if (!sessionReady) return;
     const weightUnit = settings?.weightUnit || 'kg';
@@ -1628,12 +1667,12 @@ function WorkoutContent({ plan, day, planIndex, dayIndex, navigation }) {
     const exName = currentEx?.name || '';
     const isTimeBased = isTimeBasedExercise(currentEx);
 
-    // Build compact set history � up to 4 sets shown
+    // Build compact set history · up to 4 sets shown
     const setChips = loggedSets.slice(-4).map((s) => {
       if (isTimeBased) return formatDurationShort(s.durationSec || s.reps);
       const w = Number(s.weight || 0);
       const r = Number(s.reps || 0);
-      return w > 0 ? `${w}�${r}` : `BW�${r}`;
+      return w > 0 ? `${w}·${r}` : `BW·${r}`;
     });
 
     // Current live input if typing
@@ -1641,7 +1680,7 @@ function WorkoutContent({ plan, day, planIndex, dayIndex, navigation }) {
     const liveW = liveInp.weight ? String(liveInp.weight).trim() : '';
     const liveR = liveInp.reps ? String(liveInp.reps).trim() : '';
     const liveChip = loggedCount < plannedCount && (liveW || liveR)
-      ? `? ${liveW || '?'}�${liveR || '?'}`
+      ? `? ${liveW || '?'}·${liveR || '?'}`
       : null;
 
     const setLine = [...setChips, ...(liveChip ? [liveChip] : [])].join('  ');
@@ -1654,7 +1693,7 @@ function WorkoutContent({ plan, day, planIndex, dayIndex, navigation }) {
       body,
       startedAtMs: startTime.current || Date.now(),
     }).catch(() => {});
-  // Intentionally excludes state.inputs � we don't want a notification IPC round-trip
+  // Intentionally excludes state.inputs · we don't want a notification IPC round-trip
   // on every keystroke. The live input chip is nice-to-have; set-log accuracy is not.
   }, [sessionReady, day?.name, plan?.name, state.setLog, workingExercises, liveExerciseHint, settings?.weightUnit]);
 
@@ -1795,7 +1834,7 @@ function WorkoutContent({ plan, day, planIndex, dayIndex, navigation }) {
     setTimerSyncKey(k => k + 1);
   }, [dispatch, haptic]);
 
-  // No longer drives the interval (RestTimerPanel owns that) � only needed
+  // No longer drives the interval (RestTimerPanel owns that) · only needed
   // for expired-while-backgrounded dispatch. Panel re-syncs via its own dep array.
   // Keep empty dep array here; foreground restore handled by AppState listener above.
 
@@ -1841,13 +1880,54 @@ function WorkoutContent({ plan, day, planIndex, dayIndex, navigation }) {
   }, [dispatch, haptic]);
 
   useEffect(() => {
-    const sub = AppState.addEventListener('change', nextState => {
+    const sub = AppState.addEventListener('change', async nextState => {
       const wasBackgrounded = appStateRef.current.match(/inactive|background/);
       appStateRef.current = nextState;
-      if (wasBackgrounded && nextState === 'active') syncRestTimer();
+      if (wasBackgrounded && nextState === 'active') {
+        syncRestTimer();
+        // Handle pending notification actions (SKIP_REST, ADD_30S, FINISH_WORKOUT)
+        // that were stored while the app was backgrounded.
+        const pending = await consumePendingAction();
+        if (pending?.actionId === NOTIF_ACTIONS.SKIP_REST) {
+          handleSkip();
+        } else if (pending?.actionId === NOTIF_ACTIONS.ADD_30S) {
+          handleAdd30();
+        } else if (pending?.actionId === NOTIF_ACTIONS.FINISH_WORKOUT) {
+          finishWorkout();
+        }
+      }
     });
     return () => sub.remove();
-  }, [syncRestTimer]);
+  }, [syncRestTimer, handleSkip, handleAdd30, finishWorkout]);
+
+  // Listen for foreground notification actions bridged via DeviceEventEmitter.
+  useEffect(() => {
+    const sub = DeviceEventEmitter.addListener('ironlog:notifAction', ({ actionId }) => {
+      if (actionId === NOTIF_ACTIONS.SKIP_REST) {
+        handleSkip();
+      } else if (actionId === NOTIF_ACTIONS.ADD_30S) {
+        handleAdd30();
+      } else if (actionId === NOTIF_ACTIONS.FINISH_WORKOUT) {
+        finishWorkout();
+      }
+    });
+    return () => sub.remove();
+  }, [handleSkip, handleAdd30, finishWorkout]);
+
+  // Show / update the rest-timer notification whenever the timer activates or
+  // the remaining time changes. Clear it when the timer stops.
+  useEffect(() => {
+    if (!state.restTimer.active) {
+      clearRestTimerNotification();
+      return;
+    }
+    const secondsRemaining = state.restTimer.paused
+      ? Math.max(0, Math.ceil(((state.restTimer.endTime || 0) - (state.restTimer.pausedAt || 0)) / 1000))
+      : Math.max(0, Math.ceil(((state.restTimer.endTime || 0) - Date.now()) / 1000));
+    if (secondsRemaining > 0) {
+      showRestTimerNotification({ secondsRemaining }).catch(() => {});
+    }
+  }, [state.restTimer.active, state.restTimer.endTime, state.restTimer.pausedAt]); // eslint-disable-line
 
   useFocusEffect(
     useCallback(() => {
@@ -1892,19 +1972,22 @@ function WorkoutContent({ plan, day, planIndex, dayIndex, navigation }) {
         : formatWeightFromKg(weight, weightUnit);
       dispatch({ type: 'SET_PB_NOTIF', message: 'NEW PB: ' + ex.name + ' - ' + prDisplayStr });
       setTimeout(() => dispatch({ type: 'SET_PB_NOTIF', message: null }), 3000);
-      // PRHud handles the PR notification � no separate toast needed
+      // PRHud handles the PR notification · no separate toast needed
       const previousDisplay = previousPb > 0 ? previousPb : Math.max(0, prWeight - 2.5);
       const delta = prWeight - previousDisplay;
+      const deltaStr = `+${Math.abs(delta % 1) > 0.01 ? delta.toFixed(1) : Math.round(delta)}`;
       setPrHud({
         exercise: ex.name,
         weight: prWeight,
         prev: previousDisplay,
         unit: weightUnit,
-        delta: `+${Math.abs(delta % 1) > 0.01 ? delta.toFixed(1) : Math.round(delta)} ${weightUnit}`,
+        delta: `${deltaStr} ${weightUnit}`,
         isBodyweight: isBW && weight > 0 && latestBWUnit > 0,
         addedWeight: weight,
         bodyweightKg: latestBWKg,
       });
+      // Also fire a system notification so it shows in the status bar / shade.
+      showPRNotification({ exerciseName: ex.name, delta: deltaStr, unit: weightUnit }).catch(() => {});
       primarySetEvent = 'prUnlocked';
     }
     fireHaptic(primarySetEvent, { enabled: haptic });
@@ -1919,8 +2002,8 @@ function WorkoutContent({ plan, day, planIndex, dayIndex, navigation }) {
       visible: true,
       intent: 'success',
       text: isTimeBased
-        ? `${workingExercises[exIndex]?.name || 'Exercise'} � ${formatDurationShort(reps)} logged`
-        : `${workingExercises[exIndex]?.name || 'Exercise'} � set logged`,
+        ? `${workingExercises[exIndex]?.name || 'Exercise'} · ${formatDurationShort(reps)} logged`
+        : `${workingExercises[exIndex]?.name || 'Exercise'} · set logged`,
     });
     setTimeout(() => {
       setInlineToast((previous) => ({ ...previous, visible: false }));
@@ -2052,7 +2135,7 @@ function WorkoutContent({ plan, day, planIndex, dayIndex, navigation }) {
         {
           text: 'Remove', style: 'destructive', onPress: () => {
             fireHaptic('destructiveAction', { enabled: haptic });
-            // Removing from orderedIndices is enough � finishWorkout and rendering
+            // Removing from orderedIndices is enough · finishWorkout and rendering
             // both iterate orderedIndices, so the exercise is completely excluded.
             setOrderedIndices((prev) => prev.filter((i) => i !== exIndex));
           },
@@ -2146,7 +2229,7 @@ function WorkoutContent({ plan, day, planIndex, dayIndex, navigation }) {
           try {
             fireHaptic('lightConfirm', { enabled: haptic });
             // Try YouTube app deep-link first (vnd.youtube://), fall back to HTTPS.
-            // canOpenURL is unreliable on Android 11+ for HTTPS � skip it.
+            // canOpenURL is unreliable on Android 11+ for HTTPS · skip it.
             const query = youtubeMeta?.youtubeSearchQuery;
             const appUrl = query
               ? `vnd.youtube://results?search_query=${encodeURIComponent(query)}`
@@ -2259,7 +2342,7 @@ function WorkoutContent({ plan, day, planIndex, dayIndex, navigation }) {
     );
     setAlertConfig({
       title: 'FINISH WORKOUT',
-      message: totalSets + ' sets logged � ' + Math.round(duration / 60) + 'min' + (totalDurationSec > 0 ? ` � ${Math.round(totalDurationSec / 60)}m timed` : ''),
+      message: totalSets + ' sets logged · ' + Math.round(duration / 60) + 'min' + (totalDurationSec > 0 ? ` · ${Math.round(totalDurationSec / 60)}m timed` : ''),
       buttons: [
         { text: 'Keep Going', style: 'cancel' },
         {
@@ -2386,7 +2469,7 @@ function WorkoutContent({ plan, day, planIndex, dayIndex, navigation }) {
               : 'Session locked in';
             const volumeLine = comparison?.fallback
               ? `Volume: ${formatVolumeFromKg(totalVolume, weightUnit)}`
-              : `Volume: ${formatVolumeFromKg(totalVolume, weightUnit)} � ${comparison.text}`;
+              : `Volume: ${formatVolumeFromKg(totalVolume, weightUnit)} · ${comparison.text}`;
             const milestoneCount = addResult?.unlockedMilestones?.length || 0;
             const milestoneLine = milestoneCount
               ? `Milestones: ${milestoneCount}`
@@ -2396,6 +2479,10 @@ function WorkoutContent({ plan, day, planIndex, dayIndex, navigation }) {
               fireHaptic('milestoneSuccess', { enabled: haptic });
             }
             clearOngoingWorkoutNotification().catch(() => {});
+            clearRestTimerNotification().catch(() => {});
+            // Post-workout notification with LOG WEIGHT action
+            const postSummary = [prLine, volumeLine].filter(Boolean).join(' · ');
+            showPostWorkoutNotification({ summary: postSummary }).catch(() => {});
             setCompletionPrCount(prEvents.length || 0);
             setCompletionSummary(
               [prLine, volumeLine, milestoneLine, scoreLine]
@@ -2575,7 +2662,8 @@ function WorkoutContent({ plan, day, planIndex, dayIndex, navigation }) {
   };
 
   return (
-    <View style={[s.container, { backgroundColor: colors.bg }]}>
+    <ReAnimated.View style={[{ flex: 1 }, screenAnimStyle]}>
+      <View style={[s.container, { backgroundColor: colors.bg }]}>
       {/* Header */}
       <View style={[s.header, { borderBottomColor: colors.faint }]}>
         <TouchableOpacity onPress={() => { fireHaptic('selection', { enabled: haptic }); setQuitAlert(true); }}>
@@ -2593,7 +2681,7 @@ function WorkoutContent({ plan, day, planIndex, dayIndex, navigation }) {
           <Text style={s.dayName}>{day.name}</Text>
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <TouchableOpacity onPress={() => { fireHaptic('selection', { enabled: haptic }); navigation.navigate('Tabs'); }}>
+          <TouchableOpacity onPress={handleMinimize}>
             <Ionicons name="chevron-down" size={22} color={colors.muted} />
           </TouchableOpacity>
           <TouchableOpacity style={[s.finishBtn, { backgroundColor: colors.accent }]} onPress={() => { fireHaptic('lightConfirm', { enabled: haptic }); finishWorkout(); }}>
@@ -2602,7 +2690,7 @@ function WorkoutContent({ plan, day, planIndex, dayIndex, navigation }) {
         </View>
       </View>
 
-      {/* Rest timer � isolated component so 500ms tick doesn't re-render WorkoutContent */}
+      {/* Rest timer · isolated component so 500ms tick doesn't re-render WorkoutContent */}
       {showRestPanel ? (
         <RestTimerPanel
           restTimer={state.restTimer}
@@ -2821,7 +2909,7 @@ function WorkoutContent({ plan, day, planIndex, dayIndex, navigation }) {
         buttons={[
           { text: 'Minimize', style: 'default', onPress: () => navigation.goBack() },
           { text: 'Stay', style: 'cancel', onPress: () => setQuitAlert(false) },
-          { text: 'Quit', style: 'destructive', onPress: async () => { clearOngoingWorkoutNotification().catch(() => {}); await clearActiveSession(sessionKey).catch(() => {}); setBanner(null); navigation.goBack(); } },
+          { text: 'Quit', style: 'destructive', onPress: async () => { clearOngoingWorkoutNotification().catch(() => {}); clearRestTimerNotification().catch(() => {}); await clearActiveSession(sessionKey).catch(() => {}); setBanner(null); navigation.goBack(); } },
         ]} />
 
       {/* Workout completion summary */}
@@ -2891,7 +2979,7 @@ function WorkoutContent({ plan, day, planIndex, dayIndex, navigation }) {
                   <View style={{ flex: 1, marginRight: 12 }}>
                     <Text style={[s.targetName, { color: colors.text }]} numberOfLines={1}>{t.name}</Text>
                     <Text style={[s.targetReason, { color: colors.muted }]} numberOfLines={2}>
-                      {t.action ? `${String(t.action).toUpperCase()} � ` : ''}{t.rationale || (t.plateau ? `Plateau: ${t.plateau}` : t.deload ? t.deload : 'Keep the trend moving')}
+                      {t.action ? `${String(t.action).toUpperCase()} · ` : ''}{t.rationale || (t.plateau ? `Plateau: ${t.plateau}` : t.deload ? t.deload : 'Keep the trend moving')}
                     </Text>
                   </View>
                   <Text style={[s.targetVal, { color: t.action === 'reduce' ? '#FF8E8E' : colors.accent }]}>{Number(t.weight || 0) > 0 ? formatWeightFromKg(t.weight, settings?.weightUnit || 'kg') : 'BW'} x {Math.max(1, Number(t.reps || 0))}</Text>
@@ -2913,15 +3001,16 @@ function WorkoutContent({ plan, day, planIndex, dayIndex, navigation }) {
 
       <CustomAlert visible={!!alertConfig} title={alertConfig?.title} message={alertConfig?.message} buttons={alertConfig?.buttons || []} onDismiss={() => setAlertConfig(null)} />
       <PRHud pr={prHud} onDismiss={() => setPrHud(null)} />
-    </View>
+      </View>
+    </ReAnimated.View>
   );
 }
 
-//  ROOT EXPORT 
+//  ROOT EXPORT
 
 export default function ActiveWorkoutScreen({ route, navigation }) {
   const { planIndex = 0, dayIndex = 0 } = route.params || {};
-  const { plans } = useWatermelonAppData();
+  const { plans, initialized } = useWatermelonAppData();
   const colors = useTheme();
 
   const safePlans = Array.isArray(plans) ? plans : [];
@@ -2932,7 +3021,12 @@ export default function ActiveWorkoutScreen({ route, navigation }) {
   const day = safeDays[resolvedDayIndex];
   const safeExercises = Array.isArray(day?.exercises) ? day.exercises : [];
 
+  // While WatermelonDB is still hydrating, plans is [] — render nothing rather
+  // than flashing "Workout not found" for a frame before data arrives.
   if (!day) {
+    if (!initialized) {
+      return null; // transparent until data hydrates — home screen shows through
+    }
     return (
       <View style={{ flex: 1, backgroundColor: colors.bg, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
         <Text style={{ color: colors.text, fontSize: 16 }}>Workout not found.</Text>
@@ -2969,7 +3063,7 @@ function makeStyles(colors) {
     targetBtn: { marginTop: 16, padding: 16, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6 },
     pbBanner: { backgroundColor: '#FFD70022', borderBottomWidth: 1, borderBottomColor: '#FFD70044', padding: 12, alignItems: 'center' },
     pbBannerText: { fontSize: 13, fontWeight: '700', color: '#FFD700' },
-    restOverlayAnim: { zIndex: 10 }, // only geometry � NO PlatformColor (would crash Reanimated on Monet)
+    restOverlayAnim: { zIndex: 10 }, // only geometry · NO PlatformColor (would crash Reanimated on Monet)
     restOverlay: { borderBottomWidth: 1, alignItems: 'center', paddingVertical: 4 },
     restLabel: { fontSize: 10, letterSpacing: 5, marginTop: 8 },
     warmupSection: { padding: 16, borderBottomWidth: 1, borderBottomColor: colors.faint },

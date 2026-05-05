@@ -79,7 +79,7 @@ export default function PremiumFrostedTabBar({ state, descriptors, navigation, s
   const accentBorder = colors.accentBorder || withAlpha(accent, 0.28, colors.faint || 'rgba(255,255,255,0.16)');
   const accentRing = withAlpha(accent, 0.16, colors.accentBorder || colors.faint || 'rgba(255,255,255,0.12)');
   const highlight = withAlpha(colors.text, typeof colors.bg === 'string' && colors.bg === '#f2f2f7' ? 0.05 : 0.08, colors.cardBorder || 'rgba(255,255,255,0.08)');
-  const shadowColor = isHex(accent) ? accent : '#000000';
+  const shadowColor = isHex(accent) ? accent : '#0A0A0A';
   const bottomPad = Math.max(insets.bottom, Platform.OS === 'ios' ? 12 : 10);
 
   return (

@@ -2,9 +2,12 @@
 import React from 'react';
 import { Modal, View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
+import { textOnColor } from '../utils/colorUtils';
 
 export default function ImportPreviewModal({ visible, preview, onConfirm, onCancel, loading }) {
   const colors = useTheme();
+  const confirmBg = loading ? colors.muted : colors.accent;
+  const confirmText = textOnColor(confirmBg, colors.textOnAccent);
   if (!preview) return null;
 
   return (
@@ -61,10 +64,10 @@ export default function ImportPreviewModal({ visible, preview, onConfirm, onCanc
               <Text style={{ color: colors.muted }}>Cancel</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[s.confirmBtn, { backgroundColor: loading ? colors.muted : colors.accent }]}
+              style={[s.confirmBtn, { backgroundColor: confirmBg }]}
               onPress={onConfirm}
               disabled={loading}>
-              <Text style={{ color: '#fff', fontWeight: '800' }}>
+              <Text style={{ color: confirmText, fontWeight: '800' }}>
                 {loading ? 'IMPORTING...' : `IMPORT ${preview.workouts} WORKOUTS`}
               </Text>
             </TouchableOpacity>

@@ -35,7 +35,7 @@ import {
   toBase64,
 } from './backupCrypto';
 
-// Drive sync is intentionally disabled in the current IronlogDB runtime.
+// Drive sync is intentionally disabled in the current Ironlog runtime.
 async function isDriveBackupAvailable() { return false; }
 async function uploadSnapshotToDrive() { throw new Error('Drive backup is disabled.'); }
 async function listDriveSnapshots() { return []; }

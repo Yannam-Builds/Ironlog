@@ -3,6 +3,8 @@ import { database } from '../database';
 import seedPayload from './exerciseLibrary.json';
 import { isExerciseSeedComplete, markExerciseSeedComplete } from './seedStatus';
 
+const BATCH_SIZE = 150;
+
 function toTitleCase(value) {
   return String(value || '')
     .trim()
@@ -65,6 +67,22 @@ function buildMuscleRows(exercise) {
   ];
 }
 
+/**
+ * Write prepared WatermelonDB operations in small chunks.
+ * Each chunk is its own database.write() → database.batch() transaction,
+ * releasing the SQLite write lock between chunks so the event loop stays
+ * responsive. batch() must always be called inside write() per WM v0.28.
+ */
+async function batchInChunks(preparedOps) {
+  for (let i = 0; i < preparedOps.length; i += BATCH_SIZE) {
+    const chunk = preparedOps.slice(i, i + BATCH_SIZE);
+    // eslint-disable-next-line no-await-in-loop
+    await database.write(async () => {
+      await database.batch(...chunk);
+    });
+  }
+}
+
 export async function seedExercisesIfNeeded() {
   if (await isExerciseSeedComplete()) {
     return { seeded: false, reason: 'already_seeded' };
@@ -76,51 +94,55 @@ export async function seedExercisesIfNeeded() {
   const musclesCollection = database.get('exercise_muscles');
   const now = Date.now();
 
-  await database.write(async () => {
-    const existing = await exercisesCollection.query().fetch();
-    const existingKeys = new Set(existing.map((item) => item.normalizedName));
-    const creates = [];
-    const exerciseByKey = new Map();
+  // ── Phase 1: read existing exercises (no write lock held) ─────────────────
+  const existing = await exercisesCollection.query().fetch();
+  const existingKeys = new Set(existing.map((item) => item.normalizedName));
 
-    rows.forEach((entry) => {
-      const name = String(entry.name).trim();
-      const normalizedName = normalizeName(name);
-      if (!normalizedName || existingKeys.has(normalizedName)) return;
-      existingKeys.add(normalizedName);
-      creates.push(
-        exercisesCollection.prepareCreate((record) => {
-          record.name = name;
-          record.normalizedName = normalizedName;
-          record.primaryMuscle = toTitleCase(
-            entry.primaryMuscle ||
-              (Array.isArray(entry.primaryMuscles) ? entry.primaryMuscles[0] : '') ||
-              'Other'
-          );
-          record.equipment = normalizeEquipment(entry.equipment);
-          record.category = normalizeCategory(entry);
-          record.isCustom = false;
-          record.source = 'built_in';
-          record.notes = entry.notes ? String(entry.notes) : '';
-          record._raw.created_at = now;
-          record.updatedAt = now;
-        })
-      );
-      exerciseByKey.set(normalizedName, entry);
-    });
+  const creates = [];
+  const exerciseByKey = new Map();
 
-    if (creates.length > 0) {
-      await database.batch(...creates);
-    }
+  rows.forEach((entry) => {
+    const name = String(entry.name).trim();
+    const normalizedName = normalizeName(name);
+    if (!normalizedName || existingKeys.has(normalizedName)) return;
+    existingKeys.add(normalizedName);
+    creates.push(
+      exercisesCollection.prepareCreate((record) => {
+        record.name = name;
+        record.normalizedName = normalizedName;
+        record.primaryMuscle = toTitleCase(
+          entry.primaryMuscle ||
+            (Array.isArray(entry.primaryMuscles) ? entry.primaryMuscles[0] : '') ||
+            'Other'
+        );
+        record.equipment = normalizeEquipment(entry.equipment);
+        record.category = normalizeCategory(entry);
+        record.isCustom = false;
+        record.source = 'built_in';
+        record.notes = entry.notes ? String(entry.notes) : '';
+        record._raw.created_at = now;
+        record.updatedAt = now;
+      })
+    );
+    exerciseByKey.set(normalizedName, entry);
+  });
 
+  // ── Phase 2: write exercises in small chunks (lock released between each) ─
+  if (creates.length > 0) {
+    await batchInChunks(creates);
+  }
+
+  // ── Phase 3: read inserted rows to get their WM IDs (no write lock held) ──
+  const muscleCreates = [];
+  if (exerciseByKey.size > 0) {
     const inserted = await exercisesCollection
       .query(Q.where('source', 'built_in'))
       .fetch();
-    const muscleCreates = [];
+
     inserted.forEach((exercise) => {
       const sourceExercise = exerciseByKey.get(exercise.normalizedName);
       if (!sourceExercise) return;
-      const rowsForExercise = buildMuscleRows(sourceExercise);
-      rowsForExercise.forEach((row) => {
+      buildMuscleRows(sourceExercise).forEach((row) => {
         muscleCreates.push(
           musclesCollection.prepareCreate((muscle) => {
             muscle.exercise.set(exercise);
@@ -133,11 +155,12 @@ export async function seedExercisesIfNeeded() {
         );
       });
     });
+  }
 
-    if (muscleCreates.length > 0) {
-      await database.batch(...muscleCreates);
-    }
-  });
+  // ── Phase 4: write muscle rows in small chunks ────────────────────────────
+  if (muscleCreates.length > 0) {
+    await batchInChunks(muscleCreates);
+  }
 
   await markExerciseSeedComplete();
   return { seeded: true, count: rows.length };
@@ -175,8 +198,7 @@ export async function backfillExerciseMusclesIfNeeded() {
   allExercises.forEach((exercise) => {
     const sourceEntry = libraryByName.get(exercise.normalizedName);
     if (!sourceEntry) return;
-    const rowsForExercise = buildMuscleRows(sourceEntry);
-    rowsForExercise.forEach((row) => {
+    buildMuscleRows(sourceEntry).forEach((row) => {
       muscleCreates.push(
         musclesCollection.prepareCreate((muscle) => {
           muscle.exercise.set(exercise);
@@ -192,10 +214,8 @@ export async function backfillExerciseMusclesIfNeeded() {
 
   if (muscleCreates.length === 0) return { backfilled: false, reason: 'no_exercises_matched' };
 
-  await database.write(async () => {
-    await database.batch(...muscleCreates);
-  });
+  // Write in small chunks — each chunk is its own write transaction
+  await batchInChunks(muscleCreates);
 
   return { backfilled: true, count: muscleCreates.length };
 }
-

@@ -20,17 +20,23 @@ function formatElapsed(ms) {
   return `${String(m).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
 }
 
-export default function FloatingWorkoutWidget({ navigation }) {
+function FloatingWorkoutWidget({ navigation }) {
   const { banner } = useActiveBanner();
   const colors = useTheme();
   const [elapsed, setElapsed] = useState(0);
 
-  const scaleAnim   = useSharedValue(banner ? 1 : 0.85);
+  const scaleAnim   = useSharedValue(banner ? 1 : 0.6);
   const opacityAnim = useSharedValue(banner ? 1 : 0);
 
   useEffect(() => {
-    scaleAnim.value   = withSpring(banner ? 1 : 0.85, { stiffness: 340, damping: 26 });
-    opacityAnim.value = withTiming(banner ? 1 : 0, { duration: 180 });
+    if (banner) {
+      // Pop in with a snappy spring matching the screen shrink timing (~250ms)
+      scaleAnim.value   = withSpring(1, { stiffness: 480, damping: 22, mass: 0.6 });
+      opacityAnim.value = withTiming(1, { duration: 200 });
+    } else {
+      scaleAnim.value   = withTiming(0.6, { duration: 140 });
+      opacityAnim.value = withTiming(0,   { duration: 140 });
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [!!banner]);
 
@@ -86,6 +92,8 @@ export default function FloatingWorkoutWidget({ navigation }) {
     </ReAnimated.View>
   );
 }
+
+export default React.memo(FloatingWorkoutWidget);
 
 const s = StyleSheet.create({
   pill: {

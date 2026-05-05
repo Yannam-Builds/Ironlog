@@ -31,6 +31,8 @@ import useWatermelonPlans from './useWatermelonPlans';
 import useWatermelonSettings from './useWatermelonSettings';
 import useWatermelonStats from './useWatermelonStats';
 
+const EMPTY_ARRAY = [];
+
 const HEAVY = new Set([
   'Weighted Pull-Up',
   'Weighted Pull-Up or Lat Pulldown',
@@ -148,9 +150,9 @@ export default function useWatermelonAppData() {
   const manualRecovery = useWatermelonManualRecovery();
   const bodyMeasurements = useWatermelonBodyMeasurements();
 
-  const plans = plansHook.plans?.length ? plansHook.plans : home.plans;
-  const history = home.history || historyHook.history || [];
-  const bodyWeight = bodyMeasurements.bodyWeight?.length ? bodyMeasurements.bodyWeight : home.bodyWeight || [];
+  const plans = plansHook.plans?.length ? plansHook.plans : EMPTY_ARRAY;
+  const history = historyHook.history?.length ? historyHook.history : EMPTY_ARRAY;
+  const bodyWeight = bodyMeasurements.bodyWeight?.length ? bodyMeasurements.bodyWeight : home.bodyWeight?.length ? home.bodyWeight : EMPTY_ARRAY;
   const settings = settingsHook.settings || home.settings || {};
 
   const [manualPb, setManualPb] = useState({});

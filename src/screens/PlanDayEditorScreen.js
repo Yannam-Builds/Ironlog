@@ -292,7 +292,7 @@ function AddFromLibraryModal({ visible, onAdd, onClose, onCreateExercise, onQuic
                 <View style={libStyles.exInfo}>
                   <Text style={libStyles.exName}>{exercise.name}</Text>
                   <Text style={libStyles.exMeta}>
-                    {exercise.muscleGroup || exercise.primaryMuscle || (exercise.primaryMuscles || [])[0] || 'Other'} · {exercise.equipment || 'Other'}
+                    {exercise.muscleGroup || exercise.primaryMuscle || (exercise.primaryMuscles || [])[0] || 'Other'} Â· {exercise.equipment || 'Other'}
                   </Text>
                 </View>
                 <View style={libStyles.rowActions}>

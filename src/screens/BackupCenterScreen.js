@@ -369,7 +369,7 @@ export default function BackupCenterScreen({ navigation }) {
     if (!ignored) {
       setAlertConfig({
         title: 'Background backup may be blocked',
-        message: 'Android battery optimizations can prevent background backups from running. Tap "Allow" to exempt IronlogDB.',
+        message: 'Android battery optimizations can prevent background backups from running. Tap "Allow" to exempt Ironlog.',
         buttons: [
           { text: 'Later', style: 'cancel' },
           { text: 'Allow', style: 'default', onPress: () => requestBatteryOptimizationExemption().catch(() => {}) },
@@ -550,7 +550,7 @@ export default function BackupCenterScreen({ navigation }) {
           >
             <Text style={[s.warningTitle, { color: '#F8DDA0' }]}>Battery optimization active</Text>
             <Text style={[s.warningText, { color: '#F8DDA0' }]}>
-              Android may delay or skip scheduled backups. Tap to exempt IronlogDB from battery optimization.
+              Android may delay or skip scheduled backups. Tap to exempt Ironlog from battery optimization.
             </Text>
           </TouchableOpacity>
         )}

@@ -66,7 +66,7 @@ export default function GymProfilesScreen({ navigation }) {
                 <View style={{ flex: 1 }}>
                   <Text style={[s.name, { color: colors.text }]}>{profile.name}</Text>
                   <Text style={[s.meta, { color: colors.muted }]}>
-                    {convertKgToUnit(profile.barWeight, unit, 2)}{unitLabel} bar · {(profile.plates || []).map((p) => `${convertKgToUnit(p.weight, unit, 2)}${unitLabel}`).join(', ')}
+                    {convertKgToUnit(profile.barWeight, unit, 2)}{unitLabel} bar Â· {(profile.plates || []).map((p) => `${convertKgToUnit(p.weight, unit, 2)}${unitLabel}`).join(', ')}
                   </Text>
                 </View>
                 {isActive && (

@@ -6,10 +6,25 @@ import {
 } from 'react-native';
 import Reanimated, { useSharedValue, withSpring, useAnimatedStyle } from 'react-native-reanimated';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import Svg, { Path } from 'react-native-svg';
 import { getSetting, setSetting } from '../db/repositories/settingsRepository';
 import { useTheme } from '../context/ThemeContext';
 import { ONBOARDING_TEMPLATE_ID } from '../data/programTemplates';
 import { APP_VERSION_LABEL } from '../platform/appInfo';
+import { textOnColor } from '../utils/colorUtils';
+
+// White variant of the IronLog logo rendered from the SVG path (viewBox 1254×1254)
+function IronLogLogo({ size = 140, color = '#FFFFFF' }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 1254 1254">
+      <Path
+        fillRule="evenodd"
+        fill={color}
+        d="M568.5 206L581 205.5L593 210.5L598.5 216L603.5 226L603.5 299L595.5 316L576 330.5L388 450.5L381.5 457L376.5 469L376.5 776L379.5 784L387 792.5L440 825.5L447.5 835L451.5 847L450.5 926L442 937.5L435 940.5L427 940.5L286 853.5L274.5 842L268.5 828L267.5 418L274.5 398L284 387.5L388 321.5L560 208.5L568.5 206ZM675.5 206L687 205.5L701 210.5L970 385.5L978.5 394L984.5 405L986.5 413L986.5 824L981 829.5L974 830.5L959 822.5L886 777.5L879.5 768L879.5 469L876.5 460L870 451.5L678 328.5L658.5 313L653.5 304L651.5 295L651.5 232L656.5 218L664 210.5L675.5 206ZM575.5 387L585 386.5L592 389.5L599.5 397L602.5 404L602.5 1012L598.5 1021L591 1028.5L584 1031.5L572 1031.5L567 1029.5L501 985.5L492.5 976L487.5 964L487.5 462L494.5 445L502 436.5L568 389.5L575.5 387ZM670.5 387L680 386.5L687 389.5L753 435.5L762.5 447L766.5 458L766.5 835L768.5 840L776 845.5L784 844.5L855 798.5L861 795.5L870 795.5L953 844.5L957.5 850L957.5 858L953 863.5L697 1028.5L685 1032.5L674 1032.5L663 1027.5L655.5 1019L651.5 1007L651.5 409L656.5 396L663 389.5L670.5 387Z"
+      />
+    </Svg>
+  );
+}
 
 const { width, height } = Dimensions.get('window');
 
@@ -17,7 +32,7 @@ const SLIDES = [
   {
     id: 'welcome',
     icon: 'barbell-outline',
-    title: 'WELCOME TO\nIronlogDB',
+    title: 'WELCOME TO\nIronlog',
     body: 'The no-nonsense workout tracker built for lifters who mean business.',
     accent: true,
   },
@@ -43,7 +58,7 @@ const SLIDES = [
     id: 'setup',
     icon: 'shield-checkmark-outline',
     title: 'SET UP\nSMART FEATURES',
-    body: `IronlogDB ${APP_VERSION_LABEL} adds smart notifications, encrypted local backups, and optional Google Drive backup. We'll guide you through the setup after onboarding.`,
+    body: `Ironlog ${APP_VERSION_LABEL} adds smart notifications, encrypted local backups, and manual export/restore. We'll guide you through the setup after onboarding.`,
   },
   {
     id: 'ready',
@@ -57,6 +72,7 @@ const SLIDES = [
 export default function OnboardingScreen({ navigation }) {
   const completeOnboarding = async () => { await setSetting('onboarding_complete', true, 'boolean'); };
   const colors = useTheme();
+  const primaryTextColor = textOnColor(colors.accent, colors.textOnAccent);
   const flatRef = useRef(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [goalDays, setGoalDays] = useState(4);
@@ -115,11 +131,17 @@ export default function OnboardingScreen({ navigation }) {
     }
   };
 
-  const renderSlide = ({ item, index }) => (
+  const renderSlide = ({ item }) => (
     <View style={[s.slide, { width }]}>
-      <View style={[s.iconCircle, { backgroundColor: colors.accentSoft, borderColor: colors.accentBorder }]}>
-        <Ionicons name={item.icon} size={56} color={colors.accent} />
-      </View>
+      {item.id === 'welcome' ? (
+        <View style={s.logoWrap}>
+          <IronLogLogo size={148} color="#FFFFFF" />
+        </View>
+      ) : (
+        <View style={[s.iconCircle, { backgroundColor: colors.accentSoft, borderColor: colors.accentBorder }]}>
+          <Ionicons name={item.icon} size={56} color={colors.accent} />
+        </View>
+      )}
       <Text style={[s.title, { color: colors.text }]}>{item.title}</Text>
       <Text style={[s.body, { color: colors.subtext }]}>{item.body}</Text>
     </View>
@@ -191,13 +213,13 @@ export default function OnboardingScreen({ navigation }) {
         style={[s.btn, { backgroundColor: colors.accent }]}
         onPress={next}
         activeOpacity={0.85}>
-        <Text style={s.btnText}>
+        <Text style={[s.btnText, { color: primaryTextColor }]}>
           {currentIndex === SLIDES.length - 1 ? "LET'S GO" : 'NEXT'}
         </Text>
         <Ionicons
           name={currentIndex === SLIDES.length - 1 ? 'flash' : 'arrow-forward'}
           size={18}
-          color="#fff"
+          color={primaryTextColor}
         />
       </TouchableOpacity>
 
@@ -232,6 +254,13 @@ const s = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 36,
     paddingTop: 54,
+  },
+  logoWrap: {
+    width: 148,
+    height: 148,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 34,
   },
   iconCircle: {
     width: 112,
@@ -278,7 +307,7 @@ const s = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: 14,
   },
-  btnText: { color: '#fff', fontSize: 14, fontWeight: '900', letterSpacing: 3 },
+  btnText: { fontSize: 14, fontWeight: '900', letterSpacing: 3 },
   secondaryBtn: {
     marginTop: 10,
     marginHorizontal: 24,

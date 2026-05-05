@@ -4,19 +4,8 @@ import { Modal, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import ReAnimated, { useSharedValue, withSpring, withTiming, useAnimatedStyle } from 'react-native-reanimated';
 import { useTheme } from '../context/ThemeContext';
 import { haptic } from '../services/hapticsEngine';
-import { withAlpha } from '../utils/colorUtils';
+import { pickContrastText, withAlpha } from '../utils/colorUtils';
 import { RADIUS } from '../utils/themes';
-
-function pickContrastText(hexColor, fallback = '#FFFFFF') {
-  const m = /^#?([0-9a-f]{6})$/i.exec(String(hexColor || ''));
-  if (!m) return fallback;
-  const n = parseInt(m[1], 16);
-  const r = (n >> 16) & 0xff;
-  const g = (n >> 8) & 0xff;
-  const b = n & 0xff;
-  const luma = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
-  return luma > 0.62 ? '#111111' : '#FFFFFF';
-}
 
 // Props: visible, title, message, buttons: [{ text, onPress, style: 'default'|'cancel'|'destructive' }]
 export default function CustomAlert({ visible, title, message, buttons = [], onDismiss, overlay = null, backdropOverlay = null }) {

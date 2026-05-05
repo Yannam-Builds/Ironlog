@@ -2,8 +2,8 @@ import RNFS from 'react-native-fs';
 import { exportDatabase } from '../db/repositories/importExportRepository';
 import { getSetting, setSetting } from '../db/repositories/settingsRepository';
 
-const BACKUP_DIR = `${RNFS.DocumentDirectoryPath}/ironlogdb_backups`;
-const BACKUP_FILE_PREFIX = 'ironlogdb_';
+const BACKUP_DIR = `${RNFS.DocumentDirectoryPath}/ironlog_backups`;
+const BACKUP_FILE_PREFIX = 'ironlog_';
 const BACKUP_FILE_EXT = '.json';
 const DEFAULT_RETENTION_COUNT = 4;
 const MIN_RETENTION = 2;

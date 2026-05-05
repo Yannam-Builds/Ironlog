@@ -23,9 +23,9 @@ export function normalizeBackupImport(raw) {
     typeof raw.data === 'object';
 
   if (!isWatermelon) {
-    throw new Error(
-      'Unsupported backup format. This version of IronlogDB only restores its own exports (ironlog_watermelon_export v1).'
-    );
+      throw new Error(
+        'Unsupported backup format. This version of Ironlog restores its own exports (ironlog_watermelon_export v1).'
+      );
   }
 
   const data = ensureObject(raw.data);

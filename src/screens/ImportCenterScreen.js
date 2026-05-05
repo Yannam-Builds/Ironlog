@@ -9,11 +9,13 @@ import { pickAndParseCSV, importParsedCSV } from '../services/CSVImport';
 import { pickAndParseOpenWeight, importParsedOpenWeight } from '../services/openweightInterop';
 import { buildRestoreSummary } from '../services/restoreResultModel';
 import { fireHaptic } from '../services/hapticsEngine';
+import { textOnColor } from '../utils/colorUtils';
 
 export default function ImportCenterScreen() {
   const colors = useTheme();
   const { settings, reloadFromStorage } = useWatermelonAppData();
   const haptic = settings?.hapticFeedback !== false;
+  const primaryTextColor = textOnColor(colors.accent, colors.textOnAccent);
   const [parsedPayload, setParsedPayload] = useState(null);
   const [importing, setImporting] = useState(false);
   const [alertConfig, setAlertConfig] = useState(null);
@@ -81,7 +83,7 @@ export default function ImportCenterScreen() {
           Supports Strong and Hevy exports with automatic format detection.
         </Text>
         <TouchableOpacity style={[s.primaryBtn, { backgroundColor: colors.accent }]} onPress={runCSVPick}>
-          <Text style={s.primaryText}>IMPORT STRONG / HEVY CSV</Text>
+          <Text style={[s.primaryText, { color: primaryTextColor }]}>IMPORT STRONG / HEVY CSV</Text>
         </TouchableOpacity>
       </View>
 
@@ -122,14 +124,14 @@ export default function ImportCenterScreen() {
 
 const s = StyleSheet.create({
   container: { flex: 1 },
-  content: { padding: 20, gap: 14, paddingBottom: 40 },
+  content: { padding: 20, gap: 14, paddingBottom: 72 },
   header: { fontSize: 24, fontWeight: '900', letterSpacing: 1.3, marginTop: 12 },
   sub: { fontSize: 13, lineHeight: 19 },
   card: { borderWidth: 1, padding: 16, gap: 8 },
   cardTitle: { fontSize: 15, fontWeight: '800', letterSpacing: 0.6 },
   cardBody: { fontSize: 12, lineHeight: 18 },
   primaryBtn: { marginTop: 6, paddingVertical: 14, alignItems: 'center' },
-  primaryText: { color: '#fff', fontSize: 12, fontWeight: '900', letterSpacing: 1.5 },
+  primaryText: { fontSize: 12, fontWeight: '900', letterSpacing: 1.5 },
   secondaryBtn: { marginTop: 6, paddingVertical: 14, alignItems: 'center', borderWidth: 1 },
   secondaryText: { fontSize: 12, fontWeight: '900', letterSpacing: 1.5 },
   noteCard: { borderWidth: 1, padding: 12, flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
