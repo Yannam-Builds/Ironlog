@@ -9,11 +9,11 @@ const demoState = {
 };
 
 const foxAssets = {
-  determined: "assets/site/forgefox_determined.png",
-  proud: "assets/site/forgefox_proud.png",
-  dumbbell: "assets/site/forgefox_dumbbell.png",
-  streak: "assets/site/forgefox_streak.png",
-  watch: "assets/site/forgefox_watch.png",
+  determined: "assets/site/chibi_determined.webp",
+  proud: "assets/site/chibi_proud.webp",
+  dumbbell: "assets/site/chibi_dumbbell.webp",
+  streak: "assets/site/chibi_streak.webp",
+  watch: "assets/site/chibi_watch.webp",
 };
 
 const screens = {
