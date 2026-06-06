@@ -844,11 +844,22 @@ input[type="range"] {
 }
 
 .widget-score {
-  display: block;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
   color: rgba(255, 255, 255, 0.86);
   font-size: 52px;
   line-height: 0.95;
   font-weight: 950;
+  min-height: 58px;
+}
+
+.widget-score img {
+  width: 42px;
+  height: 42px;
+  object-fit: contain;
+  flex: 0 0 42px;
+  filter: drop-shadow(0 5px 10px rgba(0, 0, 0, 0.18));
 }
 
 .fox-widget p {
