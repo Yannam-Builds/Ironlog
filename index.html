@@ -17,7 +17,7 @@
     <meta property="og:url" content="https://yannam-builds.github.io/Ironlog/" />
     <meta property="og:image" content="https://yannam-builds.github.io/Ironlog/assets/site/splashscreen_logo.png" />
     <meta name="twitter:card" content="summary_large_image" />
-    <title>IronLog - Local-first Android Workout Tracker</title>
+    <title>IronLog - Native Kotlin Training</title>
     <link rel="icon" href="assets/site/ironlog_logo.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="assets/site/splashscreen_logo.png" />
     <link rel="preload" href="assets/fonts/lexend_variable.ttf" as="font" type="font/ttf" crossorigin />
@@ -34,34 +34,30 @@
       </a>
       <nav class="nav-links" aria-label="Sections">
         <a href="#demo">Demo</a>
-        <a href="#systems">Features</a>
-        <a href="#status">Status</a>
+        <a href="#systems">Systems</a>
         <a href="#widgets">Widgets</a>
-        <a href="#roadmap">Roadmap</a>
+        <a href="#kotlin">Kotlin</a>
       </nav>
-      <a class="header-cta" href="#demo">View demo</a>
+      <a class="header-cta" href="#demo">Try demo</a>
     </header>
 
     <main id="top">
       <section class="hero-shell" aria-labelledby="hero-title">
         <div class="hero-copy">
-          <p class="eyebrow">Native Android rebuild in progress</p>
+          <p class="eyebrow">Native Android rebuild</p>
           <h1 id="hero-title">IronLog</h1>
           <p class="hero-lede">
-            A local-first Android workout tracker for logging lifts, tracking recovery, and keeping streaks honest.
-          </p>
-          <p class="hero-note">
-            Built for lifters who want fast training records, visible progression, and no cloud dependency.
+            A local-first workout tracker for logged training, recovery signals, and earned progression.
           </p>
           <div class="hero-actions" aria-label="Hero actions">
-            <a class="primary-action" href="#demo">View interactive demo</a>
-            <a class="secondary-action" href="https://github.com/Yannam-Builds/Ironlog">Follow rebuild on GitHub</a>
+            <a class="primary-action" href="#demo">Launch interactive demo</a>
+            <a class="secondary-action" href="https://github.com/Yannam-Builds/Ironlog">GitHub repo</a>
           </div>
           <div class="signal-row" aria-label="Product signals">
             <span>Local-first</span>
-            <span>Kotlin rebuild</span>
             <span>ObjectBox storage</span>
-            <span>Widget system</span>
+            <span>Material You surfaces</span>
+            <span>Forge Fox widgets</span>
           </div>
         </div>
 
@@ -101,10 +97,10 @@
 
           <aside class="demo-controls" aria-label="Demo controls">
             <div>
-              <p class="eyebrow">Live prototype state</p>
+              <p class="eyebrow">Live app state</p>
               <h2>Tap through the core loop.</h2>
               <p>
-                Complete a set, adjust recovery, inspect progression, and switch between Material You-inspired themes.
+                Complete a set, adjust recovery, inspect Ledger progression, and switch Material You themes.
               </p>
             </div>
             <div class="control-grid">
@@ -123,74 +119,37 @@
 
       <section class="section-band" id="systems" aria-labelledby="systems-title">
         <div class="section-heading">
-          <p class="eyebrow">Core features</p>
-          <h2 id="systems-title">Simple logging first. Gamification second.</h2>
+          <p class="eyebrow">Training systems</p>
+          <h2 id="systems-title">Built around the proof loop.</h2>
           <p>
-            IronLog is designed around the actions a lifter repeats every week: record work, judge readiness, protect consistency, and see progression.
+            Log work, read recovery, and keep progression tied to training history instead of isolated stats.
           </p>
         </div>
-        <div class="system-grid feature-grid">
+        <div class="system-grid">
           <article class="system-card reveal">
             <span class="card-number">01</span>
-            <h3>Workout logging</h3>
-            <p>Track exercises, sets, reps, load, and session quality without slowing down the workout.</p>
+            <h3>Daily Proof</h3>
+            <p>Home starts with the next useful action: train, recover, maintain the streak, or review progression.</p>
           </article>
           <article class="system-card reveal">
             <span class="card-number">02</span>
-            <h3>Recovery map</h3>
-            <p>Surface muscle readiness and workload patterns so the next session is based on context, not guesswork.</p>
+            <h3>Recovery Map</h3>
+            <p>Muscle readiness and workload patterns guide the next session without hiding the raw training context.</p>
           </article>
           <article class="system-card reveal">
             <span class="card-number">03</span>
             <h3>Iron Ledger</h3>
-            <p>Ranks, levels, XP, badges, and integrity stay tied to verified training history.</p>
-          </article>
-          <article class="system-card reveal">
-            <span class="card-number">04</span>
-            <h3>Home widgets</h3>
-            <p>Streak, readiness, and proof-window widgets make the app useful without opening the full tracker.</p>
-          </article>
-        </div>
-      </section>
-
-      <section class="status-band" id="status" aria-labelledby="status-title">
-        <div class="section-heading">
-          <p class="eyebrow">Project status</p>
-          <h2 id="status-title">Clear about what exists and what is being rebuilt.</h2>
-          <p>
-            The public page is a live product preview. The Kotlin Android source is being prepared before public release.
-          </p>
-        </div>
-        <div class="status-grid">
-          <article class="status-card reveal">
-            <span>Current phase</span>
-            <strong>Kotlin rebuild</strong>
-            <p>Legacy public build cleared. Native Android implementation is being prepared.</p>
-          </article>
-          <article class="status-card reveal">
-            <span>Platform</span>
-            <strong>Android</strong>
-            <p>Designed for a native mobile experience, not a wrapped web app.</p>
-          </article>
-          <article class="status-card reveal">
-            <span>Data model</span>
-            <strong>Local-first</strong>
-            <p>Training history and progression are planned around device-side storage.</p>
-          </article>
-          <article class="status-card reveal">
-            <span>Public release</span>
-            <strong>Not released yet</strong>
-            <p>The interactive page is a preview while the app implementation is cleaned up.</p>
+            <p>Rank, level, XP, badges, and integrity stay tied to verified training history.</p>
           </article>
         </div>
       </section>
 
       <section class="ledger-band" aria-labelledby="ledger-title">
         <div class="ledger-copy">
-          <p class="eyebrow">Progression system</p>
+          <p class="eyebrow">Gamification without noise</p>
           <h2 id="ledger-title">Ranks stay earned.</h2>
           <p>
-            Graphite, Iron, Steel, Titanium, Obsidian, Iridium, Apex, and Aether are designed to reward consistency, logged work, and proof integrity.
+            Graphite, Iron, Steel, Titanium, Obsidian, Iridium, Apex, and Aether remain tied to consistency and proof.
           </p>
           <div class="ledger-stats" aria-label="Ledger preview stats">
             <span><strong>14</strong> day trend</span>
@@ -231,20 +190,13 @@
         </div>
       </section>
 
-      <section class="roadmap-band" id="roadmap" aria-labelledby="roadmap-title">
+      <section class="kotlin-band" id="kotlin" aria-labelledby="kotlin-title">
         <div>
-          <p class="eyebrow">Active rebuild roadmap</p>
-          <h2 id="roadmap-title">What is next.</h2>
+          <p class="eyebrow">Coming next</p>
+          <h2 id="kotlin-title">The Kotlin rebuild is being prepared.</h2>
           <p>
-            The rebuild priority is a usable workout logger before expanding into recovery scoring, ledger progression, and widgets.
+            The public page is a preview of the product direction. The native Android source will arrive when the migration branch is clean and ready to publish.
           </p>
-        </div>
-        <div class="roadmap-list" aria-label="IronLog roadmap">
-          <div><span>Workout logger MVP</span><strong>In progress</strong></div>
-          <div><span>ObjectBox local storage</span><strong>Planned</strong></div>
-          <div><span>Recovery readiness model</span><strong>Prototype</strong></div>
-          <div><span>Iron Ledger ranks</span><strong>Designed</strong></div>
-          <div><span>Public APK / release build</span><strong>Not released</strong></div>
         </div>
         <a class="primary-action compact" href="https://github.com/Yannam-Builds/Ironlog">Watch the repo</a>
       </section>
@@ -252,7 +204,7 @@
 
     <footer class="site-footer">
       <span>IronLog</span>
-      <span>Local-first Android workout tracker</span>
+      <span>Native Android training tracker</span>
     </footer>
 
     <script src="app-demo.js"></script>
