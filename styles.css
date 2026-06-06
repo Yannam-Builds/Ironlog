@@ -868,7 +868,7 @@ input[type="range"] {
   font-size: 20px;
 }
 
-.fox-widget img {
+.fox-widget > img {
   position: absolute;
   left: 50%;
   bottom: -28px;
