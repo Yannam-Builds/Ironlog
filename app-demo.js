@@ -246,6 +246,12 @@ document.querySelectorAll("[data-demo-tab]").forEach((button) => {
   button.addEventListener("click", () => setTab(button.dataset.demoTab));
 });
 
+if (window.location.hash) {
+  window.setTimeout(() => {
+    document.querySelector(window.location.hash)?.scrollIntoView();
+  }, 80);
+}
+
 document.querySelectorAll("[data-quick-action]").forEach((button) => {
   button.addEventListener("click", () => {
     const action = button.dataset.quickAction;
