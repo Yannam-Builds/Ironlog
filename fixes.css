@@ -58,11 +58,15 @@ input:focus-visible {
 
 .brand-glyph {
   position: relative;
-  width: 44px;
-  height: 44px;
-  flex: 0 0 44px;
-  padding: 6px;
-  border-radius: 10px;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  overflow: visible;
 }
 
 .brand-glyph img {
@@ -72,7 +76,7 @@ input:focus-visible {
 .brand-glyph::before {
   content: "";
   position: absolute;
-  inset: 6px;
+  inset: 0;
   background: url("assets/site/ironlog_logo.svg") center / contain no-repeat;
 }
 
@@ -174,9 +178,9 @@ input:focus-visible {
   }
 
   .brand-glyph {
-    width: 42px;
-    height: 42px;
-    flex-basis: 42px;
+    width: 32px;
+    height: 32px;
+    flex-basis: 32px;
   }
 
   .hero-shell {
@@ -297,9 +301,9 @@ input:focus-visible {
   }
 
   .brand-glyph {
-    width: 40px;
-    height: 40px;
-    flex-basis: 40px;
+    width: 30px;
+    height: 30px;
+    flex-basis: 30px;
   }
 
   .screen-top {
