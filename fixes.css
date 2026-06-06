@@ -57,6 +57,7 @@ input:focus-visible {
 }
 
 .brand-glyph {
+  position: relative;
   width: 44px;
   height: 44px;
   flex: 0 0 44px;
@@ -65,10 +66,14 @@ input:focus-visible {
 }
 
 .brand-glyph img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  transform: none;
+  display: none;
+}
+
+.brand-glyph::before {
+  content: "";
+  position: absolute;
+  inset: 6px;
+  background: url("assets/site/ironlog_logo.svg") center / contain no-repeat;
 }
 
 .demo-stage {
