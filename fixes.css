@@ -259,35 +259,6 @@ input:focus-visible {
   grid-column: 1 / -1;
 }
 
-.body-figure::before,
-.body-figure::after {
-  background: var(--accent);
-}
-
-.body-figure::after {
-  box-shadow:
-    -42px -70px 0 -18px rgba(210, 187, 255, 0.68),
-    42px -70px 0 -18px rgba(210, 187, 255, 0.68),
-    -28px 52px 0 -16px rgba(210, 187, 255, 0.76),
-    28px 52px 0 -16px rgba(210, 187, 255, 0.76);
-}
-
-[data-site-theme="teal"] .body-figure::after {
-  box-shadow:
-    -42px -70px 0 -18px rgba(107, 216, 203, 0.68),
-    42px -70px 0 -18px rgba(107, 216, 203, 0.68),
-    -28px 52px 0 -16px rgba(107, 216, 203, 0.76),
-    28px 52px 0 -16px rgba(107, 216, 203, 0.76);
-}
-
-[data-site-theme="graphite"] .body-figure::after {
-  box-shadow:
-    -42px -70px 0 -18px rgba(243, 244, 242, 0.5),
-    42px -70px 0 -18px rgba(243, 244, 242, 0.5),
-    -28px 52px 0 -16px rgba(243, 244, 242, 0.62),
-    28px 52px 0 -16px rgba(243, 244, 242, 0.62);
-}
-
 @media (max-width: 1180px) {
   :root {
     --header-x-padding: 16px;
