@@ -82,8 +82,14 @@ const screens = {
         </div>
       </article>
       <div class="body-map" aria-label="Recovery body map preview">
-        <div class="body-figure" title="Front recovery preview"></div>
-        <div class="body-figure" title="Back recovery preview"></div>
+        <figure class="body-figure">
+          <img src="assets/site/body_map_front.svg" alt="Front body recovery map" />
+          <figcaption>Front</figcaption>
+        </figure>
+        <figure class="body-figure">
+          <img src="assets/site/body_map_back.svg" alt="Back body recovery map" />
+          <figcaption>Back</figcaption>
+        </figure>
       </div>
     `,
   },

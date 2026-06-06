@@ -539,48 +539,55 @@ input[type="range"] {
 .body-map {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 14px;
+  gap: 10px;
   margin-top: 10px;
 }
 
 .body-figure {
-  min-height: 220px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 7px;
+  min-height: 236px;
+  margin: 0;
+  padding: 10px 6px 8px;
   border: 1px solid rgba(218, 226, 253, 0.1);
   border-radius: var(--radius);
-  background:
-    linear-gradient(90deg, transparent 49%, rgba(210, 187, 255, 0.18) 50%, transparent 51%),
-    rgba(11, 19, 38, 0.48);
+  background: rgba(11, 19, 38, 0.48);
   position: relative;
   overflow: hidden;
 }
 
-.body-figure::before,
-.body-figure::after {
+.body-figure::before {
   content: "";
   position: absolute;
+  top: 10px;
+  bottom: 28px;
   left: 50%;
-  transform: translateX(-50%);
-  background: color-mix(in srgb, var(--accent) 74%, #91a4da 26%);
-  opacity: 0.82;
+  width: 1px;
+  background: rgba(210, 187, 255, 0.16);
 }
 
-.body-figure::before {
-  top: 36px;
-  width: 58px;
-  height: 92px;
-  border-radius: 26px 26px 18px 18px;
+.body-figure img {
+  width: 100%;
+  height: 202px;
+  object-fit: contain;
+  object-position: center bottom;
+  filter: drop-shadow(0 14px 16px rgba(0, 0, 0, 0.2));
+  position: relative;
+  z-index: 1;
 }
 
-.body-figure::after {
-  top: 134px;
-  width: 76px;
-  height: 70px;
-  border-radius: 18px 18px 40px 40px;
-  box-shadow:
-    -42px -70px 0 -18px color-mix(in srgb, var(--accent) 68%, transparent),
-    42px -70px 0 -18px color-mix(in srgb, var(--accent) 68%, transparent),
-    -28px 52px 0 -16px color-mix(in srgb, var(--accent) 76%, transparent),
-    28px 52px 0 -16px color-mix(in srgb, var(--accent) 76%, transparent);
+.body-figure figcaption {
+  color: var(--subtext);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  line-height: 1;
+  text-transform: uppercase;
+  position: relative;
+  z-index: 1;
 }
 
 .ledger-preview {
