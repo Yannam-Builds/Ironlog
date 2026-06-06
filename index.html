@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="IronLog is a native Kotlin Android training app for workout logging, recovery, gamification, and Iron Ledger progression."
+    />
+    <meta name="theme-color" content="#0b1326" />
+    <title>IronLog - Native Kotlin Training OS</title>
+    <link rel="icon" href="assets/site/splashscreen_logo.png" type="image/png" />
+    <link rel="apple-touch-icon" href="assets/site/splashscreen_logo.png" />
+    <link rel="preload" href="assets/fonts/lexend_variable.ttf" as="font" type="font/ttf" crossorigin />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="site-header" aria-label="Primary">
+      <a class="brand-mark" href="#top" aria-label="IronLog home">
+        <span class="brand-glyph">
+          <img src="assets/site/splashscreen_logo.png" alt="" />
+        </span>
+        <span>IronLog</span>
+      </a>
+      <nav class="nav-links" aria-label="Sections">
+        <a href="#demo">Demo</a>
+        <a href="#systems">Systems</a>
+        <a href="#widgets">Widgets</a>
+        <a href="#kotlin">Kotlin</a>
+      </nav>
+      <a class="header-cta" href="#demo">Try demo</a>
+    </header>
+
+    <main id="top">
+      <section class="hero-shell" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <p class="eyebrow">Native Kotlin Android rebuild</p>
+          <h1 id="hero-title">IronLog</h1>
+          <p class="hero-lede">
+            A local-first training OS for serious lifting, recovery intelligence, and proof-driven progression.
+          </p>
+          <div class="hero-actions" aria-label="Hero actions">
+            <a class="primary-action" href="#demo">Launch interactive demo</a>
+            <a class="secondary-action" href="https://github.com/Yannam-Builds/Ironlog">GitHub repo</a>
+          </div>
+          <div class="signal-row" aria-label="Product signals">
+            <span>ObjectBox storage</span>
+            <span>Material You surface system</span>
+            <span>Forge Fox widgets</span>
+          </div>
+        </div>
+
+        <section class="demo-stage" id="demo" aria-label="Interactive IronLog demo">
+          <div class="phone-shell" data-demo-shell>
+            <div class="phone-status">
+              <span>9:41</span>
+              <span class="status-dots" aria-hidden="true"></span>
+            </div>
+            <div class="phone-screen" data-phone-screen>
+              <div class="screen-top">
+                <div>
+                  <p class="micro-label" data-screen-kicker>Daily proof</p>
+                  <h2 data-screen-title>Ready to train</h2>
+                </div>
+                <img class="screen-fox" src="assets/site/forgefox_determined.png" alt="Forge Fox mascot" data-screen-fox />
+              </div>
+
+              <div class="metric-panel" data-metric-panel>
+                <span class="metric-value" data-readiness>92</span>
+                <div>
+                  <strong data-metric-title>Fresh</strong>
+                  <span data-metric-copy>Push volume today. Ledger proof is available.</span>
+                </div>
+              </div>
+
+              <div class="demo-content" data-demo-content></div>
+
+              <div class="phone-nav" aria-label="Demo navigation">
+                <button class="is-active" type="button" data-demo-tab="home">Home</button>
+                <button type="button" data-demo-tab="log">Log</button>
+                <button type="button" data-demo-tab="recovery">Recovery</button>
+                <button type="button" data-demo-tab="ledger">Ledger</button>
+              </div>
+            </div>
+          </div>
+
+          <aside class="demo-controls" aria-label="Demo controls">
+            <div>
+              <p class="eyebrow">Live app state</p>
+              <h2>Tap through the core loop.</h2>
+              <p>
+                Complete a set, adjust recovery, inspect Ledger progression, and switch Material You themes.
+              </p>
+            </div>
+            <div class="control-grid">
+              <button class="control-button" type="button" data-quick-action="complete">Complete set</button>
+              <button class="control-button" type="button" data-quick-action="risk">Streak risk</button>
+              <button class="control-button" type="button" data-quick-action="level">Level up</button>
+            </div>
+            <div class="theme-switcher" aria-label="Theme choices">
+              <button class="theme-dot is-active" type="button" data-theme-choice="amethyst" aria-label="Royal amethyst"></button>
+              <button class="theme-dot" type="button" data-theme-choice="teal" aria-label="Midnight teal"></button>
+              <button class="theme-dot" type="button" data-theme-choice="graphite" aria-label="Obsidian silver"></button>
+            </div>
+          </aside>
+        </section>
+      </section>
+
+      <section class="section-band" id="systems" aria-labelledby="systems-title">
+        <div class="section-heading">
+          <p class="eyebrow">Training systems</p>
+          <h2 id="systems-title">Built around the proof loop.</h2>
+          <p>
+            Every surface points back to logged work, readiness, and Iron Ledger progression instead of isolated stats.
+          </p>
+        </div>
+        <div class="system-grid">
+          <article class="system-card reveal">
+            <span class="card-number">01</span>
+            <h3>Daily Proof</h3>
+            <p>Home starts with the next useful action: train, recover, maintain the streak, or review progression.</p>
+          </article>
+          <article class="system-card reveal">
+            <span class="card-number">02</span>
+            <h3>Recovery Map</h3>
+            <p>Muscle readiness and workload patterns guide the next session without hiding the raw training context.</p>
+          </article>
+          <article class="system-card reveal">
+            <span class="card-number">03</span>
+            <h3>Iron Ledger</h3>
+            <p>Rank, level, XP, badges, and integrity are tied to verified training history and restored backup data.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="ledger-band" aria-labelledby="ledger-title">
+        <div class="ledger-copy">
+          <p class="eyebrow">Gamification without noise</p>
+          <h2 id="ledger-title">Ranks stay earned.</h2>
+          <p>
+            Graphite, Iron, Steel, Titanium, Obsidian, Iridium, Apex, and Aether remain tied to consistency and proof.
+          </p>
+          <div class="ledger-stats" aria-label="Ledger preview stats">
+            <span><strong>14</strong> day trend</span>
+            <span><strong>7</strong> signals</span>
+            <span><strong>99</strong> readiness</span>
+          </div>
+        </div>
+        <div class="grade-showcase reveal">
+          <img src="assets/site/iron_grade_iron.png" alt="Iron grade badge" />
+          <img src="assets/site/iron_grade_titanium.png" alt="Titanium grade badge" />
+        </div>
+      </section>
+
+      <section class="widgets-band" id="widgets" aria-labelledby="widgets-title">
+        <div class="section-heading">
+          <p class="eyebrow">Home screen widgets</p>
+          <h2 id="widgets-title">Forge Fox keeps the streak visible.</h2>
+          <p>
+            Mascot-led widgets make the app glanceable: one metric, one mood, one action.
+          </p>
+        </div>
+        <div class="widget-grid">
+          <article class="fox-widget widget-hot reveal">
+            <span class="widget-score">7</span>
+            <p>Keep it going.</p>
+            <img src="assets/site/forgefox_streak.png" alt="Forge Fox streak widget pose" />
+          </article>
+          <article class="fox-widget widget-calm reveal">
+            <span class="widget-score">92</span>
+            <p>Train today.</p>
+            <img src="assets/site/forgefox_dumbbell.png" alt="Forge Fox dumbbell widget pose" />
+          </article>
+          <article class="fox-widget widget-alert reveal">
+            <span class="widget-score">1h</span>
+            <p>Proof window closing.</p>
+            <img src="assets/site/forgefox_watch.png" alt="Forge Fox watch widget pose" />
+          </article>
+        </div>
+      </section>
+
+      <section class="kotlin-band" id="kotlin" aria-labelledby="kotlin-title">
+        <div>
+          <p class="eyebrow">Coming next</p>
+          <h2 id="kotlin-title">The Kotlin version is being prepared.</h2>
+          <p>
+            The old legacy build has been cleared from the public repository. The native Android source will arrive when
+            the migration branch is clean, reviewed, and ready to publish.
+          </p>
+        </div>
+        <a class="primary-action compact" href="https://github.com/Yannam-Builds/Ironlog">Watch the repo</a>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <span>IronLog</span>
+      <span>Native Android training OS</span>
+    </footer>
+
+    <script src="app-demo.js"></script>
+  </body>
+</html>
