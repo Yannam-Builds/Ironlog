@@ -140,6 +140,8 @@ function setTab(tab) {
 }
 
 function setFox(assetKey) {
+  if (!els.screenFox) return;
+
   els.screenFox.src = foxAssets[assetKey] || foxAssets.determined;
   els.screenFox.classList.remove("is-jumping");
   requestAnimationFrame(() => {
@@ -150,7 +152,7 @@ function setFox(assetKey) {
 
 function renderDemo(animate = false) {
   const screen = screens[demoState.tab];
-  if (!screen) return;
+  if (!screen || !els.content) return;
 
   const doRender = () => {
     els.screenKicker.textContent = screen.kicker;
@@ -211,6 +213,35 @@ function bindInlineControls() {
   }
 }
 
+function revealVisibleSections() {
+  document.querySelectorAll(".reveal").forEach((element) => element.classList.add("is-visible"));
+}
+
+function setupRevealObserver() {
+  const revealElements = [...document.querySelectorAll(".reveal")];
+
+  if (!revealElements.length) return;
+
+  if (!("IntersectionObserver" in window)) {
+    revealVisibleSections();
+    return;
+  }
+
+  const revealObserver = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add("is-visible");
+          revealObserver.unobserve(entry.target);
+        }
+      });
+    },
+    { threshold: 0.18 }
+  );
+
+  revealElements.forEach((element) => revealObserver.observe(element));
+}
+
 document.querySelectorAll("[data-demo-tab]").forEach((button) => {
   button.addEventListener("click", () => setTab(button.dataset.demoTab));
 });
@@ -249,18 +280,10 @@ els.themeButtons.forEach((button) => {
   });
 });
 
-const revealObserver = new IntersectionObserver(
-  (entries) => {
-    entries.forEach((entry) => {
-      if (entry.isIntersecting) {
-        entry.target.classList.add("is-visible");
-        revealObserver.unobserve(entry.target);
-      }
-    });
-  },
-  { threshold: 0.18 }
-);
-
-document.querySelectorAll(".reveal").forEach((element) => revealObserver.observe(element));
-
-renderDemo();
+try {
+  renderDemo();
+  setupRevealObserver();
+} catch (error) {
+  revealVisibleSections();
+  console.error("IronLog demo failed to initialize", error);
+}
