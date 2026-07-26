@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- filesDir-based paths -->
+    <files-path
+        name="progress_photos"
+        path="progress_photos/" />
+    <files-path
+        name="exports"
+        path="exports/" />
+    <files-path
+        name="plan_exports"
+        path="plan_exports/" />
+    <!-- cacheDir-based paths -->
+    <cache-path
+        name="cache_images"
+        path="images/" />
+    <cache-path
+        name="cache_exports"
+        path="exports/" />
+    <cache-path
+        name="cache_root"
+        path="." />
+</paths>
+

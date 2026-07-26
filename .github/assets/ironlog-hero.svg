@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="520" viewBox="0 0 1200 520" role="img" aria-labelledby="title desc">
+  <title id="title">IronLog — Train. Recover. Prove it.</title>
+  <desc id="desc">An animated training instrument moves a forge-orange signal through a barbell, recovery ring, and completed ledger mark.</desc>
+  <style>
+    :root { --bg:#050505; --surface:#0d0d0d; --line:#2a2a2a; --text:#fff; --muted:#969696; --forge:#ff4500; --ready:#00c170; --gold:#ffd700; }
+    @media (prefers-color-scheme: light) { :root { --bg:#f6f7f8; --surface:#fff; --line:#d8dce1; --text:#111; --muted:#5b616a; --forge:#d93600; --ready:#087f4d; --gold:#9a6a00; } }
+    .ring { transform-origin: 930px 260px; animation: turn 18s linear infinite; }
+    .counter { transform-origin: 930px 260px; animation: turn-back 12s linear infinite; }
+    .trace { stroke-dasharray: 12 14; animation: trace 3.2s linear infinite; }
+    .rep { transform-origin: 930px 260px; animation: rep 2.6s ease-in-out infinite; }
+    .signal { animation: signal 2.6s ease-in-out infinite; }
+    .ledger { stroke-dasharray: 90; stroke-dashoffset: 90; animation: ledger 2.6s ease-out infinite; }
+    @keyframes turn { to { transform: rotate(360deg); } }
+    @keyframes turn-back { to { transform: rotate(-360deg); } }
+    @keyframes trace { to { stroke-dashoffset: -52; } }
+    @keyframes rep { 0%,18%,100% { transform:translateY(18px); } 46%,68% { transform:translateY(-18px); } }
+    @keyframes signal { 0%,18%,100% { opacity:.3; } 46%,68% { opacity:1; } }
+    @keyframes ledger { 0%,54% { stroke-dashoffset:90; } 78%,100% { stroke-dashoffset:0; } }
+    @media (prefers-reduced-motion: reduce) { * { animation:none !important; } .ledger { stroke-dashoffset:0; } }
+  </style>
+  <rect width="1200" height="520" rx="28" fill="var(--bg)"/>
+  <path d="M54 52H1146M54 468H1146" stroke="var(--line)"/>
+  <path d="M706 52V468" stroke="var(--line)"/>
+  <text x="72" y="112" fill="var(--forge)" font-family="Arial,sans-serif" font-size="15" font-weight="700" letter-spacing="4">LOCAL-FIRST ANDROID TRAINING</text>
+  <text x="68" y="220" fill="var(--text)" font-family="Arial,sans-serif" font-size="82" font-weight="900" letter-spacing="-4">IRONLOG</text>
+  <text x="72" y="280" fill="var(--text)" font-family="Arial,sans-serif" font-size="31" font-weight="700">Train. Recover. Prove it.</text>
+  <text x="72" y="328" fill="var(--muted)" font-family="Arial,sans-serif" font-size="18">Fast logging, honest recovery, durable records.</text>
+  <g transform="translate(72 376)" font-family="Arial,sans-serif" font-size="13" font-weight="700" letter-spacing="1.5">
+    <rect width="126" height="38" rx="19" fill="var(--surface)" stroke="var(--line)"/><text x="63" y="25" fill="var(--text)" text-anchor="middle">LOG</text>
+    <path d="M142 19H174" stroke="var(--forge)" stroke-width="2" class="trace"/>
+    <rect x="190" width="142" height="38" rx="19" fill="var(--surface)" stroke="var(--line)"/><text x="261" y="25" fill="var(--text)" text-anchor="middle">RECOVER</text>
+    <path d="M348 19H380" stroke="var(--ready)" stroke-width="2" class="trace"/>
+    <rect x="396" width="146" height="38" rx="19" fill="var(--surface)" stroke="var(--line)"/><text x="469" y="25" fill="var(--text)" text-anchor="middle">PROGRESS</text>
+  </g>
+  <g>
+    <circle cx="930" cy="260" r="166" fill="var(--surface)" stroke="var(--line)"/>
+    <circle cx="930" cy="260" r="141" fill="none" stroke="var(--line)" stroke-width="2" stroke-dasharray="3 13" class="ring"/>
+    <circle cx="930" cy="260" r="112" fill="none" stroke="var(--ready)" stroke-width="3" stroke-dasharray="176 528" class="counter"/>
+    <path d="M794 260H1066" stroke="var(--text)" stroke-width="9" stroke-linecap="round" class="rep"/>
+    <g class="rep" fill="var(--forge)">
+      <rect x="816" y="222" width="16" height="76" rx="5"/><rect x="838" y="234" width="12" height="52" rx="4"/>
+      <rect x="1028" y="222" width="16" height="76" rx="5"/><rect x="1010" y="234" width="12" height="52" rx="4"/>
+    </g>
+    <circle cx="930" cy="260" r="68" fill="var(--bg)" stroke="var(--line)"/>
+    <g class="signal">
+      <text x="930" y="252" fill="var(--muted)" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="700" letter-spacing="2">SESSION</text>
+      <text x="930" y="284" fill="var(--text)" text-anchor="middle" font-family="Arial,sans-serif" font-size="28" font-weight="900">READY</text>
+    </g>
+    <path d="M1080 387l14 14 29-35" fill="none" stroke="var(--gold)" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" class="ledger"/>
+    <text x="930" y="454" fill="var(--muted)" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="700" letter-spacing="3">THE WORK IS THE RECORD</text>
+  </g>
+</svg>

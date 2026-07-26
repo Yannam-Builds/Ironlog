@@ -1,0 +1,28 @@
+# Gradle
+.gradle/
+build/
+app/build/
+**/build/
+
+# Kotlin compiler
+.kotlin/
+
+# Local config
+local.properties
+
+# IDE
+.idea/
+*.iml
+
+# Keystore (don't commit secrets)
+*.jks
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local agent/design working files
+.agents/
+.impeccable/
+artifacts/
+PROJECT.md

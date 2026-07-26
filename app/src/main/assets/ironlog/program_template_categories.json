@@ -1,0 +1,56 @@
+[
+  {
+    "id": "BEGINNER",
+    "name": "Beginner",
+    "description": "Simple foundations.",
+    "sortOrder": 100
+  },
+  {
+    "id": "STRENGTH",
+    "name": "Strength",
+    "description": "Low-rep progression.",
+    "sortOrder": 200
+  },
+  {
+    "id": "HYPERTROPHY",
+    "name": "Hypertrophy",
+    "description": "High-volume growth.",
+    "sortOrder": 300
+  },
+  {
+    "id": "AESTHETIC",
+    "name": "Aesthetic",
+    "description": "Physique-focused training.",
+    "sortOrder": 400
+  },
+  {
+    "id": "LOWER_BODY_GLUTES",
+    "name": "Lower Body / Glutes",
+    "description": "Leg emphasis.",
+    "sortOrder": 500
+  },
+  {
+    "id": "SPECIALIZATION",
+    "name": "Specialization",
+    "description": "Lagging-muscle focus.",
+    "sortOrder": 600
+  },
+  {
+    "id": "HOME_MINIMAL",
+    "name": "Home / Minimal Equipment",
+    "description": "Home-friendly plans.",
+    "sortOrder": 700
+  },
+  {
+    "id": "BODYWEIGHT_CALISTHENICS",
+    "name": "Bodyweight / Calisthenics",
+    "description": "Bodyweight-first plans.",
+    "sortOrder": 800
+  },
+  {
+    "id": "FAT_LOSS_CONDITIONING",
+    "name": "Fat Loss / Conditioning",
+    "description": "Lifting + conditioning.",
+    "sortOrder": 900
+  }
+]

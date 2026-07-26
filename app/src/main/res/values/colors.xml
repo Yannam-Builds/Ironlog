@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Launcher icon background — near-black brand color -->
+    <color name="iconBackground">#080808</color>
+    <color name="ic_launcher_background">#080808</color>
+</resources>
