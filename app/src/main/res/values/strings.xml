@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">IronLog</string>
+    <string name="badge_widget_description">IronLog grade and streak badge</string>
+    <string name="dashboard_widget_description">IronLog daily dashboard with ledger progress and workout</string>
+    <string name="warroom_widget_description">IronLog training dashboard with stats and checkpoints</string>
+</resources>

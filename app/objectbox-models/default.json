@@ -1,0 +1,1176 @@
+{
+  "_note1": "KEEP THIS FILE! Check it into a version control system (VCS) like git.",
+  "_note2": "ObjectBox manages crucial IDs for your object model. See docs for details.",
+  "_note3": "If you have VCS merge conflicts, you must resolve them according to ObjectBox docs.",
+  "entities": [
+    {
+      "id": "1:6375078547597424337",
+      "lastPropertyId": "5:17079493708331395",
+      "name": "AppSettingEntity",
+      "properties": [
+        {
+          "id": "1:7742540520026219512",
+          "name": "objectBoxId",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:1506185647286150166",
+          "name": "key",
+          "indexId": "1:5049298815426413490",
+          "type": 9,
+          "flags": 34848
+        },
+        {
+          "id": "3:4365713378798394968",
+          "name": "value",
+          "type": 9
+        },
+        {
+          "id": "4:3466618677031964009",
+          "name": "valueType",
+          "type": 9
+        },
+        {
+          "id": "5:17079493708331395",
+          "name": "updatedAt",
+          "type": 6
+        }
+      ],
+      "relations": []
+    },
+    {
+      "id": "2:302515929721921433",
+      "lastPropertyId": "11:1212075822830558583",
+      "name": "BodyMeasurementEntity",
+      "properties": [
+        {
+          "id": "1:1130576062898537770",
+          "name": "objectBoxId",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:7002735551031013151",
+          "name": "uid",
+          "indexId": "2:2161480310796959098",
+          "type": 9,
+          "flags": 2080
+        },
+        {
+          "id": "3:1202162678026618492",
+          "name": "measuredAt",
+          "indexId": "3:7005559575458638302",
+          "type": 6,
+          "flags": 8
+        },
+        {
+          "id": "4:3369436351573316369",
+          "name": "bodyweight",
+          "type": 8
+        },
+        {
+          "id": "5:4047965594104437000",
+          "name": "waist",
+          "type": 8
+        },
+        {
+          "id": "6:2396368223031782704",
+          "name": "chest",
+          "type": 8
+        },
+        {
+          "id": "7:2401092920189964658",
+          "name": "arm",
+          "type": 8
+        },
+        {
+          "id": "8:4001967161472508852",
+          "name": "thigh",
+          "type": 8
+        },
+        {
+          "id": "9:4887603775309062493",
+          "name": "notes",
+          "type": 9
+        },
+        {
+          "id": "10:90164861556050784",
+          "name": "createdAt",
+          "type": 6
+        },
+        {
+          "id": "11:1212075822830558583",
+          "name": "updatedAt",
+          "type": 6
+        }
+      ],
+      "relations": []
+    },
+    {
+      "id": "3:2776827714978953582",
+      "lastPropertyId": "3:7294532530793950561",
+      "name": "DbSmokeTestEntity",
+      "properties": [
+        {
+          "id": "1:3998339153698662456",
+          "name": "objectBoxId",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:2284681944254414824",
+          "name": "label",
+          "type": 9
+        },
+        {
+          "id": "3:7294532530793950561",
+          "name": "createdAt",
+          "type": 6
+        }
+      ],
+      "relations": []
+    },
+    {
+      "id": "4:2611743154182790160",
+      "lastPropertyId": "22:7015189296577759845",
+      "name": "ExerciseEntity",
+      "properties": [
+        {
+          "id": "1:707020838361347369",
+          "name": "objectBoxId",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:8686808791081191654",
+          "name": "uid",
+          "indexId": "4:7132074033215478825",
+          "type": 9,
+          "flags": 2080
+        },
+        {
+          "id": "3:6378664439129185066",
+          "name": "name",
+          "indexId": "5:8365493407371463395",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "4:4725244426715213154",
+          "name": "normalizedName",
+          "indexId": "6:6776885220009030455",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "5:4951136480696017650",
+          "name": "primaryMuscle",
+          "indexId": "7:1970750443334186444",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "6:2998988745134536935",
+          "name": "equipment",
+          "indexId": "8:2948446275981894937",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "7:3430537712107722538",
+          "name": "category",
+          "type": 9
+        },
+        {
+          "id": "8:5251491483762025944",
+          "name": "isCustom",
+          "indexId": "9:461564175794847502",
+          "type": 1,
+          "flags": 8
+        },
+        {
+          "id": "9:4734001117345052729",
+          "name": "source",
+          "type": 9
+        },
+        {
+          "id": "10:7611015891308048663",
+          "name": "notes",
+          "type": 9
+        },
+        {
+          "id": "11:6149860496354979775",
+          "name": "createdAt",
+          "type": 6
+        },
+        {
+          "id": "12:3907671605398701249",
+          "name": "updatedAt",
+          "type": 6
+        },
+        {
+          "id": "13:2465688578270422651",
+          "name": "equipmentDetail",
+          "type": 9
+        },
+        {
+          "id": "14:3502121968086585412",
+          "name": "apparatusJson",
+          "type": 9
+        },
+        {
+          "id": "15:8325048520281849311",
+          "name": "trackingType",
+          "type": 9
+        },
+        {
+          "id": "16:3603078725114757033",
+          "name": "isBodyweight",
+          "type": 1
+        },
+        {
+          "id": "17:6352733492945205005",
+          "name": "requiresExternalLoad",
+          "type": 1
+        },
+        {
+          "id": "18:6057663680977537429",
+          "name": "movementPattern",
+          "type": 9
+        },
+        {
+          "id": "19:85311505857371948",
+          "name": "difficulty",
+          "type": 9
+        },
+        {
+          "id": "20:359137109709133643",
+          "name": "aliasesJson",
+          "type": 9
+        },
+        {
+          "id": "21:6440091724420935180",
+          "name": "sourceTagsJson",
+          "type": 9
+        },
+        {
+          "id": "22:7015189296577759845",
+          "name": "secondaryMusclesJson",
+          "type": 9
+        }
+      ],
+      "relations": []
+    },
+    {
+      "id": "5:8631095935501798316",
+      "lastPropertyId": "9:6465717322369737282",
+      "name": "ExerciseMuscleEntity",
+      "properties": [
+        {
+          "id": "1:8274426856253767721",
+          "name": "objectBoxId",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:2048096962213666555",
+          "name": "uid",
+          "indexId": "10:6990987628250713075",
+          "type": 9,
+          "flags": 34848
+        },
+        {
+          "id": "3:101629237908960009",
+          "name": "exerciseUid",
+          "indexId": "11:3782810450716833369",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "4:7502942524137374737",
+          "name": "muscle",
+          "indexId": "12:7012750980129844156",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "5:8168274513786920235",
+          "name": "role",
+          "type": 9
+        },
+        {
+          "id": "6:419721243428278799",
+          "name": "contributionFraction",
+          "type": 8
+        },
+        {
+          "id": "7:106423071448750581",
+          "name": "createdAt",
+          "type": 6
+        },
+        {
+          "id": "8:4138816793755933269",
+          "name": "updatedAt",
+          "type": 6
+        },
+        {
+          "id": "9:6465717322369737282",
+          "name": "exerciseId",
+          "indexId": "13:1318094819683171599",
+          "type": 11,
+          "flags": 520,
+          "relationTarget": "ExerciseEntity"
+        }
+      ],
+      "relations": []
+    },
+    {
+      "id": "6:6570651244400711970",
+      "lastPropertyId": "9:7726916900838342434",
+      "name": "PlanDayEntity",
+      "properties": [
+        {
+          "id": "1:8428790323057535583",
+          "name": "objectBoxId",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:6713781316084591169",
+          "name": "uid",
+          "indexId": "14:4708930405433038414",
+          "type": 9,
+          "flags": 2080
+        },
+        {
+          "id": "3:5596649429300276786",
+          "name": "planUid",
+          "indexId": "15:1170374646201020618",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "4:4618565955832613535",
+          "name": "name",
+          "type": 9
+        },
+        {
+          "id": "5:2084917564195841564",
+          "name": "color",
+          "type": 9
+        },
+        {
+          "id": "6:8217789439750490373",
+          "name": "orderIndex",
+          "indexId": "16:2934401188564034565",
+          "type": 5,
+          "flags": 8
+        },
+        {
+          "id": "7:598708148343689483",
+          "name": "createdAt",
+          "type": 6
+        },
+        {
+          "id": "8:2705189211186920977",
+          "name": "updatedAt",
+          "type": 6
+        },
+        {
+          "id": "9:7726916900838342434",
+          "name": "planId",
+          "indexId": "17:1172575833296806094",
+          "type": 11,
+          "flags": 520,
+          "relationTarget": "PlanEntity"
+        }
+      ],
+      "relations": []
+    },
+    {
+      "id": "7:2309357112192973168",
+      "lastPropertyId": "8:3400899846978005693",
+      "name": "PlanEntity",
+      "properties": [
+        {
+          "id": "1:5230162920711976621",
+          "name": "objectBoxId",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:230772893546029768",
+          "name": "uid",
+          "indexId": "18:6786941208543501239",
+          "type": 9,
+          "flags": 2080
+        },
+        {
+          "id": "3:959653943456243202",
+          "name": "name",
+          "type": 9
+        },
+        {
+          "id": "4:3571178027715349395",
+          "name": "goal",
+          "type": 9
+        },
+        {
+          "id": "5:1536087741652199157",
+          "name": "description",
+          "type": 9
+        },
+        {
+          "id": "6:513307857960897590",
+          "name": "isActive",
+          "indexId": "19:3989058999613216512",
+          "type": 1,
+          "flags": 8
+        },
+        {
+          "id": "7:5040926330099815887",
+          "name": "createdAt",
+          "type": 6
+        },
+        {
+          "id": "8:3400899846978005693",
+          "name": "updatedAt",
+          "indexId": "20:4423634925057715172",
+          "type": 6,
+          "flags": 8
+        }
+      ],
+      "relations": []
+    },
+    {
+      "id": "8:5642091058245945037",
+      "lastPropertyId": "15:7982953182248628598",
+      "name": "PlanExerciseEntity",
+      "properties": [
+        {
+          "id": "1:5071294513351235515",
+          "name": "objectBoxId",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:3202045242703233318",
+          "name": "uid",
+          "indexId": "21:304590405260949575",
+          "type": 9,
+          "flags": 2080
+        },
+        {
+          "id": "3:8222477767718912412",
+          "name": "planDayUid",
+          "indexId": "22:1845388010696193065",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "4:1002880908358576484",
+          "name": "exerciseUid",
+          "indexId": "23:4431756976114034537",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "5:5357654532262209906",
+          "name": "orderIndex",
+          "indexId": "24:7624470436801051403",
+          "type": 5,
+          "flags": 8
+        },
+        {
+          "id": "6:6984689457390584612",
+          "name": "sets",
+          "type": 5
+        },
+        {
+          "id": "7:6365967288573418627",
+          "name": "reps",
+          "type": 9
+        },
+        {
+          "id": "8:305845508335874805",
+          "name": "restSeconds",
+          "type": 5
+        },
+        {
+          "id": "9:6146596943296265001",
+          "name": "supersetGroup",
+          "type": 9
+        },
+        {
+          "id": "10:1318994208334733938",
+          "name": "isWarmup",
+          "type": 1
+        },
+        {
+          "id": "11:4663791005614629538",
+          "name": "notes",
+          "type": 9
+        },
+        {
+          "id": "12:2039237830902713370",
+          "name": "createdAt",
+          "type": 6
+        },
+        {
+          "id": "13:4454896248020535574",
+          "name": "updatedAt",
+          "type": 6
+        },
+        {
+          "id": "14:760941413455639622",
+          "name": "planDayId",
+          "indexId": "25:87929194468686219",
+          "type": 11,
+          "flags": 520,
+          "relationTarget": "PlanDayEntity"
+        },
+        {
+          "id": "15:7982953182248628598",
+          "name": "exerciseId",
+          "indexId": "26:6009269294358758361",
+          "type": 11,
+          "flags": 520,
+          "relationTarget": "ExerciseEntity"
+        }
+      ],
+      "relations": []
+    },
+    {
+      "id": "9:4539425119869419764",
+      "lastPropertyId": "8:292678578060526509",
+      "name": "ProgressPhotoEntity",
+      "properties": [
+        {
+          "id": "1:5494904852557629796",
+          "name": "objectBoxId",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:175972985349033470",
+          "name": "uid",
+          "indexId": "27:687419790969163709",
+          "type": 9,
+          "flags": 2080
+        },
+        {
+          "id": "3:3717031907422351170",
+          "name": "fileUri",
+          "type": 9
+        },
+        {
+          "id": "4:5688752858919753694",
+          "name": "takenAt",
+          "indexId": "28:1626483308514503498",
+          "type": 6,
+          "flags": 8
+        },
+        {
+          "id": "5:2548186096965648050",
+          "name": "bodyweight",
+          "type": 8
+        },
+        {
+          "id": "6:9146382119571494830",
+          "name": "notes",
+          "type": 9
+        },
+        {
+          "id": "7:4210445366891782807",
+          "name": "createdAt",
+          "type": 6
+        },
+        {
+          "id": "8:292678578060526509",
+          "name": "updatedAt",
+          "type": 6
+        }
+      ],
+      "relations": []
+    },
+    {
+      "id": "10:8896672983816278611",
+      "lastPropertyId": "16:1999541678396910812",
+      "name": "WorkoutEntity",
+      "properties": [
+        {
+          "id": "1:9170482815713570413",
+          "name": "objectBoxId",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:8953567437095390656",
+          "name": "uid",
+          "indexId": "29:1304477636819706961",
+          "type": 9,
+          "flags": 2080
+        },
+        {
+          "id": "3:730259752772027732",
+          "name": "planUid",
+          "indexId": "30:5331943758443322541",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "4:7548509774931883365",
+          "name": "planDayUid",
+          "indexId": "31:970724848359515934",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "5:6826067441618715582",
+          "name": "name",
+          "type": 9
+        },
+        {
+          "id": "6:2882884329284383374",
+          "name": "startedAt",
+          "indexId": "32:3623862218936235916",
+          "type": 6,
+          "flags": 8
+        },
+        {
+          "id": "7:2975769613296758001",
+          "name": "completedAt",
+          "type": 6
+        },
+        {
+          "id": "8:2781354287316497412",
+          "name": "durationSeconds",
+          "type": 5
+        },
+        {
+          "id": "9:987891453695385349",
+          "name": "rating",
+          "type": 8
+        },
+        {
+          "id": "10:4394575519908125655",
+          "name": "notes",
+          "type": 9
+        },
+        {
+          "id": "11:3528795408108132268",
+          "name": "status",
+          "indexId": "33:99442323983545284",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "12:9031113332705334533",
+          "name": "createdAt",
+          "type": 6
+        },
+        {
+          "id": "13:6370380062255031895",
+          "name": "updatedAt",
+          "type": 6
+        },
+        {
+          "id": "14:1794134261713451605",
+          "name": "planId",
+          "indexId": "34:7150481635002111418",
+          "type": 11,
+          "flags": 520,
+          "relationTarget": "PlanEntity"
+        },
+        {
+          "id": "15:2664564091801544337",
+          "name": "planDayId",
+          "indexId": "35:6005115109596506198",
+          "type": 11,
+          "flags": 520,
+          "relationTarget": "PlanDayEntity"
+        },
+        {
+          "id": "16:1999541678396910812",
+          "name": "imported",
+          "type": 1
+        }
+      ],
+      "relations": []
+    },
+    {
+      "id": "11:4741913948774127407",
+      "lastPropertyId": "11:621276958343896092",
+      "name": "WorkoutExerciseEntity",
+      "properties": [
+        {
+          "id": "1:7464516990309689993",
+          "name": "objectBoxId",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:3491438182960818812",
+          "name": "uid",
+          "indexId": "36:421058826231474802",
+          "type": 9,
+          "flags": 2080
+        },
+        {
+          "id": "3:6887240933183881732",
+          "name": "workoutUid",
+          "indexId": "37:3363423963746750088",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "4:7587133369804765978",
+          "name": "exerciseUid",
+          "indexId": "38:7985944065281696022",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "5:8183794936877277097",
+          "name": "orderIndex",
+          "indexId": "39:7269429662349370187",
+          "type": 5,
+          "flags": 8
+        },
+        {
+          "id": "6:2624899628615480306",
+          "name": "supersetGroup",
+          "type": 9
+        },
+        {
+          "id": "7:7306694230480957983",
+          "name": "notes",
+          "type": 9
+        },
+        {
+          "id": "8:3203356354807555103",
+          "name": "createdAt",
+          "type": 6
+        },
+        {
+          "id": "9:5230424591224576166",
+          "name": "updatedAt",
+          "type": 6
+        },
+        {
+          "id": "10:2116151153414940385",
+          "name": "workoutId",
+          "indexId": "40:3944651843168485357",
+          "type": 11,
+          "flags": 520,
+          "relationTarget": "WorkoutEntity"
+        },
+        {
+          "id": "11:621276958343896092",
+          "name": "exerciseId",
+          "indexId": "41:6525490956396544282",
+          "type": 11,
+          "flags": 520,
+          "relationTarget": "ExerciseEntity"
+        }
+      ],
+      "relations": []
+    },
+    {
+      "id": "12:4360833741220823326",
+      "lastPropertyId": "17:5498549554904472762",
+      "name": "WorkoutSetEntity",
+      "properties": [
+        {
+          "id": "1:4626736428916203101",
+          "name": "objectBoxId",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:5346374336183447602",
+          "name": "uid",
+          "indexId": "42:2131922783263931925",
+          "type": 9,
+          "flags": 2080
+        },
+        {
+          "id": "3:5618714557746405252",
+          "name": "workoutExerciseUid",
+          "indexId": "43:1920467783060483230",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "4:7019894755280663324",
+          "name": "setIndex",
+          "indexId": "44:1947623668304261528",
+          "type": 5,
+          "flags": 8
+        },
+        {
+          "id": "5:8578473842864728696",
+          "name": "weight",
+          "type": 8
+        },
+        {
+          "id": "6:8210998745392447185",
+          "name": "reps",
+          "type": 8
+        },
+        {
+          "id": "7:1383989929661473426",
+          "name": "rpe",
+          "type": 8
+        },
+        {
+          "id": "8:8319954115125233190",
+          "name": "rir",
+          "type": 8
+        },
+        {
+          "id": "9:2478622815753987363",
+          "name": "restSeconds",
+          "type": 5
+        },
+        {
+          "id": "10:2393261358309395291",
+          "name": "isWarmup",
+          "indexId": "45:2655474054443381086",
+          "type": 1,
+          "flags": 8
+        },
+        {
+          "id": "11:2789832380678253136",
+          "name": "isDropset",
+          "type": 1
+        },
+        {
+          "id": "12:600594436099191511",
+          "name": "isAmrap",
+          "type": 1
+        },
+        {
+          "id": "13:562173916802785475",
+          "name": "toFailure",
+          "type": 1
+        },
+        {
+          "id": "14:7771050552602058712",
+          "name": "completedAt",
+          "type": 6
+        },
+        {
+          "id": "15:5045205436875128579",
+          "name": "createdAt",
+          "type": 6
+        },
+        {
+          "id": "16:3655167121615541243",
+          "name": "updatedAt",
+          "type": 6
+        },
+        {
+          "id": "17:5498549554904472762",
+          "name": "workoutExerciseId",
+          "indexId": "46:1969267965260840604",
+          "type": 11,
+          "flags": 520,
+          "relationTarget": "WorkoutExerciseEntity"
+        }
+      ],
+      "relations": []
+    },
+    {
+      "id": "13:872393084237455310",
+      "lastPropertyId": "13:8058996708874307559",
+      "name": "GamificationProfileEntity",
+      "properties": [
+        {
+          "id": "1:4420681973009124567",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:5581856577428156502",
+          "name": "offlineUserId",
+          "indexId": "47:7996134452892434897",
+          "type": 9,
+          "flags": 2080
+        },
+        {
+          "id": "3:3439692452007655530",
+          "name": "totalXp",
+          "type": 6
+        },
+        {
+          "id": "4:8269480094590442427",
+          "name": "level",
+          "type": 5
+        },
+        {
+          "id": "5:6560246734718259827",
+          "name": "xpInLevel",
+          "type": 6
+        },
+        {
+          "id": "6:3346618059051021487",
+          "name": "rank",
+          "type": 9
+        },
+        {
+          "id": "7:963411976398449338",
+          "name": "activeTitle",
+          "type": 9
+        },
+        {
+          "id": "8:8288198492989634710",
+          "name": "statsJson",
+          "type": 9
+        },
+        {
+          "id": "9:63936376127024961",
+          "name": "weeklyXp",
+          "type": 5
+        },
+        {
+          "id": "10:8460930991603249917",
+          "name": "weeklyXpResetWeek",
+          "type": 9
+        },
+        {
+          "id": "11:7666440753031599367",
+          "name": "streakWeeks",
+          "type": 5
+        },
+        {
+          "id": "12:6171387056460869585",
+          "name": "makeupCompletionsJson",
+          "type": 9
+        },
+        {
+          "id": "13:8058996708874307559",
+          "name": "unlockedBadges",
+          "type": 9
+        }
+      ],
+      "relations": []
+    },
+    {
+      "id": "15:3303933602031657554",
+      "lastPropertyId": "19:6205034933046485444",
+      "name": "AthleteCalibrationEntity",
+      "properties": [
+        {
+          "id": "1:3827532953057363661",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:5078454025712408421",
+          "name": "offlineUserId",
+          "indexId": "48:2797616992507402666",
+          "type": 9,
+          "flags": 2080
+        },
+        {
+          "id": "3:7536905653511905638",
+          "name": "trainingAgeMonths",
+          "type": 5
+        },
+        {
+          "id": "4:770717731337440208",
+          "name": "firstVerifiedSessionAt",
+          "type": 6
+        },
+        {
+          "id": "5:8006972148803772392",
+          "name": "weightUnit",
+          "type": 9
+        },
+        {
+          "id": "6:2990630982597146260",
+          "name": "bodyweightKg",
+          "type": 8
+        },
+        {
+          "id": "7:936944022977183748",
+          "name": "goalMode",
+          "type": 9
+        },
+        {
+          "id": "8:63072361060061501",
+          "name": "weeklyGoalDays",
+          "type": 5
+        },
+        {
+          "id": "9:1287460578734026252",
+          "name": "importedHistory",
+          "type": 1
+        },
+        {
+          "id": "10:5524069434125522240",
+          "name": "confidence",
+          "type": 8
+        },
+        {
+          "id": "11:6581969964691433784",
+          "name": "updatedAt",
+          "type": 6
+        },
+        {
+          "id": "12:4741176203616204863",
+          "name": "hasPastTraining",
+          "type": 1
+        },
+        {
+          "id": "13:5813023527605646507",
+          "name": "hasGymAccess",
+          "type": 1
+        },
+        {
+          "id": "14:1159119518610722754",
+          "name": "baselinePushups",
+          "type": 5
+        },
+        {
+          "id": "15:7164010130302322246",
+          "name": "baselinePullups",
+          "type": 5
+        },
+        {
+          "id": "16:4733081696383155826",
+          "name": "baselineBenchKg",
+          "type": 5
+        },
+        {
+          "id": "17:2469407931951061224",
+          "name": "baselineLatPulldownKg",
+          "type": 5
+        },
+        {
+          "id": "18:5488276568647307231",
+          "name": "baselineMileRunSeconds",
+          "type": 5
+        },
+        {
+          "id": "19:6205034933046485444",
+          "name": "historicalTrainingDaysPerWeek",
+          "type": 5
+        }
+      ],
+      "relations": []
+    },
+    {
+      "id": "16:5759065875517646429",
+      "lastPropertyId": "12:4155430192547483927",
+      "name": "IronLedgerEventEntity",
+      "properties": [
+        {
+          "id": "1:211267648957640289",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:7891121349817722156",
+          "name": "eventId",
+          "indexId": "49:3320730592556355093",
+          "type": 9,
+          "flags": 2080
+        },
+        {
+          "id": "3:422406808856606259",
+          "name": "sourceType",
+          "indexId": "50:1912751806984890698",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "4:8409752256982048584",
+          "name": "sourceId",
+          "indexId": "51:9104188331982479815",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "5:4871368561614387169",
+          "name": "eventKind",
+          "indexId": "52:4130863557055800333",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "6:1782006764642706504",
+          "name": "occurredAt",
+          "indexId": "53:3101713585028288796",
+          "type": 6,
+          "flags": 8
+        },
+        {
+          "id": "7:3581981213273908444",
+          "name": "xpDelta",
+          "type": 5
+        },
+        {
+          "id": "8:4343578316348105",
+          "name": "statDeltasJson",
+          "type": 9
+        },
+        {
+          "id": "9:3755353096104464687",
+          "name": "trustScore",
+          "type": 8
+        },
+        {
+          "id": "10:4028109913350867797",
+          "name": "fingerprint",
+          "indexId": "54:996889235122584713",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "11:759123915799413798",
+          "name": "metadataJson",
+          "type": 9
+        },
+        {
+          "id": "12:4155430192547483927",
+          "name": "invalidated",
+          "indexId": "55:7679737323583470378",
+          "type": 1,
+          "flags": 8
+        }
+      ],
+      "relations": []
+    }
+  ],
+  "lastEntityId": "16:5759065875517646429",
+  "lastIndexId": "55:7679737323583470378",
+  "lastRelationId": "0:0",
+  "lastSequenceId": "0:0",
+  "modelVersion": 5,
+  "modelVersionParserMinimum": 5,
+  "retiredEntityUids": [
+    885356565461564884
+  ],
+  "retiredIndexUids": [],
+  "retiredPropertyUids": [
+    8743783797112242118,
+    6362880859759003247,
+    6216156919604802650,
+    1447604901136741389,
+    6825076196334837396,
+    1279230704031176310,
+    7102108765480323005,
+    4485041613321335939,
+    1192629098759155910,
+    7199381384699893764,
+    353580902206095814
+  ],
+  "retiredRelationUids": [],
+  "version": 1
+}

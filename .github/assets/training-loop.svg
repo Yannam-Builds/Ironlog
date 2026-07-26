@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="340" viewBox="0 0 1200 340" role="img" aria-labelledby="title desc">
+  <title id="title">The IronLog training loop</title>
+  <desc id="desc">A signal moves from workout logging to recovery, the Iron Ledger, and the next session.</desc>
+  <style>
+    :root { --bg:#050505; --surface:#0d0d0d; --line:#333; --text:#fff; --muted:#999; --forge:#ff4500; --ready:#00c170; --gold:#ffd700; }
+    @media (prefers-color-scheme: light) { :root { --bg:#f6f7f8; --surface:#fff; --line:#cfd4da; --text:#111; --muted:#5b616a; --forge:#d93600; --ready:#087f4d; --gold:#9a6a00; } }
+    .path { stroke-dasharray:10 12; animation:flow 2.8s linear infinite; }
+    .beacon { animation:travel 8s ease-in-out infinite; }
+    .pulse { transform-box:fill-box; transform-origin:center; animation:pulse 2s ease-in-out infinite; }
+    @keyframes flow { to { stroke-dashoffset:-44; } }
+    @keyframes travel { 0%,8%{transform:translateX(0)} 29%,38%{transform:translateX(264px)} 58%,67%{transform:translateX(528px)} 88%,100%{transform:translateX(792px)} }
+    @keyframes pulse { 0%,100%{opacity:.35;transform:scale(.9)} 50%{opacity:1;transform:scale(1.1)} }
+    @media (prefers-reduced-motion: reduce) { * { animation:none !important; } }
+  </style>
+  <rect width="1200" height="340" rx="24" fill="var(--bg)"/>
+  <text x="60" y="62" fill="var(--text)" font-family="Arial,sans-serif" font-size="24" font-weight="800">One continuous training record</text>
+  <text x="60" y="91" fill="var(--muted)" font-family="Arial,sans-serif" font-size="15">The next decision is informed by the work already done.</text>
+  <path d="M178 190H970" fill="none" stroke="var(--line)" stroke-width="2" class="path"/>
+  <circle cx="178" cy="190" r="8" fill="var(--forge)" class="beacon"/>
+  <g font-family="Arial,sans-serif" text-anchor="middle">
+    <g transform="translate(178 190)"><circle r="54" fill="var(--surface)" stroke="var(--forge)" stroke-width="2"/><path d="M-19-6h38M-14-15v30M14-15v30" stroke="var(--forge)" stroke-width="5" stroke-linecap="round"/><text y="86" fill="var(--text)" font-size="15" font-weight="800">LOG THE SET</text><text y="108" fill="var(--muted)" font-size="12">load · reps · effort</text></g>
+    <g transform="translate(442 190)"><circle r="54" fill="var(--surface)" stroke="var(--ready)" stroke-width="2"/><path d="M0-24a30 30 0 1 1-25 14" fill="none" stroke="var(--ready)" stroke-width="6" stroke-linecap="round"/><path d="M-30-19l5 9 10-4" fill="none" stroke="var(--ready)" stroke-width="5"/><text y="86" fill="var(--text)" font-size="15" font-weight="800">READ RECOVERY</text><text y="108" fill="var(--muted)" font-size="12">muscles · sleep · readiness</text></g>
+    <g transform="translate(706 190)"><circle r="54" fill="var(--surface)" stroke="var(--gold)" stroke-width="2"/><path d="M-20-24h40v48h-40zM-10-10h20M-10 1h20M-10 12h13" fill="none" stroke="var(--gold)" stroke-width="4" stroke-linecap="round"/><circle cx="24" cy="-28" r="5" fill="var(--gold)" class="pulse"/><text y="86" fill="var(--text)" font-size="15" font-weight="800">EARN THE LEDGER</text><text y="108" fill="var(--muted)" font-size="12">streaks · PRs · milestones</text></g>
+    <g transform="translate(970 190)"><circle r="54" fill="var(--surface)" stroke="var(--text)" stroke-width="2"/><path d="M-22 0h38M5-12l12 12L5 12" fill="none" stroke="var(--text)" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><text y="86" fill="var(--text)" font-size="15" font-weight="800">GO AGAIN</text><text y="108" fill="var(--muted)" font-size="12">plan · adjust · progress</text></g>
+  </g>
+</svg>
