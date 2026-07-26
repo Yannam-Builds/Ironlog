@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="app/src/main/res/drawable-xxxhdpi/splashscreen_logo.png" width="112" alt="IronLog app logo">
+
 ![IronLog — Train. Recover. Prove it.](.github/assets/ironlog-hero.svg)
 
 [![Android CI](https://github.com/Yannam-Builds/Ironlog/actions/workflows/android.yml/badge.svg)](https://github.com/Yannam-Builds/Ironlog/actions/workflows/android.yml)
