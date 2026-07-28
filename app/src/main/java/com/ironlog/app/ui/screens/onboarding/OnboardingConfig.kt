@@ -4,14 +4,19 @@ import androidx.compose.ui.graphics.Color
 
 object OnboardingConfig {
 
-    val accentBlue = Color(0xFFC7B6FF)
-    val accentGold = Color(0xFFD8C6A1)
-    val bgDark = Color(0xFF111018)
-    val surfaceDark = Color(0xFF1D1B24)
-    val cardBorder = Color(0xFF393441)
-    val textMuted = Color(0xFFB9B0C8)
-    val grantedColor = Color(0xFF26A69A)
-    val deniedColor = Color(0xFFEF5350)
+    // Onboarding shares the default IronLog product identity instead of
+    // introducing a disconnected purple mini-theme.
+    val accentBlue = Color(0xFFFF6A2A)
+    val accentGold = Color(0xFFFFC96B)
+    val bgDark = Color(0xFF100F0E)
+    val surfaceDark = Color(0xFF1D1A18)
+    val surfaceRaised = Color(0xFF27221F)
+    val cardBorder = Color(0xFF3B342F)
+    val textPrimary = Color(0xFFF6EFEA)
+    val textMuted = Color(0xFFC4B7AE)
+    val textFaint = Color(0xFF887A71)
+    val grantedColor = Color(0xFF71D6A4)
+    val deniedColor = Color(0xFFFF8A7A)
 
     enum class AiProvider(val key: String, val displayName: String, val baseUrl: String, val apiFormat: String) {
         GEMINI("gemini", "Google Gemini", "https://generativelanguage.googleapis.com/v1beta/openai", "openai"),

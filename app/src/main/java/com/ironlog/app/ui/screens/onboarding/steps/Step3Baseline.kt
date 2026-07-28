@@ -12,18 +12,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -37,7 +33,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ironlog.app.ui.screens.onboarding.GlowButton
+import com.ironlog.app.ui.screens.onboarding.InfiniteNumberWheelSheet
 import com.ironlog.app.ui.screens.onboarding.OnboardingConfig
+import com.ironlog.app.ui.screens.onboarding.OnboardingPageHeader
+import com.ironlog.app.ui.screens.onboarding.SetupReward
 import java.time.Year
 import kotlin.math.roundToInt
 
@@ -49,7 +48,6 @@ private data class PickerSpec(
     val onSelect: (Int) -> Unit,
 )
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun Step3Baseline(
     yearOfBirth: Int,
@@ -79,7 +77,7 @@ fun Step3Baseline(
     onNext: () -> Unit,
 ) {
     var picker by remember { mutableStateOf<PickerSpec?>(null) }
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var showMovementChecks by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -89,28 +87,18 @@ fun Step3Baseline(
             .padding(start = 24.dp, top = 32.dp, end = 24.dp, bottom = 64.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text(
-            "Set your baseline",
-            color = OnboardingConfig.accentBlue,
-            fontSize = 28.sp,
-            fontWeight = FontWeight.ExtraBold,
-            textAlign = TextAlign.Center,
+        OnboardingPageHeader(
+            step = "Baseline",
+            title = "Give IronLog a starting signal.",
+            body = "These values personalize recovery, load suggestions and your provisional ledger. Verified workouts always outrank self-reported numbers.",
         )
-        Spacer(Modifier.height(8.dp))
-        Text(
-            "This only sets your starting point. Verified workouts decide real progression.",
-            color = OnboardingConfig.textMuted,
-            fontSize = 14.sp,
-            lineHeight = 20.sp,
-            textAlign = TextAlign.Center,
-        )
-        Spacer(Modifier.height(48.dp))
+        Spacer(Modifier.height(26.dp))
 
         BaselineCard("Profile") {
             PickerField("Birth year", "$yearOfBirth · ${ageFromBirthYear(yearOfBirth)} yrs") {
                 picker = PickerSpec(
                     title = "Birth year",
-                    values = (1940..(Year.now().value - 13)).toList().reversed(),
+                    values = ((Year.now().value - 90)..(Year.now().value - 13)).toList().reversed(),
                     selected = yearOfBirth,
                     labelFor = { it.toString() },
                     onSelect = onYearOfBirthChange,
@@ -119,7 +107,7 @@ fun Step3Baseline(
             PickerField("Body weight", "$bodyweightKg kg") {
                 picker = PickerSpec(
                     title = "Body weight",
-                    values = (35..180).toList(),
+                    values = (30..250).toList(),
                     selected = bodyweightKg,
                     labelFor = { "$it kg" },
                     onSelect = onBodyweightChange,
@@ -148,86 +136,67 @@ fun Step3Baseline(
         ToggleRow("Logged workouts before?", hasPastTraining, onPastTrainingChange)
         ToggleRow("Gym equipment access?", hasGymAccess, onGymAccessChange)
 
-        BaselineCard("Movement checks") {
-            PickerField("Pushups", "$pushups reps") {
-                picker = PickerSpec("Pushups", (0..120).toList(), pushups, { "$it reps" }, onPushupsChange)
-            }
-            PickerField("Pullups", "$pullups reps") {
-                picker = PickerSpec("Pullups", (0..40).toList(), pullups, { "$it reps" }, onPullupsChange)
-            }
-            PickerField("1-mile run", formatMileRun(mileRunSeconds)) {
-                picker = PickerSpec(
-                    title = "1-mile run",
-                    values = listOf(0) + (240..900 step 15).toList(),
-                    selected = mileRunSeconds,
-                    labelFor = ::formatMileRun,
-                    onSelect = onMileRunChange,
+        BaselineCard(if (showMovementChecks) "Optional movement checks" else "Improve your starting estimate") {
+            if (!showMovementChecks) {
+                Text(
+                    "Add a few recent best efforts for a more accurate starting badge. You can skip this and let verified workouts calibrate you.",
+                    color = OnboardingConfig.textMuted,
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp,
                 )
-            }
-            if (hasGymAccess) {
-                PickerField("Bench press", "$benchKg kg") {
-                    picker = PickerSpec("Bench press", (0..220 step 5).toList(), benchKg, { "$it kg" }, onBenchChange)
+                Spacer(Modifier.height(12.dp))
+                OutlinedButton(
+                    onClick = { showMovementChecks = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    border = BorderStroke(1.dp, OnboardingConfig.accentBlue.copy(alpha = 0.45f)),
+                    shape = RoundedCornerShape(16.dp),
+                ) {
+                    Text("Add movement checks", color = OnboardingConfig.accentBlue, fontWeight = FontWeight.Bold)
                 }
-                PickerField("Lat pulldown", "$latPulldownKg kg") {
-                    picker = PickerSpec("Lat pulldown", (0..220 step 5).toList(), latPulldownKg, { "$it kg" }, onLatPulldownChange)
+            } else {
+                PickerField("Pushups", "$pushups reps") {
+                    picker = PickerSpec("Pushups", (0..120).toList(), pushups, { "$it reps" }, onPushupsChange)
+                }
+                PickerField("Pullups", "$pullups reps") {
+                    picker = PickerSpec("Pullups", (0..40).toList(), pullups, { "$it reps" }, onPullupsChange)
+                }
+                PickerField("1-mile run", formatMileRun(mileRunSeconds)) {
+                    picker = PickerSpec(
+                        title = "1-mile run",
+                        values = listOf(0) + (240..900 step 15).toList(),
+                        selected = mileRunSeconds,
+                        labelFor = ::formatMileRun,
+                        onSelect = onMileRunChange,
+                    )
+                }
+                if (hasGymAccess) {
+                    PickerField("Bench press", "$benchKg kg") {
+                        picker = PickerSpec("Bench press", (0..220 step 5).toList(), benchKg, { "$it kg" }, onBenchChange)
+                    }
+                    PickerField("Lat pulldown", "$latPulldownKg kg") {
+                        picker = PickerSpec("Lat pulldown", (0..220 step 5).toList(), latPulldownKg, { "$it kg" }, onLatPulldownChange)
+                    }
                 }
             }
         }
 
         BaselineResultCard(grade = seededGrade, stats = seededStats)
 
-        Spacer(Modifier.height(24.dp))
+        SetupReward("Your badge remains provisional until training evidence confirms it", Modifier.fillMaxWidth())
+        Spacer(Modifier.height(14.dp))
         GlowButton(text = "Save baseline", onClick = onNext)
         Spacer(Modifier.height(24.dp))
     }
 
     picker?.let { active ->
-        ModalBottomSheet(
-            onDismissRequest = { picker = null },
-            sheetState = sheetState,
-            containerColor = OnboardingConfig.surfaceDark,
-            contentColor = Color.White,
-        ) {
-            Text(
-                active.title,
-                color = Color.White,
-                fontSize = 22.sp,
-                fontWeight = FontWeight.ExtraBold,
-                modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
-            )
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(360.dp)
-                    .padding(horizontal = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                items(active.values) { value ->
-                    val selected = value == active.selected
-                    Surface(
-                        color = if (selected) OnboardingConfig.accentBlue.copy(alpha = 0.18f) else OnboardingConfig.bgDark.copy(alpha = 0.55f),
-                        shape = RoundedCornerShape(18.dp),
-                        border = BorderStroke(1.dp, if (selected) OnboardingConfig.accentBlue else OnboardingConfig.cardBorder),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                active.onSelect(value)
-                                picker = null
-                            },
-                    ) {
-                        Text(
-                            active.labelFor(value),
-                            color = if (selected) OnboardingConfig.accentBlue else Color.White,
-                            fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.SemiBold,
-                            fontSize = if (selected) 22.sp else 18.sp,
-                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
-                            textAlign = TextAlign.Center,
-                        )
-                    }
-                }
-            }
-            Spacer(Modifier.height(24.dp))
-        }
+        InfiniteNumberWheelSheet(
+            title = active.title,
+            values = active.values,
+            selected = active.selected,
+            labelFor = active.labelFor,
+            onConfirm = active.onSelect,
+            onDismiss = { picker = null },
+        )
     }
 }
 
@@ -237,11 +206,10 @@ private fun BaselineCard(title: String, content: @Composable () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .padding(bottom = 14.dp)
-            .background(OnboardingConfig.surfaceDark, RoundedCornerShape(24.dp))
-            .border(1.dp, OnboardingConfig.cardBorder, RoundedCornerShape(24.dp))
+            .background(OnboardingConfig.surfaceDark, RoundedCornerShape(22.dp))
             .padding(18.dp),
     ) {
-        Text(title, color = OnboardingConfig.textMuted, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+        Text(title, color = OnboardingConfig.textPrimary, fontSize = 15.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(12.dp))
         content()
     }
@@ -253,14 +221,15 @@ private fun PickerField(label: String, value: String, onClick: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 6.dp)
-            .background(OnboardingConfig.bgDark.copy(alpha = 0.45f), RoundedCornerShape(18.dp))
-            .border(1.dp, OnboardingConfig.cardBorder, RoundedCornerShape(18.dp))
+            .background(OnboardingConfig.bgDark.copy(alpha = 0.72f), RoundedCornerShape(16.dp))
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 15.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(label, color = OnboardingConfig.textMuted, fontSize = 14.sp, modifier = Modifier.weight(1f))
         Text(value, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, textAlign = TextAlign.End)
+        Spacer(Modifier.width(8.dp))
+        Text("›", color = OnboardingConfig.accentBlue, fontSize = 22.sp, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -299,7 +268,7 @@ private fun ToggleChip(label: String, selected: Boolean, onClick: () -> Unit) {
 private fun BaselineResultCard(grade: String, stats: Map<String, Int>) {
     BaselineCard("Starting estimate") {
         Text(
-            grade,
+            "Provisional $grade",
             color = OnboardingConfig.accentBlue,
             fontSize = 24.sp,
             fontWeight = FontWeight.Black,

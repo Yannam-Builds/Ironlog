@@ -2,14 +2,13 @@ package com.ironlog.app.ui.screens.onboarding.steps
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -20,7 +19,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ironlog.app.R
 import com.ironlog.app.ui.screens.onboarding.GlowButton
+import com.ironlog.app.ui.screens.onboarding.OnboardingPageHeader
 import com.ironlog.app.ui.screens.onboarding.OnboardingConfig
+import com.ironlog.app.ui.screens.onboarding.SetupReward
 
 @Composable
 fun Step2Registration(
@@ -28,38 +29,24 @@ fun Step2Registration(
     onUserNameChange: (String) -> Unit,
     onNext: () -> Unit,
 ) {
-    val focusRequester = remember { FocusRequester() }
-    LaunchedEffect(Unit) { focusRequester.requestFocus() }
-
-    Box(
+    Column(
         modifier = Modifier
             .fillMaxSize()
             .background(OnboardingConfig.bgDark)
-            .padding(horizontal = 32.dp),
+            .imePadding()
+            .padding(horizontal = 24.dp, vertical = 24.dp),
+        verticalArrangement = Arrangement.SpaceBetween,
     ) {
         Column(
-            modifier            = Modifier.align(Alignment.Center),
-            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.fillMaxWidth(),
         ) {
-            Text(
-                text          = stringResource(R.string.onb_reg_header),
-                color         = OnboardingConfig.accentBlue,
-                fontSize      = 22.sp,
-                fontWeight    = FontWeight.Black,
-                letterSpacing = 4.sp,
-                textAlign     = TextAlign.Center,
+            OnboardingPageHeader(
+                step = "Identity",
+                title = "What should your ledger call you?",
+                body = "This stays on your device and appears on your training summaries. A nickname works perfectly.",
             )
 
-            Spacer(Modifier.height(8.dp))
-
-            Text(
-                text      = stringResource(R.string.onb_reg_subtext),
-                color     = OnboardingConfig.textMuted,
-                fontSize  = 14.sp,
-                textAlign = TextAlign.Center,
-            )
-
-            Spacer(Modifier.height(40.dp))
+            Spacer(Modifier.height(36.dp))
 
             OutlinedTextField(
                 value         = userName,
@@ -79,14 +66,21 @@ fun Step2Registration(
                 ),
                 keyboardActions = KeyboardActions(onDone = { if (userName.isNotBlank()) onNext() }),
                 modifier        = Modifier
-                    .fillMaxWidth()
-                    .focusRequester(focusRequester),
+                    .fillMaxWidth(),
+                shape = RoundedCornerShape(18.dp),
             )
+            Spacer(Modifier.height(14.dp))
+            Text("You can change this later in Settings.", color = OnboardingConfig.textFaint, fontSize = 12.sp)
+        }
 
-            Spacer(Modifier.height(40.dp))
-
+        Column {
+            SetupReward(
+                text = "Profile setup unlocks your personal Iron Ledger",
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.height(14.dp))
             GlowButton(
-                text    = stringResource(R.string.onb_reg_cta),
+                text    = if (userName.isBlank()) "Enter a name to continue" else "Continue as ${userName.trim()}",
                 onClick = onNext,
                 enabled = userName.isNotBlank(),
             )

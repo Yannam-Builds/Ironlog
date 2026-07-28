@@ -3,9 +3,7 @@ package com.ironlog.app.ui.screens.onboarding.steps
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -30,6 +28,8 @@ import com.ironlog.app.data.seed.PROGRAM_TEMPLATES
 import com.ironlog.app.data.seed.ProgramTemplate
 import com.ironlog.app.ui.screens.onboarding.GlowButton
 import com.ironlog.app.ui.screens.onboarding.OnboardingConfig
+import com.ironlog.app.ui.screens.onboarding.OnboardingPageHeader
+import com.ironlog.app.ui.screens.onboarding.SetupReward
 
 @Composable
 fun Step9ProgramSetup(
@@ -37,7 +37,7 @@ fun Step9ProgramSetup(
     onApplyTemplate: (ProgramTemplate) -> Unit,
 ) {
     var selected by remember { mutableStateOf<ProgramTemplate?>(null) }
-    val templates = remember { PROGRAM_TEMPLATES.take(8) }
+    val templates = remember { PROGRAM_TEMPLATES.take(4) }
 
     Column(
         modifier = Modifier
@@ -45,47 +45,48 @@ fun Step9ProgramSetup(
             .background(OnboardingConfig.bgDark)
             .padding(start = 24.dp, top = 20.dp, end = 24.dp, bottom = 64.dp)
             .verticalScroll(rememberScrollState()),
-        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text(
-            text = "Pick a starter plan",
-            color = OnboardingConfig.accentBlue,
-            fontSize = 34.sp,
-            fontWeight = FontWeight.ExtraBold,
-            letterSpacing = 0.sp,
+        OnboardingPageHeader(
+            step = "First plan",
+            title = "Start with structure, not a blank page.",
+            body = "Pick a proven template or enter IronLog without one. Plans stay fully editable and can be replaced at any time.",
         )
-        Spacer(Modifier.height(8.dp))
-        Text(
-            text = "Select one preloaded plan now, or skip and choose later in Plans.",
-            color = OnboardingConfig.textMuted,
-            fontSize = 15.sp,
-        )
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(22.dp))
 
         templates.forEach { plan ->
             val isSelected = selected?.id == plan.id
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 6.dp)
+                    .padding(vertical = 5.dp)
                     .border(
-                        width = 1.5.dp,
+                        width = if (isSelected) 1.5.dp else 1.dp,
                         color = if (isSelected) OnboardingConfig.accentBlue else OnboardingConfig.cardBorder,
-                        shape = RoundedCornerShape(16.dp),
+                        shape = RoundedCornerShape(20.dp),
                     )
                     .background(
                         color = if (isSelected) OnboardingConfig.surfaceDark.copy(alpha = 0.95f) else OnboardingConfig.surfaceDark,
-                        shape = RoundedCornerShape(16.dp),
+                        shape = RoundedCornerShape(20.dp),
                     )
                     .clickable { selected = plan }
-                    .padding(14.dp),
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
             ) {
+                if (isSelected) {
+                    Text(
+                        text = "SELECTED",
+                        color = OnboardingConfig.accentBlue,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Black,
+                        letterSpacing = 1.sp,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                }
                 Text(
                     text = plan.name,
-                    color = OnboardingConfig.accentBlue,
-                    fontSize = 18.sp,
+                    color = if (isSelected) OnboardingConfig.accentBlue else OnboardingConfig.textPrimary,
+                    fontSize = 17.sp,
                     fontWeight = FontWeight.Bold,
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
                 Spacer(Modifier.height(4.dp))
@@ -97,14 +98,19 @@ fun Step9ProgramSetup(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    PlanChip("${plan.days.size} days/week")
-                    PlanChip(plan.category)
-                    PlanChip("${plan.durationWeeks} weeks")
-                }
+                Text(
+                    text = "${plan.days.size} days/week · ${plan.category.uppercase()} · ${plan.durationWeeks} weeks",
+                    color = OnboardingConfig.textFaint,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
         }
 
+        Spacer(Modifier.height(16.dp))
+        SetupReward("Completed plan sessions feed recovery, stats, streaks, badges and widgets", Modifier.fillMaxWidth())
         Spacer(Modifier.height(14.dp))
         GlowButton(
             text = if (selected != null) "Use selected plan" else "Skip for now",
@@ -121,17 +127,4 @@ fun Step9ProgramSetup(
         )
         Spacer(Modifier.height(20.dp))
     }
-}
-
-@Composable
-private fun PlanChip(text: String) {
-    Text(
-        text = text,
-        color = OnboardingConfig.textMuted,
-        fontSize = 11.sp,
-        fontWeight = FontWeight.SemiBold,
-        modifier = Modifier
-            .border(1.dp, OnboardingConfig.cardBorder, RoundedCornerShape(999.dp))
-            .padding(horizontal = 10.dp, vertical = 4.dp),
-    )
 }

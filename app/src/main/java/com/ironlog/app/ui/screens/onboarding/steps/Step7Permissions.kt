@@ -48,6 +48,8 @@ import com.ironlog.app.R
 import com.ironlog.app.data.health.HealthConnectRepository
 import com.ironlog.app.ui.screens.onboarding.GlowButton
 import com.ironlog.app.ui.screens.onboarding.OnboardingConfig
+import com.ironlog.app.ui.screens.onboarding.OnboardingPageHeader
+import com.ironlog.app.ui.screens.onboarding.SetupReward
 
 @Composable
 fun Step7Permissions(
@@ -128,22 +130,12 @@ fun Step7Permissions(
             .padding(start = 24.dp, top = 32.dp, end = 24.dp, bottom = 64.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text(
-            text = stringResource(R.string.onb_perm_header),
-            color = OnboardingConfig.accentBlue,
-            fontSize = 26.sp,
-            fontWeight = FontWeight.Black,
-            textAlign = TextAlign.Center,
+        OnboardingPageHeader(
+            step = "Optional connections",
+            title = "Enable benefits when you need them.",
+            body = "Nothing here blocks training. IronLog asks the system only after you tap Allow, and every connection can be changed later.",
         )
-        Spacer(Modifier.height(8.dp))
-        Text(
-            text = stringResource(R.string.onb_perm_subtext),
-            color = OnboardingConfig.textMuted,
-            fontSize = 14.sp,
-            lineHeight = 20.sp,
-            textAlign = TextAlign.Center,
-        )
-        Spacer(Modifier.height(28.dp))
+        Spacer(Modifier.height(22.dp))
 
         PermissionCard(
             title = stringResource(R.string.onb_perm_camera_title),
@@ -188,7 +180,9 @@ fun Step7Permissions(
             },
         )
 
-        Spacer(Modifier.height(28.dp))
+        Spacer(Modifier.height(20.dp))
+        SetupReward("Health data improves recovery estimates; notifications protect planned-session streaks", Modifier.fillMaxWidth())
+        Spacer(Modifier.height(14.dp))
         GlowButton(text = stringResource(R.string.onb_perm_cta), onClick = onNext)
     }
 }
@@ -211,7 +205,7 @@ private fun PermissionCard(
             .fillMaxWidth()
             .clip(RoundedCornerShape(22.dp))
             .background(OnboardingConfig.surfaceDark)
-            .border(1.5.dp, borderColor, RoundedCornerShape(22.dp))
+            .border(if (granted) 1.5.dp else 1.dp, borderColor, RoundedCornerShape(22.dp))
             .padding(18.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

@@ -2,6 +2,7 @@ package com.ironlog.app.ui.screens.onboarding.steps
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -11,6 +12,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -21,7 +23,7 @@ import com.ironlog.app.ui.screens.onboarding.GlowButton
 import com.ironlog.app.ui.screens.onboarding.OnboardingConfig
 import com.ironlog.app.ui.screens.onboarding.ParticleField
 import com.ironlog.app.ui.screens.onboarding.SetupBadge
-import kotlin.math.max
+import com.ironlog.app.ui.screens.onboarding.SetupReward
 import kotlinx.coroutines.delay
 
 @Composable
@@ -37,24 +39,11 @@ fun Step8Complete(
     qualifiedBadge: String,
     onStartTraining: () -> Unit,
 ) {
-    var showContent by remember { mutableStateOf(true) }
     var revealDone by remember { mutableStateOf(false) }
-    var slotBadge by remember { mutableStateOf("Uncalibrated") }
-    val badgeOrder = remember {
-        listOf("Uncalibrated", "Graphite", "Iron", "Steel", "Titanium", "Obsidian", "Iridium", "Aether", "Apex")
-    }
-    LaunchedEffect(Unit) {
-        // Content is visible immediately; the qualification badge still animates.
-    }
-    LaunchedEffect(showContent, qualifiedBadge) {
-        if (!showContent) return@LaunchedEffect
-        val targetIndex = badgeOrder.indexOf(qualifiedBadge).coerceAtLeast(0)
-        val totalTicks = max(16, targetIndex + 12)
-        for (i in 0 until totalTicks) {
-            slotBadge = badgeOrder[i % badgeOrder.size]
-            delay((55L + (i * 5L)).coerceAtMost(170L))
-        }
+    var slotBadge by remember { mutableStateOf(qualifiedBadge) }
+    LaunchedEffect(qualifiedBadge) {
         slotBadge = qualifiedBadge
+        delay(650L)
         revealDone = true
     }
 
@@ -65,7 +54,6 @@ fun Step8Complete(
     ) {
         ParticleField()
 
-        if (showContent) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -74,6 +62,12 @@ fun Step8Complete(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
             ) {
+                Image(
+                    painter = painterResource(R.drawable.forgefox_25_trophy_medal),
+                    contentDescription = "Forge Fox holding a trophy",
+                    modifier = Modifier.size(104.dp),
+                )
+                Spacer(Modifier.height(8.dp))
                 SetupBadge(
                     code = slotBadge.take(2).uppercase(),
                     accent = OnboardingConfig.accentBlue,
@@ -81,7 +75,7 @@ fun Step8Complete(
 
                 Spacer(Modifier.height(10.dp))
                 Text(
-                    text = if (revealDone) "Qualified badge: $slotBadge" else "Evaluating your badge...",
+                    text = if (revealDone) "Provisional grade · $slotBadge" else "Preparing your ledger...",
                     color = OnboardingConfig.textMuted,
                     fontSize = 13.sp,
                     textAlign = TextAlign.Center,
@@ -102,9 +96,9 @@ fun Step8Complete(
                 Spacer(Modifier.height(8.dp))
 
                 Text(
-                    text          = stringResource(R.string.onb_arise_reg_complete),
-                    color         = OnboardingConfig.textMuted,
-                    fontSize      = 18.sp,
+                    text          = "Your training system is calibrated",
+                    color         = OnboardingConfig.textPrimary,
+                    fontSize      = 20.sp,
                     fontWeight    = FontWeight.ExtraBold,
                     letterSpacing = 0.sp,
                     textAlign     = TextAlign.Center,
@@ -113,16 +107,10 @@ fun Step8Complete(
                 Spacer(Modifier.height(24.dp))
 
                 Text(
-                    text      = stringResource(R.string.onb_arise_line1),
+                    text      = "Your first workouts will verify this baseline, tune recovery, and begin earning durable ledger XP.",
                     color     = OnboardingConfig.textMuted,
                     fontSize  = 13.sp,
-                    textAlign = TextAlign.Center,
-                )
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text      = stringResource(R.string.onb_arise_line2),
-                    color     = OnboardingConfig.textMuted,
-                    fontSize  = 13.sp,
+                    lineHeight = 19.sp,
                     textAlign = TextAlign.Center,
                 )
 
@@ -131,8 +119,7 @@ fun Step8Complete(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(OnboardingConfig.surfaceDark, RoundedCornerShape(16.dp))
-                        .border(1.dp, OnboardingConfig.cardBorder, RoundedCornerShape(16.dp))
+                        .background(OnboardingConfig.surfaceDark, RoundedCornerShape(20.dp))
                         .padding(18.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
@@ -141,23 +128,19 @@ fun Step8Complete(
                     SummaryLine("Weekly target", "$weeklyGoalDays days / week")
                     SummaryLine("Weight unit", weightUnit.uppercase())
                     SummaryLine("AI mode", intelligenceMode.toDisplayLabel())
-                    SummaryLine(
-                        "Permissions",
-                        buildList {
-                            add(if (healthConnectGranted) "Health connected" else "Health skipped")
-                            add(if (notificationsGranted) "Notifications on" else "Notifications skipped")
-                        }.joinToString(" / "),
-                    )
+                    SummaryLine("Recovery data", if (healthConnectGranted) "Connected" else "Not connected")
+                    SummaryLine("Reminders", if (notificationsGranted) "Enabled" else "Not enabled")
                 }
 
-                Spacer(Modifier.height(34.dp))
+                Spacer(Modifier.height(18.dp))
+                SetupReward("Next: choose a starter plan or enter the app with an empty workspace", Modifier.fillMaxWidth())
+                Spacer(Modifier.height(18.dp))
 
                 GlowButton(
                     text    = stringResource(R.string.onb_arise_cta),
                     onClick = onStartTraining,
                 )
             }
-        }
     }
 }
 
@@ -168,8 +151,21 @@ private fun SummaryLine(label: String, value: String) {
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(label, color = OnboardingConfig.textMuted, fontSize = 12.sp)
-        Text(value, color = OnboardingConfig.accentBlue, fontSize = 13.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.End)
+        Text(
+            label,
+            modifier = Modifier.weight(1f),
+            color = OnboardingConfig.textMuted,
+            fontSize = 12.sp,
+        )
+        Spacer(Modifier.width(16.dp))
+        Text(
+            value,
+            modifier = Modifier.weight(1f),
+            color = OnboardingConfig.accentBlue,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.End,
+        )
     }
 }
 

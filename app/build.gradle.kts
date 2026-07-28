@@ -34,8 +34,10 @@ android {
         applicationId = "com.ironlogpro.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = localProps.getProperty("version.code", "1").toInt()
-        versionName = localProps.getProperty("version.name", "1.0.0")
+        versionCode = providers.gradleProperty("IRONLOG_VERSION_CODE").orNull?.toIntOrNull()
+            ?: localProps.getProperty("version.code", "2").toInt()
+        versionName = providers.gradleProperty("IRONLOG_VERSION_NAME").orNull
+            ?: localProps.getProperty("version.name", "0.1.0-pre-alpha.1")
     }
 
     buildFeatures { compose = true; buildConfig = true }

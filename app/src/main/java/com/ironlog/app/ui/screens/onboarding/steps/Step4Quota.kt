@@ -8,6 +8,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -22,6 +24,9 @@ import androidx.compose.ui.unit.sp
 import com.ironlog.app.R
 import com.ironlog.app.ui.screens.onboarding.GlowButton
 import com.ironlog.app.ui.screens.onboarding.OnboardingConfig
+import com.ironlog.app.ui.screens.onboarding.OnboardingPageHeader
+import com.ironlog.app.ui.screens.onboarding.OnboardingSection
+import com.ironlog.app.ui.screens.onboarding.SetupReward
 
 private val DAY_LABELS = listOf("M", "T", "W", "T", "F", "S", "S")
 
@@ -37,95 +42,91 @@ fun Step4Quota(
         modifier            = Modifier
             .fillMaxSize()
             .background(OnboardingConfig.bgDark)
-            .padding(horizontal = 32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 24.dp, vertical = 24.dp),
     ) {
-        Text(
-            text          = stringResource(R.string.onb_quota_header),
-            color         = OnboardingConfig.accentBlue,
-            fontSize      = 20.sp,
-            fontWeight    = FontWeight.Black,
-            letterSpacing = 3.sp,
-            textAlign     = TextAlign.Center,
+        OnboardingPageHeader(
+            step = "Weekly rhythm",
+            title = "Choose days you can actually protect.",
+            body = "Consistency beats an ambitious schedule that collapses. These days drive reminders, streaks and recovery-aware workout suggestions.",
         )
 
-        Spacer(Modifier.height(40.dp))
+        Spacer(Modifier.height(26.dp))
 
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment     = Alignment.CenterVertically,
+        OnboardingSection(
+            title = "Training days",
+            caption = "Tap at least one day. You can reschedule without losing history.",
         ) {
-            DAY_LABELS.forEachIndexed { index, label ->
-                val isSelected = index in selectedDayIndices
-                val bgColor by animateColorAsState(
-                    if (isSelected) OnboardingConfig.accentBlue else Color.Transparent,
-                    tween(200), label = "dot$index"
-                )
-                val textColor by animateColorAsState(
-                    if (isSelected) Color.White else OnboardingConfig.textMuted,
-                    tween(200), label = "dotText$index"
-                )
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                        .background(bgColor)
-                        .border(
-                            1.5.dp,
-                            OnboardingConfig.accentBlue.copy(alpha = if (isSelected) 0f else 0.3f),
-                            CircleShape
-                        )
-                        .clickable {
-                            if (!isSelected || selectedDayIndices.size > 1) onDayToggle(index)
-                        },
-                ) {
-                    Text(text = label, color = textColor, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                DAY_LABELS.forEachIndexed { index, label ->
+                    val isSelected = index in selectedDayIndices
+                    val bgColor by animateColorAsState(
+                        if (isSelected) OnboardingConfig.accentBlue else OnboardingConfig.bgDark,
+                        tween(200), label = "dot$index"
+                    )
+                    val textColor by animateColorAsState(
+                        if (isSelected) Color.White else OnboardingConfig.textMuted,
+                        tween(200), label = "dotText$index"
+                    )
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(bgColor)
+                            .clickable {
+                                if (!isSelected || selectedDayIndices.size > 1) onDayToggle(index)
+                            },
+                    ) {
+                        Text(text = label, color = textColor, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+            Spacer(Modifier.height(18.dp))
+            Text(
+                text = "${selectedDayIndices.size}-session weekly target",
+                color = OnboardingConfig.accentGold,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Black,
+            )
+        }
+
+        Spacer(Modifier.height(14.dp))
+
+        OnboardingSection(title = "Weight display", caption = "This only changes display units; stored training data remains precise.") {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                listOf("kg", "lbs").forEach { unit ->
+                    val isActive = unit == weightUnit
+                    val bg by animateColorAsState(
+                        if (isActive) OnboardingConfig.accentBlue else OnboardingConfig.bgDark, tween(200), label = "unit$unit"
+                    )
+                    val tc by animateColorAsState(
+                        if (isActive) Color.White else OnboardingConfig.textMuted, tween(200), label = "unitText$unit"
+                    )
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(bg)
+                            .clickable { onWeightUnitChange(unit) }
+                            .padding(vertical = 13.dp),
+                    ) {
+                        Text(unit.uppercase(), color = tc, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    }
                 }
             }
         }
 
-        Spacer(Modifier.height(24.dp))
-
-        Text(
-            text          = stringResource(R.string.onb_quota_sessions, selectedDayIndices.size),
-            color         = OnboardingConfig.accentGold,
-            fontSize      = 24.sp,
-            fontWeight    = FontWeight.Black,
-            letterSpacing = 2.sp,
-        )
-
-        Spacer(Modifier.height(32.dp))
-
-        Row(
-            modifier = Modifier
-                .clip(RoundedCornerShape(8.dp))
-                .border(1.dp, OnboardingConfig.accentBlue.copy(alpha = 0.4f), RoundedCornerShape(8.dp)),
-        ) {
-            listOf("kg", "lbs").forEach { unit ->
-                val isActive = unit == weightUnit
-                val bg by animateColorAsState(
-                    if (isActive) OnboardingConfig.accentBlue else Color.Transparent, tween(200), label = "unit$unit"
-                )
-                val tc by animateColorAsState(
-                    if (isActive) Color.White else OnboardingConfig.textMuted, tween(200), label = "unitText$unit"
-                )
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(bg)
-                        .clickable { onWeightUnitChange(unit) }
-                        .padding(horizontal = 24.dp, vertical = 10.dp),
-                ) {
-                    Text(unit.uppercase(), color = tc, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                }
-            }
-        }
-
-        Spacer(Modifier.height(48.dp))
+        Spacer(Modifier.height(20.dp))
+        SetupReward("Weekly targets power streaks, makeup quests and widget states", Modifier.fillMaxWidth())
+        Spacer(Modifier.height(14.dp))
 
         GlowButton(text = stringResource(R.string.onb_quota_cta), onClick = onNext)
+        Spacer(Modifier.height(24.dp))
     }
 }

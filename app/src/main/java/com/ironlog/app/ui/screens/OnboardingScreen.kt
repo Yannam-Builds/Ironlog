@@ -17,14 +17,20 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ironlog.app.data.repository.PlanRepository
 import com.ironlog.app.data.seed.toPlanObject
@@ -54,6 +60,13 @@ fun OnboardingScreen(
     var completionError by remember { mutableStateOf<String?>(null) }
 
     fun advance() = scope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) }
+    fun goBack() = scope.launch {
+        if (pagerState.currentPage > 0) pagerState.animateScrollToPage(pagerState.currentPage - 1)
+    }
+
+    val stageLabels = remember {
+        listOf("Welcome", "Profile", "Baseline", "Training level", "Schedule", "Goal", "Coaching", "Permissions", "Calibration", "Starter plan")
+    }
 
     Box(
         modifier = Modifier
@@ -66,11 +79,21 @@ fun OnboardingScreen(
             userScrollEnabled = true,
             modifier          = Modifier
                 .fillMaxSize()
-                // Keep step content clear of the floating indicator and system bar.
-                .padding(bottom = 84.dp),
+                .padding(
+                    top = if (pagerState.currentPage == 0) 0.dp else 62.dp,
+                    bottom = 8.dp,
+                ),
         ) { page ->
                 when (page) {
-                    0 -> Step1Awakening(onAdvance = { advance() })
+                    0 -> Step1Awakening(
+                        onAdvance = { advance() },
+                        onSkip = {
+                            scope.launch {
+                                runCatching { onComplete(draft) }
+                                    .onFailure { completionError = it.message ?: "Could not finish setup. Please try again." }
+                            }
+                        },
+                    )
                     1 -> Step2Registration(
                         userName         = draft.userName,
                         onUserNameChange = vm::updateUserName,
@@ -171,42 +194,43 @@ fun OnboardingScreen(
                     )
                 }
             }
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .navigationBarsPadding()
-                .padding(bottom = 12.dp),
-        ) {
-            Row(
+        if (pagerState.currentPage > 0) {
+            Column(
                 modifier = Modifier
-                    .height(44.dp)
-                    .clip(CircleShape)
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(
-                                OnboardingConfig.surfaceDark.copy(alpha = 0.82f),
-                                OnboardingConfig.bgDark.copy(alpha = 0.70f),
-                            )
-                        )
-                    )
-                    .border(1.dp, OnboardingConfig.cardBorder.copy(alpha = 0.90f), CircleShape)
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically,
+                    .align(Alignment.TopCenter)
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 4.dp),
             ) {
-                repeat(pagerState.pageCount) { index ->
-                    val selected = index == pagerState.currentPage
-                    Box(
-                        modifier = Modifier
-                            .padding(horizontal = 4.dp)
-                            .size(width = if (selected) 18.dp else 7.dp, height = 7.dp)
-                            .clip(CircleShape)
-                            .background(
-                                if (selected) OnboardingConfig.accentBlue
-                                else OnboardingConfig.cardBorder.copy(alpha = 0.95f),
-                            ),
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    IconButton(onClick = ::goBack) {
+                        Icon(
+                            Icons.AutoMirrored.Rounded.ArrowBack,
+                            contentDescription = "Previous onboarding step",
+                            tint = OnboardingConfig.textPrimary,
+                        )
+                    }
+                    Text(
+                        stageLabels[pagerState.currentPage],
+                        color = OnboardingConfig.textMuted,
+                        fontSize = 12.sp,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        "${pagerState.currentPage} / ${pagerState.pageCount - 1}",
+                        color = OnboardingConfig.textFaint,
+                        fontSize = 12.sp,
                     )
                 }
+                LinearProgressIndicator(
+                    progress = { pagerState.currentPage.toFloat() / (pagerState.pageCount - 1).toFloat() },
+                    modifier = Modifier.fillMaxWidth().height(3.dp),
+                    color = OnboardingConfig.accentBlue,
+                    trackColor = OnboardingConfig.cardBorder,
+                )
             }
         }
     }

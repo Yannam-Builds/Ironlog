@@ -10,10 +10,14 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -158,11 +162,100 @@ fun GlowCard(
     val bgAlpha by animateFloatAsState(if (selected) 0.16f else 0.02f, label = "cardBg")
     Column(
         modifier = modifier
-            .background(glowColor.copy(alpha = bgAlpha), RoundedCornerShape(24.dp))
-            .border(1.dp, borderColor, RoundedCornerShape(24.dp))
+            .background(
+                if (selected) glowColor.copy(alpha = bgAlpha)
+                else OnboardingConfig.surfaceDark,
+                RoundedCornerShape(22.dp),
+            )
+            .border(if (selected) 1.5.dp else 1.dp, borderColor, RoundedCornerShape(22.dp))
             .fillMaxWidth()
             .clickable(onClick = onClick)
             .padding(18.dp),
         content = content,
     )
+}
+
+@Composable
+fun OnboardingPageHeader(
+    step: String,
+    title: String,
+    body: String,
+    modifier: Modifier = Modifier,
+    alignment: TextAlign = TextAlign.Start,
+) {
+    Column(modifier = modifier.fillMaxWidth()) {
+        Text(
+            text = step.uppercase(),
+            color = OnboardingConfig.accentBlue,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.ExtraBold,
+            letterSpacing = 1.8.sp,
+            textAlign = alignment,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            text = title,
+            color = OnboardingConfig.textPrimary,
+            fontSize = 32.sp,
+            lineHeight = 35.sp,
+            fontWeight = FontWeight.Black,
+            letterSpacing = (-0.8).sp,
+            textAlign = alignment,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(10.dp))
+        Text(
+            text = body,
+            color = OnboardingConfig.textMuted,
+            fontSize = 14.sp,
+            lineHeight = 20.sp,
+            textAlign = alignment,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+}
+
+@Composable
+fun OnboardingSection(
+    title: String,
+    modifier: Modifier = Modifier,
+    caption: String? = null,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(OnboardingConfig.surfaceDark, RoundedCornerShape(22.dp))
+            .padding(18.dp),
+    ) {
+        Text(title, color = OnboardingConfig.textPrimary, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+        if (!caption.isNullOrBlank()) {
+            Spacer(Modifier.height(4.dp))
+            Text(caption, color = OnboardingConfig.textFaint, fontSize = 12.sp, lineHeight = 17.sp)
+        }
+        Spacer(Modifier.height(14.dp))
+        content()
+    }
+}
+
+@Composable
+fun SetupReward(
+    text: String,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .background(OnboardingConfig.accentGold.copy(alpha = 0.10f), RoundedCornerShape(14.dp))
+            .padding(horizontal = 12.dp, vertical = 9.dp),
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(8.dp)
+                .background(OnboardingConfig.accentGold, RoundedCornerShape(999.dp)),
+        )
+        Spacer(Modifier.width(9.dp))
+        Text(text, color = OnboardingConfig.accentGold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+    }
 }

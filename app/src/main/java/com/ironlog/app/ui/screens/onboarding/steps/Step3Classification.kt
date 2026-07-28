@@ -2,6 +2,8 @@ package com.ironlog.app.ui.screens.onboarding.steps
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -14,7 +16,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ironlog.app.R
 import com.ironlog.app.ui.screens.onboarding.GlowCard
+import com.ironlog.app.ui.screens.onboarding.GlowButton
 import com.ironlog.app.ui.screens.onboarding.OnboardingConfig
+import com.ironlog.app.ui.screens.onboarding.OnboardingPageHeader
+import com.ironlog.app.ui.screens.onboarding.SetupReward
 import com.ironlog.app.ui.screens.onboarding.SetupBadge
 
 @Composable
@@ -27,24 +32,13 @@ fun Step3Classification(
         modifier            = Modifier
             .fillMaxSize()
             .background(OnboardingConfig.bgDark)
-            .padding(horizontal = 24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 24.dp, vertical = 24.dp),
     ) {
-        Text(
-            text          = stringResource(R.string.onb_class_header),
-            color         = OnboardingConfig.accentBlue,
-            fontSize      = 20.sp,
-            fontWeight    = FontWeight.Black,
-            letterSpacing = 3.sp,
-            textAlign     = TextAlign.Center,
-        )
-        Spacer(Modifier.height(8.dp))
-        Text(
-            text      = stringResource(R.string.onb_class_subtext),
-            color     = OnboardingConfig.textMuted,
-            fontSize  = 13.sp,
-            textAlign = TextAlign.Center,
+        OnboardingPageHeader(
+            step = "Training level",
+            title = "How should progression begin?",
+            body = "Choose the closest fit. IronLog will replace this estimate with verified training evidence over time.",
         )
         Spacer(Modifier.height(28.dp))
 
@@ -56,7 +50,6 @@ fun Step3Classification(
                     glowColor = option.accent,
                     onClick   = {
                         onSelect(option.progressionStyle, option.defaultGoalMode)
-                        onNext()
                     },
                     modifier  = Modifier.fillMaxWidth(),
                 ) {
@@ -82,5 +75,13 @@ fun Step3Classification(
                 }
             }
         }
+        Spacer(Modifier.height(22.dp))
+        SetupReward(
+            text = "This sets your starting difficulty — it does not grant unearned XP",
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(14.dp))
+        GlowButton(text = "Use this progression", onClick = onNext)
+        Spacer(Modifier.height(24.dp))
     }
 }

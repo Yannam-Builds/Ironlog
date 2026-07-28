@@ -61,6 +61,8 @@ import com.ironlog.app.R
 import com.ironlog.app.domain.intelligence.CloudAiEngine
 import com.ironlog.app.ui.screens.onboarding.GlowButton
 import com.ironlog.app.ui.screens.onboarding.OnboardingConfig
+import com.ironlog.app.ui.screens.onboarding.OnboardingPageHeader
+import com.ironlog.app.ui.screens.onboarding.SetupReward
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -102,27 +104,16 @@ fun Step6AiAbilities(
             .padding(start = 24.dp, top = 32.dp, end = 24.dp, bottom = 64.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text(
-            text = stringResource(R.string.onb_ai_header),
-            color = OnboardingConfig.accentBlue,
-            fontSize = 28.sp,
-            fontWeight = FontWeight.Black,
-            textAlign = TextAlign.Center,
-        )
-        Spacer(Modifier.height(8.dp))
-        Text(
-            text = "Local coaching stays on by default. Add your own key only if you want cloud plan generation.",
-            color = OnboardingConfig.textMuted,
-            fontSize = 14.sp,
-            lineHeight = 20.sp,
-            textAlign = TextAlign.Center,
+        OnboardingPageHeader(
+            step = "Coaching engine",
+            title = "Local by default. Cloud only by choice.",
+            body = "Recovery, suggestions and gamification work without an account or API key. Cloud AI is only for richer plan generation and review.",
         )
 
         Spacer(Modifier.height(22.dp))
         Surface(
             color = OnboardingConfig.surfaceDark,
             shape = RoundedCornerShape(24.dp),
-            border = BorderStroke(1.dp, OnboardingConfig.cardBorder),
             modifier = Modifier.fillMaxWidth(),
         ) {
             Column(Modifier.padding(18.dp)) {
@@ -132,7 +123,13 @@ fun Step6AiAbilities(
             }
         }
 
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(14.dp))
+        SetupReward("Local coaching already includes readiness, progression and workout feedback", Modifier.fillMaxWidth())
+        Spacer(Modifier.height(14.dp))
+        GlowButton(text = "Continue with local coaching", onClick = onSkip)
+        Spacer(Modifier.height(18.dp))
+        Text("OPTIONAL CLOUD SETUP", color = OnboardingConfig.textFaint, fontSize = 10.sp, fontWeight = FontWeight.Black, letterSpacing = 1.4.sp)
+        Spacer(Modifier.height(10.dp))
         Surface(
             color = OnboardingConfig.surfaceDark,
             shape = RoundedCornerShape(24.dp),
@@ -304,10 +301,9 @@ fun Step6AiAbilities(
         }
         }
 
-        Spacer(Modifier.height(24.dp))
-        GlowButton(text = if (cloudApiKey.isBlank()) "Continue with local coaching" else "Save and continue", onClick = onNext)
-        TextButton(onClick = onSkip, modifier = Modifier.fillMaxWidth()) {
-            Text("Skip cloud setup", color = OnboardingConfig.textMuted, fontSize = 13.sp)
+        if (cloudApiKey.isNotBlank()) {
+            Spacer(Modifier.height(18.dp))
+            GlowButton(text = "Save cloud setup", onClick = onNext)
         }
         Spacer(Modifier.height(24.dp))
     }

@@ -1,7 +1,5 @@
 package com.ironlog.app
 
-import android.Manifest
-import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build.VERSION.SDK_INT
 import android.os.Build
@@ -10,8 +8,6 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.ironlog.app.data.repository.SettingsRepository
 import com.ironlog.app.services.NotificationActionRouter
@@ -28,10 +24,6 @@ import kotlinx.coroutines.withContext
  */
 class MainActivity : ComponentActivity() {
 
-    // Android 13+ requires runtime POST_NOTIFICATIONS approval
-    private val requestNotifPermission =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) { /* granted or denied — UX continues either way */ }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         // Force fully transparent nav bar on ALL navigation modes (gesture AND 3-button).
         // The default SystemBarStyle.auto() applies a translucent scrim on 3-button nav —
@@ -47,15 +39,6 @@ class MainActivity : ComponentActivity() {
         requestMaxRefreshRate()
         handleIntentRouting(intent)
         setContent { IronLogApp() }
-
-        // Request notification permission on first launch (Android 13+)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
-                != PackageManager.PERMISSION_GRANTED
-            ) {
-                requestNotifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
-            }
-        }
     }
 
     override fun onResume() {
