@@ -37,15 +37,14 @@ fun Step8Complete(
     qualifiedBadge: String,
     onStartTraining: () -> Unit,
 ) {
-    var showContent by remember { mutableStateOf(false) }
+    var showContent by remember { mutableStateOf(true) }
     var revealDone by remember { mutableStateOf(false) }
     var slotBadge by remember { mutableStateOf("Uncalibrated") }
     val badgeOrder = remember {
         listOf("Uncalibrated", "Graphite", "Iron", "Steel", "Titanium", "Obsidian", "Iridium", "Aether", "Apex")
     }
     LaunchedEffect(Unit) {
-        delay(OnboardingConfig.COMPLETION_REVEAL_DELAY_MS)
-        showContent = true
+        // Content is visible immediately; the qualification badge still animates.
     }
     LaunchedEffect(showContent, qualifiedBadge) {
         if (!showContent) return@LaunchedEffect
@@ -70,7 +69,7 @@ fun Step8Complete(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 32.dp, vertical = 28.dp)
+                    .padding(start = 32.dp, top = 28.dp, end = 32.dp, bottom = 64.dp)
                     .verticalScroll(rememberScrollState()),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,

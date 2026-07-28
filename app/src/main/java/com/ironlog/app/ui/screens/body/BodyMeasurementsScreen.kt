@@ -11,6 +11,8 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -124,6 +126,7 @@ fun BodyMeasurementsScreen(
     bodyWeight: List<BodyWeightUiRow>,
     weightUnit: String = "kg",
     hapticFeedback: Boolean = true,
+    onBack: () -> Unit = {},
     onLogBodyWeight: suspend (BodyMeasurementInput) -> Unit,
     onAddMeasurement: suspend (BodyMeasurementInput) -> Unit,
 ) {
@@ -187,6 +190,20 @@ fun BodyMeasurementsScreen(
     }
 
     Column(Modifier.fillMaxSize().background(colors.bg).statusBarsPadding()) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconButton(onClick = onBack) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = colors.accent)
+            }
+            Text(
+                "Body tracking",
+                color = colors.text,
+                fontWeight = FontWeight.Bold,
+                fontSize = IronLogType.section.fontSize.sp,
+            )
+        }
         // Tab bar
         TabRow(
             selectedTabIndex = activeTab,

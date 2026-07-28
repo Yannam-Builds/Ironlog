@@ -63,10 +63,20 @@ class AppDataViewModel(
             val stats = statsVm.state.value
             val exercises = exerciseRepo.getExercisesSnapshot()
             val settings = readIronLogSettings()
-            val onboarding = settingsRepo.getBoolean(ONBOARDING_KEY, false)
+            val storedOnboarding = settingsRepo.getBoolean(ONBOARDING_KEY, false)
+            val onboardingMigrationDone = settingsRepo.getBoolean(ONBOARDING_MIGRATION_KEY, false)
+            val onboarding = if (!onboardingMigrationDone && !storedOnboarding && plans.isNotEmpty()) {
+                // One-time compatibility for installations created before the explicit
+                // onboarding marker. Never repeat this inference: users must be able to
+                // intentionally restart onboarding while keeping their plans.
+                settingsRepo.setBoolean(ONBOARDING_KEY, true)
+                settingsRepo.setBoolean(ONBOARDING_MIGRATION_KEY, true)
+                true
+            } else {
+                storedOnboarding
+            }
             manualPb = readDoubleMap(settingsRepo.getString("ironlog_pb"))
             exerciseNotes = readStringMap(settingsRepo.getString(EXERCISE_NOTES_KEY))
-            if (!onboarding && plans.isNotEmpty()) settingsRepo.setBoolean(ONBOARDING_KEY, true)
             // plansLoaded becomes true once plansVm has finished its initial DB read (!loading),
             // or once we receive a non-empty override (plansVm emitted real data).
             // An empty override list is the StateFlow's initial emission — NOT a real "loaded" signal.
@@ -82,7 +92,7 @@ class AppDataViewModel(
                 pb = stats.pb + manualPb,
                 exerciseNotes = exerciseNotes,
                 settings = settings,
-                onboardingComplete = onboarding || plans.isNotEmpty(),
+                onboardingComplete = onboarding,
                 exerciseIndex = exercises,
             )
         }
@@ -186,12 +196,14 @@ class AppDataViewModel(
 
     fun completeOnboarding(weeklyGoalDays: Int? = null) = viewModelScope.launch {
         weeklyGoalDays?.let { updateSettings(_state.value.settings.copy(weeklyGoalDays = normalizeWeeklyGoalDays(it, _state.value.settings.weeklyGoalDays))) }
+        settingsRepo.setBoolean(ONBOARDING_MIGRATION_KEY, true)
         settingsRepo.setBoolean(ONBOARDING_KEY, true)
         flagDirty("onboarding_changed")
         refresh()
     }
 
     fun resetOnboarding() = viewModelScope.launch {
+        settingsRepo.setBoolean(ONBOARDING_MIGRATION_KEY, true)
         settingsRepo.setBoolean(ONBOARDING_KEY, false)
         flagDirty("onboarding_changed")
         refresh()
@@ -223,8 +235,8 @@ class AppDataViewModel(
                 defaultRestHeavySeconds = json.optInt("defaultRestHeavySeconds", 180),
                 barWeightKg = json.optDouble("barWeightKg", 20.0),
                 weeklyGoalDays = normalizeWeeklyGoalDays(json.optInt("weeklyGoalDays", 4), 4),
-                goalMode = json.optString("goalMode", "hypertrophy"),
-                progressionStyle = json.optString("progressionStyle", "balanced"),
+                goalMode = normalizeStoredGoalMode(json.optString("goalMode", "hypertrophy")),
+                progressionStyle = normalizeStoredProgressionStyle(json.optString("progressionStyle", "balanced")),
                 userName = json.optString("userName", ""),
                 performanceMode = json.optString("performanceMode", "balanced"),
                 intelligenceMode = json.optString("intelligenceMode", "builtin"),
@@ -278,6 +290,7 @@ class AppDataViewModel(
 
 private const val EXERCISE_NOTES_KEY = "exercise_notes_v1"
 private const val ONBOARDING_KEY = "onboarding_complete"
+private const val ONBOARDING_MIGRATION_KEY = "onboarding_state_migrated_v1"
 
 private val HEAVY = setOf("Weighted Pull-Up", "Weighted Pull-Up or Lat Pulldown", "Romanian Deadlift", "Bulgarian Split Squat", "DB Shrugs", "Incline Smith Press", "Barbell Shrugs", "Deadlift", "Back Squat", "Front Squat")
 
@@ -344,3 +357,14 @@ private fun IronLogSettings.toJson(): JSONObject = JSONObject()
     .put("cloudAiProviderPreset", cloudAiProviderPreset)
     .put("cloudAiApiFormat", cloudAiApiFormat)
 
+internal fun normalizeStoredGoalMode(value: String): String = when (value.trim().lowercase()) {
+    "strength" -> "strength"
+    "general_fitness", "general fitness", "performance", "endurance" -> "general_fitness"
+    else -> "hypertrophy"
+}
+
+internal fun normalizeStoredProgressionStyle(value: String): String = when (value.trim().lowercase()) {
+    "conservative", "linear" -> "conservative"
+    "aggressive", "undulating" -> "aggressive"
+    else -> "balanced"
+}

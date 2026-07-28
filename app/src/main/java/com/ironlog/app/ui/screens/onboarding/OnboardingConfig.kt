@@ -102,7 +102,7 @@ object OnboardingConfig {
     val baselineOptions = listOf(
         BaselineOption("01", "Rebuilding", "New or returning to training", "LINEAR", "STRENGTH", Color(0xFFB8B2C7)),
         BaselineOption("02", "Consistent", "Training regularly for months", "DOUBLE_PROGRESSION", "HYPERTROPHY", accentBlue),
-        BaselineOption("03", "Experienced", "Years of structured work", "UNDULATING", "PERFORMANCE", accentGold),
+        BaselineOption("03", "Experienced", "Years of structured work", "UNDULATING", "GENERAL_FITNESS", accentGold),
     )
 
     enum class OnboardingPermission { CAMERA, HEALTH_CONNECT, NOTIFICATIONS }

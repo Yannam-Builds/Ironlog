@@ -128,9 +128,9 @@ object BadgeDefinitions {
         ),
         BadgeDefinition(
             id = "all_goal_modes", title = "Multiclass",
-            description = "Train with all 4 goal modes", tier = BadgeTier.BLUE,
+            description = "Train with all 3 available goal modes", tier = BadgeTier.BLUE,
             iconResName = "ic_badge_3stars",
-            unlockCondition = { it.goalModesUsed.size >= 4 },
+            unlockCondition = { it.goalModesUsed.size >= 3 },
         ),
         BadgeDefinition(
             id = "s_rank", title = "Diamond",

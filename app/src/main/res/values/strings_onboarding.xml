@@ -27,8 +27,8 @@
     <string name="onb_ai_skip">Skip cloud AI</string>
     <string name="onb_perm_header">Enable app features</string>
     <string name="onb_perm_subtext">Each permission improves the app. All are optional.</string>
-    <string name="onb_perm_camera_title">Camera for QR sharing</string>
-    <string name="onb_perm_camera_desc">Scan and share workout plans as QR codes.</string>
+    <string name="onb_perm_camera_title">Camera for progress photos</string>
+    <string name="onb_perm_camera_desc">Capture private progress photos. They stay on your device unless you export them.</string>
     <string name="onb_perm_health_title">Health Connect recovery data</string>
     <string name="onb_perm_health_desc">Import sleep, HRV, and heart rate for better recovery scores.</string>
     <string name="onb_perm_notif_title">Workout notifications</string>

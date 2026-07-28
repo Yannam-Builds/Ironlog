@@ -21,8 +21,7 @@ private data class GoalOption(val mode: String, val label: String, val subtitle:
 private val GOAL_OPTIONS = listOf(
     GoalOption("STRENGTH",    "STRENGTH",    "Max weight, low reps"),
     GoalOption("HYPERTROPHY", "HYPERTROPHY", "Size & muscle growth"),
-    GoalOption("PERFORMANCE", "PERFORMANCE", "Speed & power"),
-    GoalOption("ENDURANCE",   "ENDURANCE",   "High volume, stamina"),
+    GoalOption("GENERAL_FITNESS", "GENERAL FITNESS", "Strength, conditioning & health"),
 )
 
 @Composable
@@ -61,7 +60,7 @@ fun Step5GoalMode(
                         selected  = isSelected,
                         glowColor = OnboardingConfig.accentGold,
                         onClick   = { onSelect(option.mode) },
-                        modifier  = Modifier.weight(1f),
+                        modifier  = if (row.size == 1) Modifier.fillMaxWidth() else Modifier.weight(1f),
                     ) {
                         Text(
                             text          = option.label,

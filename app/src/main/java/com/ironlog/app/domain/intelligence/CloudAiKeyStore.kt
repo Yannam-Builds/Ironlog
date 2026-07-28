@@ -30,7 +30,12 @@ object CloudAiKeyStore {
 
     /** Stores the API key for [provider] encrypted on-device. */
     fun save(context: Context, provider: String, key: String) {
-        runCatching { prefs(context).edit().putString(keyFor(provider), key).apply() }
+        val normalized = key.trim()
+        require(normalized.isNotEmpty()) { "API key cannot be blank" }
+        val committed = runCatching {
+            prefs(context).edit().putString(keyFor(provider), normalized).commit()
+        }.getOrElse { throw IllegalStateException("Could not store the API key securely", it) }
+        check(committed) { "Could not store the API key securely" }
     }
 
     /**
@@ -40,13 +45,13 @@ object CloudAiKeyStore {
     fun load(context: Context, provider: String): String {
         val p = runCatching { prefs(context) }.getOrNull() ?: return ""
         val providerKey = runCatching { p.getString(keyFor(provider), "") ?: "" }.getOrDefault("")
-        if (providerKey.isNotBlank()) return providerKey
+        if (providerKey.isNotBlank()) return providerKey.trim()
         // Migration: return legacy key (set when there was only one slot)
-        return runCatching { p.getString(KEY_LEGACY, "") ?: "" }.getOrDefault("")
+        return runCatching { p.getString(KEY_LEGACY, "")?.trim() ?: "" }.getOrDefault("")
     }
 
     /** Deletes the stored API key for [provider]. */
     fun clear(context: Context, provider: String) {
-        runCatching { prefs(context).edit().remove(keyFor(provider)).apply() }
+        runCatching { prefs(context).edit().remove(keyFor(provider)).commit() }
     }
 }

@@ -109,7 +109,6 @@ import com.ironlog.app.domain.intelligence.CloudAiKeyStore
 import com.ironlog.app.domain.intelligence.TrainingIntelligenceEngine
 import com.ironlog.app.ui.viewmodel.AppDataViewModel
 import com.valentinilk.shimmer.shimmer
-import com.ironlog.app.domain.milestone.MilestoneService
 import com.ironlog.app.services.WorkoutForegroundService
 import com.ironlog.app.services.WorkoutNotificationBridge
 import com.ironlog.app.services.ShareService
@@ -201,7 +200,6 @@ data class NormalizedSessionExercise(
 class ActiveWorkoutViewModel(application: Application) : AndroidViewModel(application) {
     private val workoutRepo = WorkoutRepository()
     private val settingsRepo = SettingsRepository()
-    private val milestoneService = MilestoneService()
     // Read weight unit once from settings so the PR banner uses the correct unit.
     private var vmWeightUnit: String = "kg"
     private val _workoutState = MutableStateFlow(WorkoutState())
@@ -584,20 +582,9 @@ class ActiveWorkoutViewModel(application: Application) : AndroidViewModel(applic
             _activeWorkoutIdSignal.value = null
             streakDays = computeDailyWorkoutStreakDays()
 
-            val metrics = runCatching {
+            runCatching {
                 workoutRepo.recordPostWorkoutMetrics(id, totalVolumeKg, hadPr)
             }.onFailure { Timber.e(it, "Failed to record post-workout metrics for %s", id) }
-                .getOrNull()
-            if (metrics?.newlyRecorded == true) {
-                runCatching {
-                    milestoneService.registerPostWorkout(
-                        totalVolumeKg = metrics.cumulativeVolumeKg,
-                        streakDays = streakDays,
-                        newPr = hadPr,
-                    )
-                }.onFailure { Timber.e(it, "Failed to register workout milestones for %s", id) }
-            }
-
             runCatching { WorkoutNotificationBridge.clearWorkout(getApplication()) }
             runCatching { WorkoutForegroundService.stop(getApplication()) }
             runCatching { com.ironlog.app.widget.WidgetUpdateWorker.enqueueOneTime(getApplication()) }
@@ -605,10 +592,11 @@ class ActiveWorkoutViewModel(application: Application) : AndroidViewModel(applic
             _elapsedSeconds.value = 0
             _timerStarted.value = false
             _showCompletionSheet.value = false
+            val milestoneAlertsEnabled = settingsRepo.getBoolean("milestone_alerts_enabled", true)
             onDone(
                 WorkoutCompletionCelebration(
-                    hasPrCelebration = hadPr,
-                    hasStreak30Celebration = streakDays >= 30,
+                    hasPrCelebration = milestoneAlertsEnabled && hadPr,
+                    hasStreak30Celebration = milestoneAlertsEnabled && streakDays >= 30,
                 ),
             )
         }

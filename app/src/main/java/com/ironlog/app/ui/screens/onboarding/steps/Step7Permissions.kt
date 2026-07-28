@@ -12,6 +12,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -122,10 +124,10 @@ fun Step7Permissions(
         modifier = Modifier
             .fillMaxSize()
             .background(OnboardingConfig.bgDark)
-            .padding(horizontal = 24.dp),
+            .verticalScroll(rememberScrollState())
+            .padding(start = 24.dp, top = 32.dp, end = 24.dp, bottom = 64.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Spacer(Modifier.height(72.dp))
         Text(
             text = stringResource(R.string.onb_perm_header),
             color = OnboardingConfig.accentBlue,
@@ -186,9 +188,8 @@ fun Step7Permissions(
             },
         )
 
-        Spacer(Modifier.weight(1f))
+        Spacer(Modifier.height(28.dp))
         GlowButton(text = stringResource(R.string.onb_perm_cta), onClick = onNext)
-        Spacer(Modifier.height(32.dp))
     }
 }
 

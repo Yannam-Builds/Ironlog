@@ -478,6 +478,14 @@ Generate the plan now. Output ONLY the JSON object.
                                 scope.launch {
                                     val allExercises = withContext(Dispatchers.IO) { exerciseRepo.getExercisesSnapshot() }
                                     val exerciseCatalogMarkdown = withContext(Dispatchers.IO) { exerciseRepo.getCompactCatalogMarkdown() }
+                                    val baselineContext = withContext(Dispatchers.IO) {
+                                        Triple(
+                                            settingsRepo.getString("baseline_training_age_months")?.toIntOrNull() ?: 0,
+                                            settingsRepo.getString("baseline_historical_training_days_per_week")?.toIntOrNull()
+                                                ?: cloudSettings.weeklyGoalDays,
+                                            settingsRepo.getString("baseline_bodyweight_kg")?.toDoubleOrNull(),
+                                        )
+                                    }
                                     val json = CloudAiEngine.generatePlanJson(
                                         baseUrl            = cloudSettings.cloudAiBaseUrl,
                                         apiKey             = cloudApiKey,
@@ -489,6 +497,11 @@ Generate the plan now. Output ONLY the JSON object.
                                         sessionDurationMin = sessionDuration.toIntOrNull() ?: 60,
                                         cardioEverySession = cardioEverySession,
                                         exerciseCatalogMarkdown = exerciseCatalogMarkdown,
+                                        history            = appState.history,
+                                        progressionStyle   = cloudSettings.progressionStyle,
+                                        trainingAgeMonths  = baselineContext.first,
+                                        historicalTrainingDaysPerWeek = baselineContext.second,
+                                        bodyweightKg        = baselineContext.third,
                                     )
                                     if (json.isBlank()) {
                                         alertConfig = AlertData("Generation Failed", "Cloud AI returned an empty response. Check your settings and try again.")

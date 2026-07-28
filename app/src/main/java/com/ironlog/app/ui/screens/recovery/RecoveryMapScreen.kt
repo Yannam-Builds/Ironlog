@@ -92,10 +92,10 @@ import kotlinx.coroutines.launch
 
 private val RECOVERY_WINDOWS = listOf("Workout" to 3, "7D" to 7, "30D" to 30, "Program" to 90)
 private val LEGEND = listOf(
-    "Back Off (<72%)" to "danger",
-    "Maintain (72-90%)" to "warning",
-    "Train (>90%)" to "success",
-    "Unknown" to "faint",
+    "<72% Back off" to "danger",
+    "72-90% Maintain" to "warning",
+    ">90% Train" to "success",
+    "No data" to "faint",
 )
 
 @Composable

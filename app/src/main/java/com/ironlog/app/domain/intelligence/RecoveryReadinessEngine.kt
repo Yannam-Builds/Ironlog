@@ -102,7 +102,9 @@ object RecoveryReadinessEngine {
         val top = rows.first()
         val low = rows.last()
         val out = mutableListOf("${top.key} is most recovered (${(top.value * 100).roundToInt()}%).")
-        if (top.key != low.key) out += "${low.key} is least recovered (${(low.value * 100).roundToInt()}%), reduce volume."
+        if (top.key != low.key && low.value < 0.85) {
+            out += "${low.key} is least recovered (${(low.value * 100).roundToInt()}%), reduce volume."
+        }
         return out
     }
 

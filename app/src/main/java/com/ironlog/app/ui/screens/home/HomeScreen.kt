@@ -101,6 +101,8 @@ import com.ironlog.app.data.health.BiometricSnapshot
 import com.ironlog.app.data.health.HealthConnectRepository
 import com.ironlog.app.data.repository.SettingsRepository
 import com.ironlog.app.domain.gamification.DailyProofStatus
+import com.ironlog.app.domain.gamification.IronGrade
+import com.ironlog.app.domain.badges.BadgeDefinitions
 import com.ironlog.app.domain.intelligence.ManualRecoveryInput
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -216,7 +218,7 @@ fun HomeScreen(
         }
     }
 
-    val streak = remember(state.history) { getStreak(state.history) }
+    val streak = gamState.dailyStreakDays
     val recentSessions = remember(state.history) {
         val cutoff = LocalDate.now().minusDays(30).toString()
         state.history.count { it.date.substringBefore('T') >= cutoff }
@@ -254,7 +256,7 @@ fun HomeScreen(
             .sumOf { it.volume }
             .roundToInt()
     }
-    val goalStreak = remember(state.history, weeklyGoalDays) { getGoalStreak(state.history, weeklyGoalDays) }
+    val goalStreak = gamState.streakWeeks
     // Prefer the plan explicitly marked active; fall back to first (most-recently-updated) plan
     val activePlan = state.plans.firstOrNull { it.isActive } ?: state.plans.firstOrNull()
     val planDays = activePlan?.days ?: emptyList()
@@ -368,85 +370,6 @@ fun HomeScreen(
                 onPrimaryAction = dailyProofAction,
                 onOpenLedger = onOpenStatusWindow,
             )
-        }
-        item {
-            val xpAnim by animateFloatAsState(
-                targetValue = if (gamState.xpForNextLevel > 0L)
-                    (gamState.xpInLevel.toFloat() / gamState.xpForNextLevel.toFloat()).coerceIn(0f, 1f)
-                else 0f,
-                label = "xpBarAnim",
-            )
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(10.dp))
-                    .clickable { onOpenStatusWindow() }
-                    .padding(vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                // Rank + Level badge
-                Surface(
-                    shape = RoundedCornerShape(10.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        IronGradeBadge(
-                            rank = gamState.rank,
-                            accent = ironGradeColor(gamState.rank),
-                            modifier = Modifier.size(22.dp),
-                        )
-                        Text(
-                            text = "${gamState.rank} · Lv.${gamState.level}",
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                }
-
-                // XP progress bar
-                Box(modifier = Modifier.weight(1f)) {
-                    LinearProgressIndicator(
-                        progress = { xpAnim },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(8.dp)
-                            .clip(RoundedCornerShape(4.dp)),
-                        color = MaterialTheme.colorScheme.primary,
-                        trackColor = MaterialTheme.colorScheme.surfaceVariant,
-                    )
-                }
-
-                // XP label
-                Text(
-                    text = "${gamState.xpInLevel}/${gamState.xpForNextLevel}",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 10.sp,
-                )
-
-                // Streak badge
-                if (gamState.streakWeeks > 0) {
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = MaterialTheme.colorScheme.tertiaryContainer,
-                    ) {
-                        Text(
-                            text = "${gamState.streakWeeks}w streak",
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            color = MaterialTheme.colorScheme.onTertiaryContainer,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                        )
-                    }
-                }
-            }
         }
         item {
             if (activePlan == null) {
@@ -642,9 +565,8 @@ fun HomeScreen(
                 onOpen = onOpenTrainingIntelligence,
             )
         }
-        // Milestones card — only shown when at least one PB has been unlocked
-        if (state.pb.keys.isNotEmpty()) {
-            item { MilestonesCard(unlocked = state.pb.keys) }
+        if (gamState.unlockedBadges.isNotEmpty()) {
+            item { MilestonesCard(unlocked = gamState.unlockedBadges.toSet()) }
         }
     }
 }
@@ -678,8 +600,9 @@ private fun DailyProofCard(
             .clip(RoundedCornerShape(IronLogRadius.xl.dp))
             .background(c.card)
             .border(1.dp, c.cardBorder, RoundedCornerShape(IronLogRadius.xl.dp))
-            .padding(18.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+            .clickable(onClick = onOpenLedger)
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -688,7 +611,7 @@ private fun DailyProofCard(
         ) {
             Column(
                 modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(3.dp),
             ) {
                 Text(
                     "DAILY PROOF",
@@ -707,8 +630,10 @@ private fun DailyProofCard(
                 Text(
                     gamState.dailyProofDetail,
                     color = c.subtext,
-                    fontSize = IronLogType.body.fontSize.sp,
-                    lineHeight = IronLogType.body.lineHeight.sp,
+                    fontSize = IronLogType.meta.fontSize.sp,
+                    lineHeight = 16.sp,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
 
@@ -716,78 +641,17 @@ private fun DailyProofCard(
                 painter = painterResource(ForgeFoxExpression.fromId(gamState.foxExpressionId).drawableRes),
                 contentDescription = gamState.dailyProofHeadline,
                 modifier = Modifier
-                    .padding(start = 12.dp)
-                    .size(112.dp),
+                    .padding(start = 8.dp)
+                    .size(72.dp),
             )
         }
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = accent.copy(alpha = 0.12f),
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    IronGradeBadge(
-                        rank = gamState.rank,
-                        accent = ironGradeColor(gamState.rank),
-                        modifier = Modifier.size(24.dp),
-                    )
-                    Text(
-                        text = "${gamState.rank} · Lv.${gamState.level}",
-                        color = c.text,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                    )
-                }
-            }
-
-            if (gamState.dailyStreakDays > 0) {
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = c.surface,
-                ) {
-                    Text(
-                        text = "${gamState.dailyStreakDays}d streak",
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                        color = c.text,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                    )
-                }
-            }
-
-            if (gamState.latestBadgeTitle != null) {
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = c.surface,
-                ) {
-                    Text(
-                        text = gamState.latestBadgeTitle,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                        color = c.accent,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            }
-        }
-
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             LinearProgressIndicator(
                 progress = { xpAnim },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(8.dp)
+                    .height(6.dp)
                     .clip(RoundedCornerShape(4.dp)),
                 color = accent,
                 trackColor = c.faint,
@@ -798,12 +662,12 @@ private fun DailyProofCard(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = "${gamState.xpInLevel}/${gamState.xpForNextLevel} XP",
+                    text = "${gamState.rank} · Level ${gamState.level}  ·  ${gamState.xpInLevel}/${gamState.xpForNextLevel} XP",
                     color = c.subtext,
                     fontSize = 11.sp,
                 )
                 Text(
-                    text = "${gamState.streakWeeks} qualifying weeks",
+                    text = if (gamState.dailyStreakDays > 0) "${gamState.dailyStreakDays}d streak" else "Open ledger",
                     color = c.subtext,
                     fontSize = 11.sp,
                 )
@@ -819,12 +683,6 @@ private fun DailyProofCard(
                 modifier = Modifier.weight(1f),
             ) {
                 Text(gamState.dailyProofPrimaryActionLabel.uppercase())
-            }
-            TextButton(
-                onClick = onOpenLedger,
-                modifier = Modifier.weight(1f),
-            ) {
-                Text("OPEN IRON LEDGER")
             }
         }
     }
@@ -1706,15 +1564,11 @@ private fun AthleteProfileCard(totalSessions: Int, streak: Int, onOpen: () -> Un
 
 private data class TierInfo(val tier: String, val tierEmoji: String, val tierMin: Int, val tierNext: Int)
 
-private val MILESTONE_LABELS = mapOf(
-    "MILESTONE_PR" to ("🏆" to "First PR"),
-    "MILESTONE_LIFT_1T" to ("💪" to "1 Ton Lifted"),
-    "MILESTONE_LIFT_5T" to ("🔥" to "5 Tons Lifted"),
-    "MILESTONE_LIFT_10T" to ("⚡" to "10 Tons Lifted"),
-    "MILESTONE_STREAK_7" to ("🔥" to "7-Day Streak"),
-    "MILESTONE_STREAK_30" to ("📅" to "30-Day Streak"),
-    "MILESTONE_STREAK_100" to ("🌟" to "100-Day Streak"),
-)
+private val GAMIFICATION_BADGE_LABELS: Map<String, Pair<String, String>> = buildMap {
+    BadgeDefinitions.all.forEach { badge -> put(badge.id, "◆" to badge.title) }
+    IronGrade.entries.filter { it != IronGrade.UNCALIBRATED }
+        .forEach { grade -> put(grade.label, "◇" to "${grade.label} grade") }
+}
 
 @Composable
 private fun MilestonesCard(unlocked: Set<String>) {
@@ -1730,7 +1584,7 @@ private fun MilestonesCard(unlocked: Set<String>) {
     ) {
         Text("MILESTONES", color = c.muted, fontSize = IronLogType.eyebrow.fontSize.sp, fontWeight = FontWeight(IronLogType.eyebrow.fontWeight), letterSpacing = IronLogType.eyebrow.letterSpacing.sp)
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            MILESTONE_LABELS.entries.filter { it.key in unlocked }.forEach { (_, pair) ->
+            GAMIFICATION_BADGE_LABELS.entries.filter { it.key in unlocked }.forEach { (_, pair) ->
                 val (emoji, label) = pair
                 Column(
                     Modifier
@@ -1748,5 +1602,3 @@ private fun MilestonesCard(unlocked: Set<String>) {
         }
     }
 }
-
-

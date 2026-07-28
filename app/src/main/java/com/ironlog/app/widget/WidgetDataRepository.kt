@@ -7,6 +7,8 @@ import com.ironlog.app.data.objectbox.AppSettingEntity
 import com.ironlog.app.data.objectbox.ExerciseEntity
 import com.ironlog.app.data.objectbox.ExerciseEntity_
 import com.ironlog.app.data.objectbox.GamificationProfileEntity
+import com.ironlog.app.data.objectbox.GamificationProfileEntity_
+import com.ironlog.app.data.objectbox.IronLedgerEventEntity
 import com.ironlog.app.data.objectbox.PlanDayEntity
 import com.ironlog.app.data.objectbox.PlanDayEntity_
 import com.ironlog.app.data.objectbox.PlanEntity
@@ -16,6 +18,9 @@ import com.ironlog.app.data.objectbox.PlanExerciseEntity_
 import com.ironlog.app.domain.gamification.AthleteCalibration
 import com.ironlog.app.domain.gamification.DailyProofStatus
 import com.ironlog.app.domain.gamification.IronLedgerEngine
+import com.ironlog.app.domain.gamification.IronGrade
+import com.ironlog.app.domain.gamification.StreakEngine
+import com.ironlog.app.domain.badges.BadgeDefinitions
 import com.ironlog.app.domain.gamification.buildDailyProofSummary
 import com.ironlog.app.domain.gamification.dailyWorkoutStreakDays
 import com.ironlog.app.domain.gamification.parseHistoryLocalDate
@@ -30,6 +35,7 @@ import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import java.time.temporal.TemporalAdjusters
 import java.time.temporal.WeekFields
+import kotlinx.serialization.json.Json
 
 /**
  * Canonical widget snapshot builder using Iron Ledger as source of truth.
@@ -39,6 +45,7 @@ class WidgetDataRepository(
     private val boxStore: BoxStore,
 ) {
     private val ledgerEngine = IronLedgerEngine()
+    private val streakEngine = StreakEngine()
     private val suggestionEngine = WorkoutSuggestionEngine()
 
     fun buildWidgetState(
@@ -53,11 +60,16 @@ class WidgetDataRepository(
             calibration = calibration,
         )
 
-        // Reconcile: stored profile may have bonus XP from recovery circuits or other
-        // awardXp() calls that aren't captured by the history-only ledger rebuild.
-        val storedProfileXp = boxStore.boxFor(GamificationProfileEntity::class.java)
-            .query().build().use { it.findFirst() }?.totalXp ?: 0L
-        val reconciledXp = maxOf(storedProfileXp, snapshot.totalXp)
+        // Rebuild total XP from workout proof plus durable, idempotent bonus events.
+        // Do not use cached profile.totalXp: it must be able to decrease after history deletion.
+        val storedProfile = boxStore.boxFor(GamificationProfileEntity::class.java)
+            .query(GamificationProfileEntity_.offlineUserId.equal("local"))
+            .build().use { it.findFirst() }
+        val bonusXp = boxStore.boxFor(IronLedgerEventEntity::class.java).all
+            .filter { !it.invalidated && it.sourceType == "bonus" }
+            .sumOf { it.xpDelta.toLong() }
+            .coerceAtLeast(0L)
+        val reconciledXp = (snapshot.totalXp + bonusXp).coerceAtLeast(0L)
         val reconciledLevel = ledgerEngine.levelFromTotalXp(reconciledXp)
         val reconciledXpInLevel = ledgerEngine.xpInCurrentLevel(reconciledXp)
         val reconciledXpForNextLevel = ledgerEngine.xpForLevel(reconciledLevel)
@@ -68,7 +80,15 @@ class WidgetDataRepository(
         val readinessScore = RecoveryReadinessEngine.score(
             RecoveryReadinessEngine.readinessByRegion(recentHistory)
         ).score
-        val latestBadgeTitle = readLatestBadgeTitle(snapshot.grade.label)
+        val latestBadgeTitle = readLatestBadgeTitle(storedProfile, snapshot.grade.label)
+        val recoveryCircuitCompletions = runCatching {
+            Json.decodeFromString<Map<String, Int>>(storedProfile?.makeupCompletionsJson ?: "{}")
+        }.getOrDefault(emptyMap())
+        val currentStreakWeeks = streakEngine.computeStreakWeeks(
+            history = history,
+            weeklyGoal = weeklyGoalSafe,
+            recoveryCircuitCompletions = recoveryCircuitCompletions,
+        )
         val dailyProof = buildDailyProofSummary(
             history = history,
             hasActivePlan = recommendedDayName != "No Plan",
@@ -119,9 +139,10 @@ class WidgetDataRepository(
         return WidgetState(
             grade = snapshot.grade.label,
             level = reconciledLevel,
-            title = titleForGrade(snapshot.grade.label),
+            title = storedProfile?.activeTitle?.takeIf(String::isNotBlank)
+                ?: titleForGrade(snapshot.grade.label),
             dailyStreakDays = dailyStreakDays,
-            streakWeeks = snapshot.qualifyingWeeks,
+            streakWeeks = currentStreakWeeks,
             integrityScore = snapshot.integrityScore,
             totalXp = reconciledXp,
             xpInLevel = reconciledXpInLevel,
@@ -241,22 +262,16 @@ class WidgetDataRepository(
         else -> "Ledger Initiate"
     }
 
-    private fun readLatestBadgeTitle(fallback: String): String {
-        val badgeId = boxStore.boxFor(GamificationProfileEntity::class.java)
-            .query()
-            .build()
-            .use { query ->
-                query.findFirst()
-                    ?.unlockedBadges
-                    ?.split(",")
-                    ?.map(String::trim)
-                    ?.lastOrNull(String::isNotBlank)
-            }
-        return badgeId
-            ?.replace('_', ' ')
-            ?.split(' ')
-            ?.joinToString(" ") { token -> token.replaceFirstChar(Char::titlecase) }
-            ?: fallback
+    private fun readLatestBadgeTitle(profile: GamificationProfileEntity?, fallback: String): String {
+        val badgeId = profile?.unlockedBadges
+            ?.split(",")
+            ?.map(String::trim)
+            ?.lastOrNull(String::isNotBlank)
+            ?: return fallback
+        BadgeDefinitions.all.firstOrNull { it.id == badgeId }?.let { return it.title }
+        IronGrade.entries.firstOrNull { it.label == badgeId }?.let { return "${it.label} grade" }
+        return badgeId.replace('_', ' ').split(' ')
+            .joinToString(" ") { token -> token.replaceFirstChar(Char::titlecase) }
     }
 
     private fun readActiveWorkoutDayName(): String? =

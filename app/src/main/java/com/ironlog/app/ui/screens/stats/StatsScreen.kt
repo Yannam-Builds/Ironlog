@@ -198,7 +198,7 @@ fun StatsScreen(
             PageHeader(
                 eyebrow = "ANALYTICS",
                 title = "Stats",
-                subtitle = "${state.history.size} sessions · ${state.streak}-day streak",
+                subtitle = "${state.history.size} sessions · ${gamState.dailyStreakDays}-day streak",
             )
         }
         item {
@@ -219,7 +219,7 @@ fun StatsScreen(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
             ) {
                 StatCard("Sessions", state.history.size.toString(), Modifier.weight(1f))
-                StatCard("Streak", state.streak.toString(), Modifier.weight(1f))
+                StatCard("Streak", gamState.dailyStreakDays.toString(), Modifier.weight(1f))
                 StatCard("Sets", state.totalSets.toString(), Modifier.weight(1f))
                 StatCard("Avg Min", state.avgDurationMin.toString(), Modifier.weight(1f))
             }
@@ -966,4 +966,3 @@ private fun StatCard(label: String, value: String, modifier: Modifier = Modifier
 fun parseLocalDate(dateStr: String): LocalDate = LocalDate.parse(dateStr)
 fun estimateOneRM(weight: Double, reps: Int = 5): Int = round(weight * (1 + kotlin.math.max(1, reps) / 30.0)).toInt()
 fun statsGetStreak(history: List<HistoryEntry>): Int = getStreak(history)
-

@@ -43,7 +43,7 @@ fun Step9ProgramSetup(
         modifier = Modifier
             .fillMaxSize()
             .background(OnboardingConfig.bgDark)
-            .padding(horizontal = 24.dp, vertical = 20.dp)
+            .padding(start = 24.dp, top = 20.dp, end = 24.dp, bottom = 64.dp)
             .verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {

@@ -5,6 +5,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import java.time.Year
 
 data class OnboardingDraft(
     val userName: String = "",
@@ -58,7 +59,7 @@ class OnboardingViewModel : ViewModel() {
     }
 
     fun updateWeightUnit(unit: String) {
-        _draft.update { it.copy(weightUnit = unit) }
+        _draft.update { it.copy(weightUnit = if (unit.equals("lbs", ignoreCase = true)) "lbs" else "kg") }
     }
 
     fun setClassification(progressionStyle: String, defaultGoalMode: String) {
@@ -99,14 +100,14 @@ class OnboardingViewModel : ViewModel() {
     }
 
     // Baseline calibration update methods
-    fun updateYearOfBirth(year: Int) { _draft.update { it.copy(yearOfBirth = year) } }
-    fun updateBodyweightKg(kg: Int) { _draft.update { it.copy(bodyweightKg = kg) } }
-    fun updateTrainingAgeMonths(months: Int) { _draft.update { it.copy(trainingAgeMonths = months) } }
+    fun updateYearOfBirth(year: Int) { _draft.update { it.copy(yearOfBirth = year.coerceIn(1900, Year.now().value)) } }
+    fun updateBodyweightKg(kg: Int) { _draft.update { it.copy(bodyweightKg = kg.coerceIn(20, 500)) } }
+    fun updateTrainingAgeMonths(months: Int) { _draft.update { it.copy(trainingAgeMonths = months.coerceIn(0, 960)) } }
     fun setHasPastTraining(has: Boolean) { _draft.update { it.copy(hasPastTraining = has) } }
     fun setHasGymAccess(has: Boolean) { _draft.update { it.copy(hasGymAccess = has) } }
-    fun updateBaselinePushups(n: Int) { _draft.update { it.copy(baselinePushups = n) } }
-    fun updateBaselinePullups(n: Int) { _draft.update { it.copy(baselinePullups = n) } }
-    fun updateBaselineBenchKg(kg: Int) { _draft.update { it.copy(baselineBenchKg = kg) } }
-    fun updateBaselineLatPulldownKg(kg: Int) { _draft.update { it.copy(baselineLatPulldownKg = kg) } }
-    fun updateBaselineMileRunSeconds(seconds: Int) { _draft.update { it.copy(baselineMileRunSeconds = seconds) } }
+    fun updateBaselinePushups(n: Int) { _draft.update { it.copy(baselinePushups = n.coerceIn(0, 1_000)) } }
+    fun updateBaselinePullups(n: Int) { _draft.update { it.copy(baselinePullups = n.coerceIn(0, 500)) } }
+    fun updateBaselineBenchKg(kg: Int) { _draft.update { it.copy(baselineBenchKg = kg.coerceIn(0, 1_000)) } }
+    fun updateBaselineLatPulldownKg(kg: Int) { _draft.update { it.copy(baselineLatPulldownKg = kg.coerceIn(0, 1_000)) } }
+    fun updateBaselineMileRunSeconds(seconds: Int) { _draft.update { it.copy(baselineMileRunSeconds = seconds.coerceIn(0, 7_200)) } }
 }

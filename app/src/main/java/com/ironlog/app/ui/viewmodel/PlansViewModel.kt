@@ -193,39 +193,6 @@ class PlansViewModel(
         refresh()
     }
 
-    /**
-     * Import a plan decoded from a QR code payload.
-     * Converts the [UiPlan] to a [FullPlanObject] (no IDs, just names/settings)
-     * so the repository assigns fresh UUIDs and avoids ID collisions.
-     */
-    fun importPlanFromQr(plan: UiPlan) = viewModelScope.launch {
-        val fullPlan = FullPlanObject(
-            name = "${plan.name} (imported)",
-            goal = plan.goal,
-            description = plan.description,
-            days = plan.days.map { day ->
-                FullPlanDay(
-                    name = day.name,
-                    color = day.color,
-                    exercises = day.exercises.map { ex ->
-                        PlanExerciseInput(
-                            exerciseId = ex.exerciseId,
-                            name = ex.name,
-                            sets = ex.sets,
-                            reps = ex.reps,
-                            restSeconds = ex.restSeconds,
-                            supersetGroup = ex.supersetGroup,
-                            isWarmup = ex.isWarmup,
-                            notes = ex.notes,
-                        )
-                    },
-                )
-            },
-        )
-        plansRepo.importFullPlan(fullPlan)
-        refresh()
-    }
-
     // GAP-12: copy all exercises from one day to another day
     fun copyDay(sourceDayId: String, targetDayId: String) = viewModelScope.launch {
         val allPlans = _plans.value
@@ -278,4 +245,3 @@ class PlansViewModel(
 }
 
 private suspend fun PlanRepository.getPlansFlowReplayOnce(): List<com.ironlog.app.data.objectbox.PlanEntity> = getPlansFlow().first()
-

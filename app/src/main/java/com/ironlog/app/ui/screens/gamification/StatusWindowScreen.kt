@@ -55,6 +55,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.ironlog.app.assets.ForgeFoxExpression
+import com.ironlog.app.domain.badges.BadgeDefinitions
 import com.ironlog.app.domain.gamification.IronGrade
 import com.ironlog.app.domain.gamification.IronGradeGate
 import com.ironlog.app.domain.gamification.IronLedgerStats
@@ -106,10 +107,7 @@ fun StatusWindowScreen(
             }
 
             item {
-                DailyProofSection(
-                    state = state,
-                    onRecoveryCircuitTap = onRecoveryCircuitTap,
-                )
+                DailyProofSection(state = state)
             }
 
             // XP progress bar
@@ -130,6 +128,7 @@ fun StatusWindowScreen(
             item {
                 StreakSection(
                     streakWeeks = state.streakWeeks,
+                    recoveryCompleted = state.recoveryCircuitCompletedThisWeek,
                     onRecoveryCircuitTap = onRecoveryCircuitTap,
                 )
             }
@@ -156,6 +155,7 @@ fun StatusWindowScreen(
     if (showGradeBrowser) {
         GradeBrowserDialog(
             currentRank = state.rank,
+            unlockedBadges = state.unlockedBadges,
             onDismiss = { showGradeBrowser = false },
         )
     }
@@ -164,7 +164,6 @@ fun StatusWindowScreen(
 @Composable
 private fun DailyProofSection(
     state: GamificationUiState,
-    onRecoveryCircuitTap: () -> Unit,
 ) {
     val accent = when (state.dailyProofStatus) {
         com.ironlog.app.domain.gamification.DailyProofStatus.PROOF_LOGGED -> MaterialTheme.colorScheme.primary
@@ -235,9 +234,6 @@ private fun DailyProofSection(
                             )
                         }
                     }
-                }
-                TextButton(onClick = onRecoveryCircuitTap) {
-                    Text("Recovery circuit")
                 }
             }
             Image(
@@ -381,7 +377,11 @@ private fun XpLogRow(log: XpLogEntry) {
 }
 
 @Composable
-private fun StreakSection(streakWeeks: Int, onRecoveryCircuitTap: () -> Unit) {
+private fun StreakSection(
+    streakWeeks: Int,
+    recoveryCompleted: Boolean,
+    onRecoveryCircuitTap: () -> Unit,
+) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.padding(16.dp),
@@ -413,8 +413,11 @@ private fun StreakSection(streakWeeks: Int, onRecoveryCircuitTap: () -> Unit) {
                 )
                 Text("Ledger weeks that met your training standard", style = MaterialTheme.typography.bodySmall)
             }
-            TextButton(onClick = onRecoveryCircuitTap) {
-                Text("Recovery circuit")
+            TextButton(
+                onClick = onRecoveryCircuitTap,
+                enabled = !recoveryCompleted,
+            ) {
+                Text(if (recoveryCompleted) "Proof saved" else "Recovery circuit")
             }
         }
     }
@@ -540,6 +543,7 @@ private fun BadgeShelf(unlockedBadges: List<String>, onOpenBrowser: () -> Unit) 
         } else {
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(unlockedBadges) { badge ->
+                    val displayName = BadgeDefinitions.all.firstOrNull { it.id == badge }?.title ?: badge
                     Surface(
                         shape = RoundedCornerShape(18.dp),
                         color = MaterialTheme.colorScheme.primaryContainer,
@@ -553,13 +557,13 @@ private fun BadgeShelf(unlockedBadges: List<String>, onOpenBrowser: () -> Unit) 
                             verticalArrangement = Arrangement.spacedBy(2.dp),
                         ) {
                             Text(
-                                badge.take(2).uppercase(),
+                                displayName.take(2).uppercase(),
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Black,
                                 color = MaterialTheme.colorScheme.primary,
                             )
                             Text(
-                                badge.replace('_', ' ')
+                                displayName.replace('_', ' ')
                                     .split(' ')
                                     .joinToString(" ") { token -> token.replaceFirstChar(Char::titlecase) },
                                 style = MaterialTheme.typography.bodySmall,
@@ -575,7 +579,11 @@ private fun BadgeShelf(unlockedBadges: List<String>, onOpenBrowser: () -> Unit) 
 }
 
 @Composable
-private fun GradeBrowserDialog(currentRank: String, onDismiss: () -> Unit) {
+private fun GradeBrowserDialog(
+    currentRank: String,
+    unlockedBadges: List<String>,
+    onDismiss: () -> Unit,
+) {
     val c = useTheme()
     val current = IronGrade.entries.firstOrNull { it.label == currentRank } ?: IronGrade.UNCALIBRATED
     Dialog(onDismissRequest = onDismiss) {
@@ -588,11 +596,11 @@ private fun GradeBrowserDialog(currentRank: String, onDismiss: () -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Text("Grade Atlas", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Text("Achievement Atlas", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                     TextButton(onClick = onDismiss) { Text("Close") }
                 }
                 Text(
-                    "Swipe sideways. Locked grades show the exact proof required.",
+                    "Swipe sideways to inspect every grade and app badge.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodySmall,
                 )
@@ -638,6 +646,48 @@ private fun GradeBrowserDialog(currentRank: String, onDismiss: () -> Unit) {
                                 if (grade.ordinal >= IronGrade.APEX.ordinal) {
                                     GradeRequirement("Discipline window", "4+ years")
                                 }
+                            }
+                        }
+                    }
+                }
+                Text("App badges", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    items(BadgeDefinitions.all) { badge ->
+                        val unlocked = badge.id in unlockedBadges
+                        Card(
+                            modifier = Modifier.width(220.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (unlocked) MaterialTheme.colorScheme.primaryContainer
+                                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+                            ),
+                            border = BorderStroke(
+                                1.dp,
+                                if (unlocked) MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                                else MaterialTheme.colorScheme.outline.copy(alpha = 0.45f),
+                            ),
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                Text(
+                                    badge.tier.name,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.Black,
+                                )
+                                Text(badge.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                Text(
+                                    if (unlocked) "Unlocked" else "Locked",
+                                    color = if (unlocked) c.success else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                )
+                                Text(
+                                    badge.description,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
                             }
                         }
                     }

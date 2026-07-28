@@ -8,6 +8,17 @@ import org.junit.Test
 
 class OnboardingPersistenceTest {
     @Test
+    fun `onboarding modes map to settings modes used by the rest of the app`() {
+        assertEquals("strength", canonicalGoalMode("STRENGTH"))
+        assertEquals("hypertrophy", canonicalGoalMode("HYPERTROPHY"))
+        assertEquals("general_fitness", canonicalGoalMode("PERFORMANCE"))
+        assertEquals("general_fitness", canonicalGoalMode("ENDURANCE"))
+        assertEquals("conservative", canonicalProgressionStyle("LINEAR"))
+        assertEquals("balanced", canonicalProgressionStyle("DOUBLE_PROGRESSION"))
+        assertEquals("aggressive", canonicalProgressionStyle("UNDULATING"))
+    }
+
+    @Test
     fun `onboarding draft maps into canonical athlete calibration entity and fallback settings`() {
         val draft = OnboardingDraft(
             weeklyGoalDays = 5,

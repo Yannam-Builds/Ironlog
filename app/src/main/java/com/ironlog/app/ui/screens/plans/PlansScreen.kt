@@ -63,7 +63,6 @@ fun PlansScreen(
     onStartWorkout: (planId: String, dayId: String) -> Unit = { _, _ -> },
     onOpenProgramPicker: () -> Unit = {},
     onOpenAIPlan: () -> Unit = {},
-    onOpenQrScan: () -> Unit = {},
 ) {
     val c = useTheme()
     val context = LocalContext.current
@@ -94,7 +93,6 @@ fun PlansScreen(
     var showImport by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("") }
     var planToDelete by remember { mutableStateOf<UiPlan?>(null) }
-    var qrTargetPlan by remember { mutableStateOf<UiPlan?>(null) }
 
     // File picker for plan import
     val planImportPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -164,7 +162,6 @@ fun PlansScreen(
                     ActionTile("BROWSE PROGRAMS", Icons.Outlined.LibraryBooks, c, onOpenProgramPicker)
                     ActionTile("IMPORT PLAN", Icons.Outlined.Download, c) { showImport = !showImport }
                     ActionTile("CREATE WITH AI", Icons.Outlined.AutoAwesome, c, onOpenAIPlan)
-                    ActionTile("SCAN QR CODE", Icons.Outlined.QrCodeScanner, c, onOpenQrScan)
                 }
 
                 if (showImport) {
@@ -231,7 +228,6 @@ fun PlansScreen(
                                 }
                             }
                         },
-                        onShareQr = { qrTargetPlan = plan },
                         onStart = { dayId -> onStartWorkout(plan.id, dayId) },
                         dragModifier = Modifier.draggableHandle(),
                     )
@@ -298,22 +294,6 @@ fun PlansScreen(
         }
     }
 
-    // QR Share Sheet
-    val qrPlan = qrTargetPlan
-    if (qrPlan != null) {
-        PlanQrShareSheet(
-            plan = qrPlan,
-            onDismiss = { qrTargetPlan = null },
-            onShareText = { payload ->
-                val sendIntent = Intent(Intent.ACTION_SEND).apply {
-                    putExtra(Intent.EXTRA_TEXT, "ironlog://import?plan=$payload")
-                    type = "text/plain"
-                }
-                context.startActivity(Intent.createChooser(sendIntent, "Share Plan"))
-            },
-        )
-    }
-
     // Rename Modal
     val planToRename = showRenamePlan
     if (planToRename != null) {
@@ -355,7 +335,6 @@ private fun PlanCard(
     onRename: () -> Unit,
     onDelete: () -> Unit,
     onShare: () -> Unit,
-    onShareQr: () -> Unit = {},
     onDuplicate: () -> Unit = {},
     onSetActive: () -> Unit = {},
     onStart: (dayId: String) -> Unit = {},
@@ -481,7 +460,6 @@ private fun PlanCard(
                         }
                         DropdownMenuItem(text = { Text("Duplicate", color = c.text) }, onClick = { expandedMenu = false; onDuplicate() })
                         DropdownMenuItem(text = { Text("Share Plan", color = c.text) }, onClick = { expandedMenu = false; onShare() })
-                        DropdownMenuItem(text = { Text("Share as QR", color = c.text) }, onClick = { expandedMenu = false; onShareQr() })
                         DropdownMenuItem(text = { Text("Delete", color = c.danger) }, onClick = { expandedMenu = false; onDelete() })
                     }
                 }

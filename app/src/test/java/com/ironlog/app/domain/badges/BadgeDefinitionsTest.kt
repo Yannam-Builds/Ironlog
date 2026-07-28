@@ -48,4 +48,12 @@ class BadgeDefinitionsTest {
         assertTrue("first_plan" in earned)
         assertFalse("workouts_10" in earned)
     }
+
+    @Test fun `multiclass unlocks after all available goal modes`() {
+        val earned = BadgeDefinitions.evaluate(
+            AppStats(goalModesUsed = setOf("hypertrophy", "strength", "general_fitness"))
+        )
+
+        assertTrue("all_goal_modes" in earned)
+    }
 }

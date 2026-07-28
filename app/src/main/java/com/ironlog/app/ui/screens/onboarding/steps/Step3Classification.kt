@@ -2,12 +2,11 @@ package com.ironlog.app.ui.screens.onboarding.steps
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -47,13 +46,10 @@ fun Step3Classification(
             fontSize  = 13.sp,
             textAlign = TextAlign.Center,
         )
-        Spacer(Modifier.height(40.dp))
+        Spacer(Modifier.height(28.dp))
 
-        LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            contentPadding        = PaddingValues(horizontal = 8.dp),
-        ) {
-            items(OnboardingConfig.baselineOptions) { option ->
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            OnboardingConfig.baselineOptions.forEach { option ->
                 val isSelected = option.progressionStyle == selectedProgressionStyle
                 GlowCard(
                     selected  = isSelected,
@@ -62,31 +58,27 @@ fun Step3Classification(
                         onSelect(option.progressionStyle, option.defaultGoalMode)
                         onNext()
                     },
-                    modifier  = Modifier.width(184.dp),
+                    modifier  = Modifier.fillMaxWidth(),
                 ) {
-                    SetupBadge(
-                        code     = option.code,
-                        accent   = option.accent,
-                        modifier  = Modifier.align(Alignment.CenterHorizontally),
-                    )
-                    Spacer(Modifier.height(12.dp))
-                    Text(
-                        text          = option.label,
-                        color         = if (isSelected) option.accent else OnboardingConfig.textMuted,
-                        fontSize      = 14.sp,
-                        fontWeight    = FontWeight.Bold,
-                        letterSpacing = 0.6.sp,
-                        textAlign     = TextAlign.Center,
-                        modifier      = Modifier.fillMaxWidth(),
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        text      = option.description,
-                        color     = OnboardingConfig.textMuted,
-                        fontSize  = 11.sp,
-                        textAlign = TextAlign.Center,
-                        modifier  = Modifier.fillMaxWidth(),
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        SetupBadge(code = option.code, accent = option.accent)
+                        Spacer(Modifier.width(16.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = option.label,
+                                color = if (isSelected) option.accent else Color.White,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                            )
+                            Spacer(Modifier.height(3.dp))
+                            Text(
+                                text = option.description,
+                                color = OnboardingConfig.textMuted,
+                                fontSize = 12.sp,
+                                lineHeight = 17.sp,
+                            )
+                        }
+                    }
                 }
             }
         }

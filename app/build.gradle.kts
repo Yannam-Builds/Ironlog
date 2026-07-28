@@ -114,17 +114,6 @@ dependencies {
     // Health Connect (replaces deprecated Google Fit)
     implementation("androidx.health.connect:connect-client:1.1.0-alpha07")
 
-    // QR code generation (pure-Kotlin, no native dependencies)
-    implementation("io.github.g0dkar:qrcode-kotlin-android:4.2.0")
-
-    // ML Kit Barcode Scanning — camera QR scan
-    implementation("com.google.mlkit:barcode-scanning:17.3.0")
-
-    // CameraX — required by ML Kit scanner
-    implementation("androidx.camera:camera-camera2:1.4.2")
-    implementation("androidx.camera:camera-lifecycle:1.4.2")
-    implementation("androidx.camera:camera-view:1.4.2")
-
     // Jetpack Glance — Compose-based app widgets
     implementation("androidx.glance:glance-appwidget:1.1.1")
     implementation("androidx.glance:glance-material3:1.1.1")

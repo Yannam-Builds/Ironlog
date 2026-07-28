@@ -16,6 +16,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -34,7 +37,7 @@ import com.ironlog.app.ui.screens.onboarding.steps.*
 import kotlinx.coroutines.launch
 
 /**
- * Root onboarding composable — 8-screen Ironlog setup flow.
+ * Root onboarding composable — 10-screen IronLog setup flow.
  * HorizontalPager with swipe navigation and page indicator.
  * [onComplete] receives the completed [OnboardingDraft] for atomic save.
  */
@@ -48,6 +51,7 @@ fun OnboardingScreen(
     val seededSnapshot = remember(draft) { buildOnboardingLedgerSnapshot(draft) }
     val pagerState = rememberPagerState(pageCount = { 10 })
     val scope = rememberCoroutineScope()
+    var completionError by remember { mutableStateOf<String?>(null) }
 
     fun advance() = scope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) }
 
@@ -62,7 +66,8 @@ fun OnboardingScreen(
             userScrollEnabled = true,
             modifier          = Modifier
                 .fillMaxSize()
-                .padding(bottom = 40.dp),
+                // Keep step content clear of the floating indicator and system bar.
+                .padding(bottom = 84.dp),
         ) { page ->
                 when (page) {
                     0 -> Step1Awakening(onAdvance = { advance() })
@@ -147,11 +152,20 @@ fun OnboardingScreen(
                         onStartTraining = { advance() },
                     )
                     9 -> Step9ProgramSetup(
-                        onSkip = { scope.launch { onComplete(draft) } },
+                        onSkip = {
+                            scope.launch {
+                                runCatching { onComplete(draft) }
+                                    .onFailure { completionError = it.message ?: "Could not finish setup. Please try again." }
+                            }
+                        },
                         onApplyTemplate = { template ->
                             scope.launch {
-                                runCatching { planRepo.importFullPlan(template.toPlanObject()) }
-                                onComplete(draft)
+                                runCatching {
+                                    planRepo.importFullPlan(template.toPlanObject())
+                                    onComplete(draft)
+                                }.onFailure {
+                                    completionError = it.message ?: "Could not save the starter plan. Please try again."
+                                }
                             }
                         },
                     )
@@ -195,5 +209,16 @@ fun OnboardingScreen(
                 }
             }
         }
+    }
+
+    completionError?.let { message ->
+        AlertDialog(
+            onDismissRequest = { completionError = null },
+            title = { Text("Setup not saved") },
+            text = { Text(message) },
+            confirmButton = {
+                TextButton(onClick = { completionError = null }) { Text("OK") }
+            },
+        )
     }
 }

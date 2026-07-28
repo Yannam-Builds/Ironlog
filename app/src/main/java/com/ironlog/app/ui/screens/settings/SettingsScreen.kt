@@ -674,7 +674,13 @@ fun SettingsScreen(
                                     .clickable(enabled = cloudApiKey.isNotBlank() && cloudBaseUrl.isNotBlank() && cloudModelName.isNotBlank()) {
                                         scope.launch {
                                             val fmt = PROVIDER_PRESETS.find { it.key == cloudPreset }?.apiFormat ?: "openai"
-                                            withContext(Dispatchers.IO) { CloudAiKeyStore.save(context, cloudPreset, cloudApiKey) }
+                                            val keySaved = runCatching {
+                                                withContext(Dispatchers.IO) { CloudAiKeyStore.save(context, cloudPreset, cloudApiKey) }
+                                            }
+                                            if (keySaved.isFailure) {
+                                                cloudVerifyResult = "✗ API key could not be stored securely"
+                                                return@launch
+                                            }
                                             vm.updateSettingsAsync(
                                                 settings.copy(
                                                     intelligenceMode = "cloud_ai",

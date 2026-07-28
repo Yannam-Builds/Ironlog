@@ -62,4 +62,18 @@ class RecoveryReadinessEngineTest {
         )
         assertTrue(aWeekLater.getValue("Push") > immediatelyAfter.getValue("Push"))
     }
+
+    @Test fun `fully recovered regions do not recommend reducing volume`() {
+        val suggestions = RecoveryReadinessEngine.suggestions(
+            mapOf("Push" to 1.0, "Pull" to 1.0, "Legs" to 1.0),
+        )
+        assertTrue(suggestions.none { it.contains("reduce volume", ignoreCase = true) })
+    }
+
+    @Test fun `fatigued region recommends reducing volume`() {
+        val suggestions = RecoveryReadinessEngine.suggestions(
+            mapOf("Push" to 0.95, "Pull" to 0.55),
+        )
+        assertTrue(suggestions.any { it.contains("Pull") && it.contains("reduce volume") })
+    }
 }

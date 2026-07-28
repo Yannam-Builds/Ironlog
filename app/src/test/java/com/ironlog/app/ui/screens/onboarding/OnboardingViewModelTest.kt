@@ -102,4 +102,17 @@ class OnboardingViewModelTest {
         vm.updateHistoricalTrainingDaysPerWeek(5)
         assertEquals(5, vm.draft.value.historicalTrainingDaysPerWeek)
     }
+
+    @Test fun `baseline inputs are clamped before preview and persistence`() {
+        val vm = OnboardingViewModel()
+        vm.updateBodyweightKg(-10)
+        vm.updateTrainingAgeMonths(-3)
+        vm.updateBaselinePushups(-1)
+        vm.updateBaselineMileRunSeconds(99_999)
+
+        assertEquals(20, vm.draft.value.bodyweightKg)
+        assertEquals(0, vm.draft.value.trainingAgeMonths)
+        assertEquals(0, vm.draft.value.baselinePushups)
+        assertEquals(7_200, vm.draft.value.baselineMileRunSeconds)
+    }
 }

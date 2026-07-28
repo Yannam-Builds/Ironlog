@@ -101,7 +101,6 @@ import com.ironlog.app.ui.theme.IronLogThemeTokens
 import com.ironlog.app.ui.screens.OnboardingScreen
 import com.ironlog.app.ui.screens.plans.PlanEditorScreen
 import com.ironlog.app.ui.screens.plans.PlansScreen
-import com.ironlog.app.ui.screens.plans.PlanQrScanScreen
 import com.ironlog.app.ui.screens.settings.PrivacyScreen
 import com.ironlog.app.ui.screens.plans.ProgramInsightsScreen
 import com.ironlog.app.ui.screens.plans.ProgramPickerScreen
@@ -340,6 +339,7 @@ fun AppNavigator(
                 measurements    = bodyState.measurements,
                 bodyWeight      = bodyState.bodyWeight,
                 weightUnit      = statsState.weightUnit,
+                onBack          = { navController.popBackStack() },
                 onLogBodyWeight = { bodyVm.add(it) },
                 onAddMeasurement = { bodyVm.add(it) },
             )
@@ -441,16 +441,6 @@ fun AppNavigator(
             )
         }
         composable("AIPlan")         { AIPlanScreen(onBack = { navController.popBackStack() }) }
-        composable("ScanPlanQr") {
-            val plansVm: PlansViewModel = viewModel()
-            PlanQrScanScreen(
-                onPlanScanned = { plan ->
-                    plansVm.importPlanFromQr(plan)
-                    navController.popBackStack()
-                },
-                onBack = { navController.popBackStack() },
-            )
-        }
         composable("DataPortability") {
             val app = LocalContext.current.applicationContext as Application
             val dpScope = rememberCoroutineScope()
@@ -523,15 +513,19 @@ fun AppNavigator(
             if (showMakeupSheet) {
                 RecoveryCircuitSheet(
                     onDismiss = { showMakeupSheet = false },
-                    onComplete = { _ ->
+                    onComplete = { circuitId ->
                         showMakeupSheet = false
                         val weekKey = java.time.LocalDate.now().let {
                             val week = it.get(java.time.temporal.WeekFields.ISO.weekOfWeekBasedYear())
                             val year = it.get(java.time.temporal.WeekFields.ISO.weekBasedYear())
                             "$year-W${week.toString().padStart(2, '0')}"
                         }
-                        gamificationVm.completeRecoveryCircuit(weekKey)
-                        gamificationVm.refreshFromHistory(appState.history, appState.settings.weeklyGoalDays)
+                        gamificationVm.completeRecoveryCircuit(
+                            isoWeekKey = weekKey,
+                            circuitId = circuitId,
+                            history = appState.history,
+                            weeklyGoal = appState.settings.weeklyGoalDays,
+                        )
                     },
                 )
             }
@@ -541,13 +535,12 @@ fun AppNavigator(
 
 private suspend fun settingsRepoSaveOnboardingDataFull(context: Context, draft: com.ironlog.app.ui.screens.onboarding.OnboardingDraft) {
     val repo = SettingsRepository()
-    repo.setBoolean("onboarding_complete", true)
     val raw  = repo.getString("ironlog_settings") ?: "{}"
     val json = runCatching { org.json.JSONObject(raw) }.getOrDefault(org.json.JSONObject())
     json.put("weeklyGoalDays",       draft.weeklyGoalDays.coerceIn(1, 7))
     json.put("weightUnit",           if (draft.weightUnit == "lbs") "lbs" else "kg")
-    json.put("progressionStyle",     draft.progressionStyle)
-    json.put("goalMode",             draft.goalMode)
+    json.put("progressionStyle",     canonicalProgressionStyle(draft.progressionStyle))
+    json.put("goalMode",             canonicalGoalMode(draft.goalMode))
     json.put("intelligenceMode",     draft.intelligenceMode)
     json.put("cloudAiModelName",     draft.cloudAiModelName)
     json.put("cloudAiProviderPreset",draft.cloudAiProviderPreset)
@@ -575,6 +568,10 @@ private suspend fun settingsRepoSaveOnboardingDataFull(context: Context, draft: 
         val provider = draft.cloudAiProviderPreset.ifBlank { "custom" }
         CloudAiKeyStore.save(context, provider, draft.cloudAiApiKey)
     }
+    // Commit this marker last. A crash or key/calibration failure must return the
+    // athlete to onboarding instead of launching a partially initialized ledger.
+    repo.setBoolean("onboarding_state_migrated_v1", true)
+    repo.setBoolean("onboarding_complete", true)
 }
 
 internal fun buildCalibrationEntityFromOnboardingDraft(
@@ -588,7 +585,7 @@ internal fun buildCalibrationEntityFromOnboardingDraft(
     entity.historicalTrainingDaysPerWeek = draft.historicalTrainingDaysPerWeek.coerceIn(1, 7)
     entity.weightUnit = if (draft.weightUnit == "lbs") "lbs" else "kg"
     entity.bodyweightKg = draft.bodyweightKg.takeIf { it > 0 }?.toDouble()
-    entity.goalMode = draft.goalMode.lowercase()
+    entity.goalMode = canonicalGoalMode(draft.goalMode)
     entity.weeklyGoalDays = draft.weeklyGoalDays.coerceIn(1, 7)
     entity.hasPastTraining = draft.hasPastTraining
     entity.hasGymAccess = draft.hasGymAccess
@@ -615,6 +612,18 @@ internal fun onboardingBaselineSettingsFromDraft(
     "baseline_has_past_training" to draft.hasPastTraining.toString(),
     "baseline_has_gym_access" to draft.hasGymAccess.toString(),
 )
+
+internal fun canonicalGoalMode(value: String): String = when (value.trim().lowercase()) {
+    "strength" -> "strength"
+    "general_fitness", "general fitness", "performance", "endurance" -> "general_fitness"
+    else -> "hypertrophy"
+}
+
+internal fun canonicalProgressionStyle(value: String): String = when (value.trim().lowercase()) {
+    "conservative", "linear" -> "conservative"
+    "aggressive", "undulating" -> "aggressive"
+    else -> "balanced"
+}
 
 private suspend fun settingsRepoSetPendingNavRoute(route: String) {
     SettingsRepository().setString("pending_nav_route", route)
@@ -752,7 +761,6 @@ private fun Tabs(navController: NavHostController) {
                         },
                         onOpenProgramPicker = { navController.navigate("ProgramPicker") },
                         onOpenAIPlan        = { navController.navigate("AIPlan") },
-                        onOpenQrScan        = { navController.navigate("ScanPlanQr") },
                     )
                     "Log" -> HistoryScreen(
                         onOpenProgressPhotos = { navController.navigate("ProgressPhotos") },
@@ -769,6 +777,7 @@ private fun Tabs(navController: NavHostController) {
                         onOpenRecoveryMap        = { navController.navigate("RecoveryMap") },
                         onOpenTrainingIntelligence = { navController.navigate("TrainingIntelligence") },
                         onOpenProgressPhotos     = { navController.navigate("ProgressPhotos") },
+                        onOpenStatusWindow       = { navController.navigate("statusWindow") },
                     )
                     "Settings" -> SettingsScreen(
                         onOpenProgramPicker        = { navController.navigate("ProgramPicker") },

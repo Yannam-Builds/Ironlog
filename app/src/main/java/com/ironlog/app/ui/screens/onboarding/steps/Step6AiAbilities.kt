@@ -6,7 +6,6 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -85,6 +84,7 @@ fun Step6AiAbilities(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var keyVisible by remember { mutableStateOf(false) }
+    var showProviderSheet by remember { mutableStateOf(false) }
     var modelExpanded by remember { mutableStateOf(false) }
     var showModelSheet by remember { mutableStateOf(false) }
     var loadingModels by remember { mutableStateOf(false) }
@@ -104,7 +104,7 @@ fun Step6AiAbilities(
             .fillMaxSize()
             .background(OnboardingConfig.bgDark)
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 24.dp, vertical = 32.dp),
+            .padding(start = 24.dp, top = 32.dp, end = 24.dp, bottom = 64.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
@@ -147,27 +147,25 @@ fun Step6AiAbilities(
             Column(Modifier.padding(18.dp)) {
                 Text("Cloud AI", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Black)
                 Spacer(Modifier.height(4.dp))
-                Text("Gemini 2.0 Flash-Lite or Flash is recommended for free users.", color = OnboardingConfig.textMuted, fontSize = 13.sp, lineHeight = 18.sp)
+                Text("Choose a provider and model you already have access to. Your key is stored securely on this device.", color = OnboardingConfig.textMuted, fontSize = 13.sp, lineHeight = 18.sp)
 
                 Spacer(Modifier.height(18.dp))
                 Text("Provider", color = OnboardingConfig.textMuted, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                OutlinedButton(
+                    onClick = { showProviderSheet = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(1.dp, OnboardingConfig.cardBorder),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 14.dp),
                 ) {
-                    OnboardingConfig.AiProvider.entries.forEach { item ->
-                        ProviderChip(
-                            label = item.displayName,
-                            selected = item == provider,
-                            onClick = {
-                                onProviderChange(item.key, OnboardingConfig.defaultModelFor(item))
-                                remoteModels = emptyList()
-                                status = null
-                            },
-                        )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(provider.displayName, color = Color.White, fontWeight = FontWeight.Bold)
+                        Text("Change", color = OnboardingConfig.accentBlue, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
                 }
 
@@ -209,8 +207,7 @@ fun Step6AiAbilities(
                 )
 
                 Spacer(Modifier.height(12.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                    OutlinedButton(
+                OutlinedButton(
                         onClick = {
                             remoteModels = presetModels.map { it.modelId }
                             showModelSheet = true
@@ -298,32 +295,19 @@ fun Step6AiAbilities(
                                 )
                             }
                         },
-                        enabled = cloudApiKey.isNotBlank() && selectedModel.isNotBlank() && !verifying,
-                        modifier = Modifier.weight(1f),
+                        enabled = cloudApiKey.isNotBlank() && selectedModel.isNotBlank() && provider.baseUrl.isNotBlank() && !verifying,
+                        modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(999.dp),
                     ) {
                         Text(if (verifying) "Checking..." else "Verify")
                     }
-                    OutlinedButton(
-                        onClick = { onNext() },
-                        enabled = true,
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(999.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            containerColor = OnboardingConfig.accentBlue.copy(alpha = 0.2f),
-                            contentColor = Color.White,
-                        ),
-                    ) {
-                        Text(if (cloudApiKey.isBlank()) "Use Local" else "Save")
-                    }
-                }
             }
         }
 
         Spacer(Modifier.height(24.dp))
-        GlowButton(text = stringResource(R.string.onb_ai_cta), onClick = onNext)
+        GlowButton(text = if (cloudApiKey.isBlank()) "Continue with local coaching" else "Save and continue", onClick = onNext)
         TextButton(onClick = onSkip, modifier = Modifier.fillMaxWidth()) {
-            Text(stringResource(R.string.onb_ai_skip), color = OnboardingConfig.textMuted, fontSize = 13.sp)
+            Text("Skip cloud setup", color = OnboardingConfig.textMuted, fontSize = 13.sp)
         }
         Spacer(Modifier.height(24.dp))
     }
@@ -361,20 +345,44 @@ fun Step6AiAbilities(
             Spacer(Modifier.height(24.dp))
         }
     }
-}
 
-@Composable
-private fun ProviderChip(label: String, selected: Boolean, onClick: () -> Unit) {
-    OutlinedButton(
-        onClick = onClick,
-        shape = RoundedCornerShape(999.dp),
-        border = BorderStroke(1.dp, if (selected) Color.White else OnboardingConfig.cardBorder),
-        colors = ButtonDefaults.outlinedButtonColors(
-            containerColor = if (selected) Color.White.copy(alpha = 0.12f) else Color.Transparent,
-            contentColor = if (selected) Color.White else OnboardingConfig.textMuted,
-        ),
-    ) {
-        Text(label, fontWeight = FontWeight.Bold)
+    if (showProviderSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showProviderSheet = false },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            containerColor = OnboardingConfig.surfaceDark,
+        ) {
+            Text(
+                "Choose provider",
+                color = Color.White,
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Black,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
+            )
+            Column(
+                modifier = Modifier.padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OnboardingConfig.AiProvider.entries.forEach { item ->
+                    Surface(
+                        color = if (item == provider) OnboardingConfig.accentBlue.copy(alpha = 0.18f) else OnboardingConfig.bgDark.copy(alpha = 0.55f),
+                        shape = RoundedCornerShape(18.dp),
+                        border = BorderStroke(1.dp, if (item == provider) OnboardingConfig.accentBlue else OnboardingConfig.cardBorder),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                onProviderChange(item.key, OnboardingConfig.defaultModelFor(item))
+                                remoteModels = emptyList()
+                                status = null
+                                showProviderSheet = false
+                            },
+                    ) {
+                        Text(item.displayName, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(16.dp))
+                    }
+                }
+            }
+            Spacer(Modifier.height(24.dp))
+        }
     }
 }
 
