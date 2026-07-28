@@ -26,14 +26,10 @@ import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -85,7 +81,6 @@ fun Step6AiAbilities(
     val scope = rememberCoroutineScope()
     var keyVisible by remember { mutableStateOf(false) }
     var showProviderSheet by remember { mutableStateOf(false) }
-    var modelExpanded by remember { mutableStateOf(false) }
     var showModelSheet by remember { mutableStateOf(false) }
     var loadingModels by remember { mutableStateOf(false) }
     var verifying by remember { mutableStateOf(false) }
@@ -207,6 +202,7 @@ fun Step6AiAbilities(
                 )
 
                 Spacer(Modifier.height(12.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                 OutlinedButton(
                         onClick = {
                             remoteModels = presetModels.map { it.modelId }
@@ -249,27 +245,30 @@ fun Step6AiAbilities(
                 Spacer(Modifier.height(14.dp))
                 Text("Model", color = OnboardingConfig.textMuted, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(6.dp))
-                ExposedDropdownMenuBox(expanded = modelExpanded, onExpandedChange = { modelExpanded = it }) {
-                    OutlinedTextField(
-                        value = selectedModel,
-                        onValueChange = {},
-                        readOnly = true,
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(modelExpanded) },
-                        colors = onboardingTextFieldColors(),
-                        modifier = Modifier
-                            .menuAnchor(MenuAnchorType.PrimaryNotEditable)
-                            .fillMaxWidth(),
-                    )
-                    ExposedDropdownMenu(expanded = modelExpanded, onDismissRequest = { modelExpanded = false }) {
-                        modelOptions.forEach { model ->
-                            DropdownMenuItem(
-                                text = { Text(model, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                                onClick = {
-                                    onModelChange(model)
-                                    modelExpanded = false
-                                },
-                            )
-                        }
+                OutlinedButton(
+                    onClick = {
+                        remoteModels = (remoteModels + presetModels.map { it.modelId }).distinct()
+                        showModelSheet = true
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(1.dp, OnboardingConfig.cardBorder),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 14.dp),
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            selectedModel,
+                            color = Color.White,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Text("Change", color = OnboardingConfig.accentBlue, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
                 }
 
@@ -302,6 +301,7 @@ fun Step6AiAbilities(
                         Text(if (verifying) "Checking..." else "Verify")
                     }
             }
+        }
         }
 
         Spacer(Modifier.height(24.dp))
