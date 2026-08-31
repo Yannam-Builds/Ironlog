@@ -26,7 +26,10 @@ test("landing native themes and first launch", async ({ page }, testInfo) => {
     "Train.Recover.Prove it.",
   );
   await expect(page.locator(".hero h1")).toHaveCSS("font-weight", "350");
-  await expect(page.locator(".theme-showcase h2")).toHaveCSS("font-weight", "450");
+  await expect(page.locator(".theme-showcase h2")).toHaveCSS(
+    "font-weight",
+    "450",
+  );
   await expect(page.locator(".brand").first()).toHaveCSS("font-weight", "500");
   await page.screenshot({
     path: `output/playwright/${testInfo.project.name}-landing.png`,
@@ -48,11 +51,20 @@ test("landing native themes and first launch", async ({ page }, testInfo) => {
   );
   await page.getByRole("link", { name: "Try App in web instead" }).click();
   await expect(
+    page
+      .frameLocator('iframe[title="IronLog interactive app preview"]')
+      .getByRole("heading", { name: "Make it your own." }),
+  ).toBeVisible();
+  await page
+    .getByRole("link", { name: "Open app full-screen", exact: true })
+    .click();
+  await expect(
     page.getByRole("heading", { name: "Make it your own." }),
   ).toBeVisible();
   // Lighter editorial typography must not leak into the native-style app.
-  await expect(page.getByRole("heading", { name: "Make it your own." }))
-    .toHaveCSS("font-weight", "800");
+  await expect(
+    page.getByRole("heading", { name: "Make it your own." }),
+  ).toHaveCSS("font-weight", "800");
   await expect(page.locator("html")).toHaveAttribute(
     "data-theme",
     "deep_forest",

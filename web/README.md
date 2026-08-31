@@ -13,6 +13,8 @@ npm run dev
 
 Landing: `http://127.0.0.1:5173/Ironlog/`. App: `/Ironlog/app/#/home`.
 
+The landing CTA launches the working app inside a phone-sized iframe. It is a browser preview, not an Android emulator or a desktop dashboard. **Open app full-screen** uses the same origin and saved data; use that entry for Android Chrome/iPhone Safari and Home Screen installation. The iframe loads only after a user launches it, and theme selection applies to both experiences.
+
 For production/offline verification:
 
 ```sh
@@ -33,9 +35,9 @@ Service workers run in the production preview, not the development server. Brows
 - `src/domain/`: calculations, date rules, plan/backup codecs and manual external-AI prompt construction.
 - `src/features/`: onboarding, the five native tabs, detail screens and editor flows.
 - `src/ui/`: native theme tokens, opaque dialogs, shared controls, body-map rendering and update prompt.
-- `src/landing.tsx`: landing page and explicitly synthetic product demonstration.
+- `src/landing.tsx`: landing page, interactive phone preview and a separately labeled synthetic walkthrough.
 - `src/research.tsx`: shared, six-paper registry with feature relevance and limitations.
-- `tests/`: synthetic regression fixtures and desktop Chromium/WebKit journeys.
+- `tests/`: synthetic regression fixtures, desktop Chromium/WebKit journeys and Pixel 7 Chrome emulation for the phone preview.
 
 See [domain fidelity](docs/domain-parity.md) and [acceptance status](docs/acceptance.md). Do not infer full native parity or physical-iPhone verification from a passing unit test suite.
 
@@ -67,9 +69,11 @@ The PWA uses prompt updates. Pending writes and active workouts disable update c
 
 **Preview publication requested by the owner on 31 August 2026.** Repository publication is separate from full product acceptance. The workflow must pass before Pages deployment; never skip a failed test to publish. Real iPhone testing and the documented parity/acceptance gaps remain open. Do not include unrelated Android edits, APKs, keystores or user backups.
 
-On Windows, the latest run passed 85 unit tests and 19/20 main browser tests. The remaining desktop WebKit simulated-offline reload failure reproduces without IronLog. Run the supplemental origin-unavailable workout tests with `npx playwright test --config=diagnostics/playwright.config.ts` (both engines pass). See [the diagnostic evidence and limitations](diagnostics/OFFLINE-WEBKIT.md); this does not replace real device testing or suppress the original test.
+On Windows, the latest run passed 85 unit tests and all 29 main browser tests. The phone-preview journeys run in desktop Chromium/WebKit and Pixel 7 Chrome emulation; a complete workout is logged and finished inside the frame. Both supplemental origin-unavailable workout tests pass with `npx playwright test --config=diagnostics/playwright.config.ts`. The main offline test now closes its actual HTTP server; the standalone WebKit offline-emulation failure remains documented and reproducible. See [the diagnostic evidence and limitations](diagnostics/OFFLINE-WEBKIT.md); this is not physical-device or installed-PWA verification.
 
 OpenGym exercise pictures/GIFs are not included. Its [media notice](https://gitlab.com/DuarteSantos8/opengym/-/blob/main/NOTICE.md) and the [upstream dataset terms](https://github.com/hasaneyldrm/exercises-dataset#license--usage) require separate media permission; software licenses do not grant those image rights.
+
+See the [six-feature OpenGym reference](docs/opengym-feature-reference-2026-08-31.md) for independently written Kotlin requirements and source-level correctness findings. No competitor implementation or media was copied, and no native feature is claimed as shipped by this website pass.
 
 ## Skill provenance
 

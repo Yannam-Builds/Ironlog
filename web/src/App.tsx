@@ -210,7 +210,11 @@ export function App() {
               ) : (
                 <img src={asset("ironlog-logo.svg")} alt="" />
               )}
-              <a href={import.meta.env.BASE_URL} aria-label="IronLog website">
+              <a
+                href={import.meta.env.BASE_URL}
+                target="_top"
+                aria-label="IronLog website"
+              >
                 IRON<span>LOG</span>
               </a>
               <small>WEB</small>

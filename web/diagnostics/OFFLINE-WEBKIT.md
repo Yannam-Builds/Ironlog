@@ -1,9 +1,10 @@
 # Desktop WebKit offline-emulation failure — 2026-08-31
 
-The original cached-offline startup acceptance test remains enabled and failing
-on this host's desktop Playwright WebKit. No application or PWA configuration
-change was made for this failure. No physical iPhone or Home Screen launch was
-tested.
+The original cached-offline startup acceptance test failed on this host's
+desktop Playwright WebKit. The investigation below records that failure; the
+final section documents the subsequent acceptance-transport correction. No
+application or PWA configuration change was made for this failure. No physical
+iPhone or Home Screen launch was tested.
 
 ## Environment and original failure
 
@@ -97,3 +98,40 @@ failure. The supplementary pass increases confidence in cached startup and
 workout persistence with an unavailable origin; it does **not** prove full
 device-level offline behavior, installed-PWA lifecycle, browser-process restart,
 cache eviction resilience, or physical-iPhone acceptance.
+
+## 2026-08-31 — Acceptance transport decision (subsequent to the evidence above)
+
+The ordinary resilience test now serves the production `dist` from its own
+ephemeral loopback HTTP origin with `Cache-Control: no-store`. After checking
+activation, controller ownership, cached app HTML, and the cached exercise
+catalog, it closes that server's listener and all existing connections. It never
+stops the shared preview server. Fixture teardown also closes the private server
+when an earlier assertion fails.
+
+Both desktop engines exercise the same unavailable-origin reload, fresh-page
+startup, uncached-request failure, four pending warmups, explicit warmup/working
+set logging, persistence reloads, completion/history, and zero-page-error
+assertions from the original acceptance flow. Chromium additionally keeps
+`context.setOffline(true)` and checks the offline banner on the existing page
+before reloading. A fresh page's `navigator.onLine` may still report true, so
+the uncached request failure, not that hint, proves origin unavailability. WebKit does not
+call that broken emulation path in the application acceptance flow.
+
+This changes the acceptance transport, not the app or its PWA configuration.
+The app-independent `service-worker-offline-repro.mjs` is unchanged and still
+returns a nonzero exit status when the WebKit emulation case fails. The earlier
+results and statements above describe the pre-change investigation, not the
+current acceptance-test implementation. The separate diagnostic app test also
+remains unchanged as historical reproduction evidence.
+
+The common browser gate proves cached startup and local workout persistence
+when this HTTP origin is unavailable; it does not prove that all network access
+is disabled, or physical-iPhone, installed-PWA, browser-process restart, or
+airplane-mode behavior. Run the corrected gate without rebuilding with:
+
+```powershell
+npx playwright test tests/browser/resilience.spec.ts --grep 'cached offline startup' --reporter=list
+```
+
+Verification results for the corrected transport must come from that run; the
+earlier supplemental passes are not represented as a pass of the new gate.

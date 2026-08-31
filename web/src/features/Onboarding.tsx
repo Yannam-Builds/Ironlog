@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { useApp } from "../ui/context";
 import { saveProfile, savePlan } from "../data/store";
 import { instantiatePlan } from "../domain/plans";
@@ -17,6 +17,15 @@ export function Onboarding() {
   const [draft, setDraft] = useState(data.profile);
   const [starter, setStarter] = useState("");
   const step = data.profile.onboardingStep;
+  const content = useRef<HTMLElement>(null);
+  useLayoutEffect(() => {
+    // The preceding Continue button may be below the fold, especially inside
+    // the phone preview. A new step must start at its heading, not the old offset.
+    const heading = content.current?.querySelector("h1");
+    heading?.setAttribute("tabindex", "-1");
+    heading?.focus({ preventScroll: true });
+    window.scrollTo({ top: 0, behavior: "instant" });
+  }, [step]);
   const change = (p: Partial<typeof draft>) => setDraft({ ...draft, ...p });
   const next = () =>
     run(async () => {
@@ -39,7 +48,7 @@ export function Onboarding() {
       } else await saveProfile({ ...draft, onboardingStep: step + 1 });
     });
   return (
-    <main className="onboarding">
+    <main className="onboarding" ref={content}>
       <header className="onboard-brand">
         <img src={asset("ironlog-logo.svg")} alt="IronLog" />
         <span>IRONLOG</span>
@@ -235,7 +244,7 @@ export function Onboarding() {
           {busy ? "Saving…" : step === 3 ? "Start training" : "Continue"}
         </Button>
       </div>
-      <a href={`${import.meta.env.BASE_URL}#privacy`}>
+      <a href={`${import.meta.env.BASE_URL}#privacy`} target="_top">
         Privacy & local storage
       </a>
     </main>

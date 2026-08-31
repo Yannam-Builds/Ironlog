@@ -22,5 +22,10 @@ export default defineConfig({
       },
     },
     { name: "webkit", use: { ...devices["iPhone 13"], browserName: "webkit" } },
+    {
+      name: "android-chrome",
+      testMatch: "phone-preview.spec.ts",
+      use: { ...devices["Pixel 7"], browserName: "chromium" },
+    },
   ],
 });

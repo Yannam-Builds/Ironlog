@@ -15,7 +15,7 @@
 </div>
 
 > [!NOTE]
-> IronLog is under active development and physical-device QA. The signed build is not distributed from this repository yet; build locally or follow a future tagged release.
+> IronLog is under active development and physical-device QA. The existing [Android pre-alpha](https://github.com/Yannam-Builds/Ironlog/releases/tag/v0.1.0-pre-alpha.1) is available for testing; it is not a new APK from this website update.
 
 ## IronLog Web preview
 
@@ -24,16 +24,19 @@ The website now has a separate product landing page and a local-first browser ap
 The August 31 website update includes:
 
 - The current transparent monochrome IronLog mark, lighter Lexend landing typography, Forge Fox artwork and twelve native themes shared between the page and app. Native app headings keep their heavier weight.
+- A real interactive app inside a phone frame on the landing page—not a desktop dashboard or an Android emulator. Onboarding and workouts save in this browser. Open the same app full-screen for Android Chrome or iPhone Safari; no separate account is needed.
 - Home, Plans, Log, Stats and Settings; saved onboarding, editable plans, custom exercises, notes, explicit warmup queues, resumable workouts, set editing/deletion, rest timers and plate calculation.
 - Local history, recovery estimates, Ledger progression, body measurements, photo comparison and validated backup/restore. No account, phone synchronization or browser cloud-AI backend.
 - Opaque modal sheets with keyboard focus wrapping, Escape dismissal and blocked background taps; mobile safe-area layouts and accessible numeric entry.
 - A six-paper research bibliography with limitations, separate software/font notices, and optional Home Screen installation.
 
-**Preview, not full native parity.** On Windows, 85 unit tests pass, the production build and scoped output scan pass, and 19 of 20 desktop Chromium/WebKit browser tests pass. The remaining WebKit simulated-offline reload fails even in an app-independent service-worker reproduction. Supplemental tests with the actual HTTP origin stopped pass in both engines. These results do not verify real iPhone Safari, Home Screen lifecycle or VoiceOver. See the [acceptance record](web/docs/acceptance.md), [native parity gaps](web/docs/domain-parity.md) and [offline investigation](web/diagnostics/OFFLINE-WEBKIT.md).
+**Preview, not full native parity.** On Windows, 85 unit tests, all 29 browser tests, the production build and scoped output scan pass. Browser coverage includes desktop Chromium/WebKit and Pixel 7 Chrome emulation for the phone preview, including a complete embedded workout. Both supplemental origin-stopped workout checks also pass. These results do not verify physical Android/iPhone devices, installed Home Screen lifecycle or VoiceOver. See the [acceptance record](web/docs/acceptance.md), [native parity gaps](web/docs/domain-parity.md) and [offline investigation](web/diagnostics/OFFLINE-WEBKIT.md).
 
-**Deployment status:** website source and documentation are on `main`, but the redesigned site is not live yet. [Linux CI for the website commit](https://github.com/Yannam-Builds/Ironlog/actions/runs/33369416266) passed unit tests/build/output checks and 19/20 browser tests, then reproduced the same WebKit offline-reload error. Deployment was blocked; the existing Pages publishing setup was not changed. The failing test remains enabled.
+**Publishing:** the [website workflow](https://github.com/Yannam-Builds/Ironlog/actions/workflows/web-pages.yml) builds and publishes only `web/dist` after its verification job succeeds. Pages must use **GitHub Actions**, not the legacy branch/README renderer. The app-independent WebKit offline-emulation failure is retained as a diagnostic; the application gate now closes its actual HTTP origin and verifies cached startup and workout persistence without it.
 
 Workout instruction media from OpenGym is **not bundled**: its media notice and upstream dataset require separate reuse permission. Kotlin source, APKs and phone data are unchanged by this website update.
+
+The [deeper OpenGym feature review](web/docs/opengym-feature-reference-2026-08-31.md) proposes six independently implementable Kotlin improvements: source-linked records, consistent exercise discovery, explicit note lifetimes, date-specific scheduling, atomic day copying and clearly scoped backups. It includes source-level issues to investigate, not claims that those native changes have shipped.
 
 Run locally with Node 24:
 

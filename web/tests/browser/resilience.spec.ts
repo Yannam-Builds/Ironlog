@@ -1,9 +1,23 @@
-import { test, expect, type Page } from "@playwright/test";
+import { test as base, expect, type Page } from "@playwright/test";
+import { startTestOrigin } from "../helpers/test-origin";
+
+const test = base.extend<{
+  testOrigin: Awaited<ReturnType<typeof startTestOrigin>>;
+}>({
+  testOrigin: async ({}, use) => {
+    const origin = await startTestOrigin();
+    try {
+      await use(origin);
+    } finally {
+      await origin.stop();
+    }
+  },
+});
 
 // Synthetic UI-created data only. These are desktop browser-engine checks,
 // not a claim of physical iPhone or installed Home Screen verification.
-async function onboard(page: Page) {
-  await page.goto("app/");
+async function onboard(page: Page, appUrl = "app/") {
+  await page.goto(appUrl);
   await page.getByLabel("Your name").fill("Resilience QA Athlete");
   for (const heading of [
     "What are you training for?",
@@ -43,14 +57,16 @@ async function logWorkingSet(page: Page, weight: string, reps: string) {
   await expect(card.locator(".sets")).toContainText(`${weight} kg × ${reps}`);
 }
 
-test("cached offline startup resumes pending warmups and saves without a network", async ({
+test("cached offline startup resumes pending warmups and saves with its origin unavailable", async ({
   page,
   context,
+  browserName,
+  testOrigin,
 }, testInfo) => {
   test.setTimeout(120_000);
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(String(error)));
-  await onboard(page);
+  await onboard(page, testOrigin.appUrl);
   await startBenchSession(page);
   const card = page.locator(".exercise-card");
   await card.getByLabel("KG", { exact: true }).fill("65");
@@ -127,7 +143,24 @@ test("cached offline startup resumes pending warmups and saves without a network
   appUrl.pathname = `${appUrl.pathname}app/`;
   appUrl.hash = "/home";
 
-  await context.setOffline(true);
+  // WebKit's setOffline breaks even synthetic worker responses in the
+  // app-independent reproduction; see diagnostics/OFFLINE-WEBKIT.md.
+  // Both engines lose their real HTTP origin. Chromium additionally exercises
+  // browser offline emulation and the application's connectivity banner.
+  await testOrigin.stop();
+  expect(testOrigin.listening).toBe(false);
+  if (browserName === "chromium") {
+    await context.setOffline(true);
+    await expect(page.locator(".offline")).toBeVisible();
+  }
+  await testInfo.attach("offline-transport", {
+    body: JSON.stringify({
+      origin: testOrigin.appUrl,
+      originListening: testOrigin.listening,
+      browserOfflineEmulation: browserName === "chromium",
+    }),
+    contentType: "application/json",
+  });
   await page.reload();
   await expect(
     page.getByRole("button", { name: "Log warmup", exact: true }),

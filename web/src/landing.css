@@ -2,6 +2,7 @@
 .hero,
 .work-strip,
 .theme-showcase,
+.walkthrough,
 .practical,
 .ownership,
 .install,
@@ -123,6 +124,145 @@ main > .research {
 .hero-product {
   position: relative;
   padding-top: 22px;
+}
+.phone-preview {
+  min-width: 0;
+  text-align: center;
+  scroll-margin-top: 24px;
+}
+.phone-frame {
+  width: min(100%, 406px);
+  margin: 0 auto;
+  padding: 6px;
+  border: 2px solid #626267;
+  border-radius: 46px;
+  background: #080809;
+  box-shadow:
+    0 24px 70px rgb(0 0 0 / 0.3),
+    inset 0 0 0 1px #303034;
+  overflow: hidden;
+}
+.phone-bezel,
+.phone-chin {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+}
+.phone-bezel span {
+  width: 48px;
+  height: 5px;
+  border-radius: 8px;
+  background: #55555a;
+}
+.phone-chin {
+  height: 22px;
+}
+.phone-chin span {
+  width: 90px;
+  height: 4px;
+  border-radius: 8px;
+  background: #bcbcc2;
+}
+.phone-screen {
+  height: 740px;
+  height: clamp(540px, 76dvh, 780px);
+  overflow: hidden;
+  border-radius: 24px;
+  background: var(--bg);
+  text-align: left;
+}
+.phone-screen iframe {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: var(--bg);
+}
+.phone-welcome {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 20px;
+  height: 100%;
+  overflow-y: auto;
+  padding: 28px;
+}
+.phone-welcome img {
+  width: 60px;
+  height: 60px;
+}
+html[data-theme="light"] .phone-welcome img {
+  filter: invert(1);
+}
+.phone-welcome h2 {
+  font-size: 2rem;
+  font-weight: 450;
+  line-height: 1.15;
+  margin: 0;
+}
+.phone-welcome p,
+.phone-welcome small {
+  margin: 0;
+  color: var(--subtext);
+}
+.phone-caption {
+  margin: 16px 0 6px;
+  font-size: 0.75rem;
+  color: var(--subtext);
+}
+.phone-preview > .text-button {
+  justify-content: center;
+}
+@media (min-width: 681px) and (max-width: 900px) {
+  .hero {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.walkthrough {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 70px;
+  align-items: center;
+  padding-top: 70px;
+  padding-bottom: 70px;
+}
+.walkthrough > * {
+  min-width: 0;
+}
+.walkthrough .product-demo {
+  width: 100%;
+}
+.walkthrough h2 {
+  font-weight: 450;
+  font-size: clamp(2rem, 3.5vw, 3rem);
+  line-height: 1.12;
+}
+.walkthrough p {
+  color: var(--subtext);
+}
+@media (max-width: 800px) {
+  .walkthrough {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 28px;
+    padding: 40px 24px;
+  }
+}
+@media (max-width: 480px) {
+  .phone-preview {
+    margin-inline: -16px;
+  }
+  .phone-frame {
+    padding: 4px;
+    border-radius: 34px;
+  }
+  .phone-screen {
+    border-radius: 18px;
+  }
+  .phone-welcome {
+    padding: 20px;
+    gap: 16px;
+  }
 }
 .product-demo {
   border: 1px solid var(--cardBorder);

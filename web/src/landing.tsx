@@ -154,6 +154,7 @@ function Demonstration() {
 }
 function Landing() {
   const theme = useTheme();
+  const [previewStarted, setPreviewStarted] = useState(false);
   useEffect(() => {
     applyTheme(theme);
   }, [theme]);
@@ -170,8 +171,12 @@ function Landing() {
         <nav aria-label="Website">
           <a href="#themes">Themes</a>
           <a href="#research">Research</a>
-          <a className="nav-open" href={appUrl}>
-            Open app <Icon name="next" size={17} />
+          <a
+            className="nav-open"
+            href="#try-app"
+            onClick={() => setPreviewStarted(true)}
+          >
+            Try app <Icon name="next" size={17} />
           </a>
         </nav>
       </header>
@@ -192,7 +197,11 @@ function Landing() {
               Put the work on record. Know what you trained, see what needs
               time, and build a history worth coming back to.
             </p>
-            <a className="button primary hero-cta" href={appUrl}>
+            <a
+              className="button primary hero-cta"
+              href="#try-app"
+              onClick={() => setPreviewStarted(true)}
+            >
               Try App in web instead <Icon name="next" />
             </a>
             <a
@@ -205,8 +214,53 @@ function Landing() {
               No account. Local data. Made for the next session.
             </small>
           </div>
-          <div className="hero-product">
-            <Demonstration />
+          <div className="hero-product phone-preview" id="try-app">
+            <div className="phone-frame">
+              <div className="phone-bezel" aria-hidden="true">
+                <span />
+              </div>
+              <div className="phone-screen">
+                {previewStarted ? (
+                  <iframe
+                    src={appUrl}
+                    title="IronLog interactive app preview"
+                    allow="camera; clipboard-write; fullscreen"
+                  />
+                ) : (
+                  <div className="phone-welcome">
+                    <img src={asset("ironlog-logo.svg")} alt="IronLog" />
+                    <span className="eyebrow">
+                      Your next session starts here
+                    </span>
+                    <h2>
+                      Try a little.
+                      <br />
+                      Log something.
+                    </h2>
+                    <p>
+                      The working web app, right inside this phone. Choose a
+                      plan, try the controls and make it yours.
+                    </p>
+                    <Button onClick={() => setPreviewStarted(true)}>
+                      Launch interactive demo
+                    </Button>
+                    <small>
+                      Preview · saves in this browser. No account or
+                      installation.
+                    </small>
+                  </div>
+                )}
+              </div>
+              <div className="phone-chin" aria-hidden="true">
+                <span />
+              </div>
+            </div>
+            <p className="phone-caption">
+              Interactive web preview · not an Android emulator
+            </p>
+            <a className="text-button" href={appUrl}>
+              Open app full-screen <Icon name="next" />
+            </a>
           </div>
         </section>
         <section className="work-strip">
@@ -219,6 +273,21 @@ function Landing() {
             <span>Recovery estimates</span>
             <span>The Iron Ledger</span>
           </div>
+        </section>
+        <section className="walkthrough" aria-labelledby="walkthrough-heading">
+          <div>
+            <span className="eyebrow">A quick look · sample data</span>
+            <h2 id="walkthrough-heading">
+              From your first set
+              <br />
+              to your next session.
+            </h2>
+            <p>
+              Workout, recovery, Ledger. This walkthrough shows the loop; the
+              phone above is the app you can actually use.
+            </p>
+          </div>
+          <Demonstration />
         </section>
         <section id="themes" className="theme-showcase">
           <div>
@@ -310,20 +379,25 @@ function Landing() {
               on your Home Screen.
             </h2>
             <p>
-              IronLog Web is built for iPhone Safari first. Open it once online,
-              then your cached app can open offline.
+              Try it in Android Chrome or iPhone Safari. Use the full-screen app
+              for Home Screen installation. This browser preview is still being
+              tested; keep a backup of anything you want to keep.
             </p>
           </div>
           <ol>
             <li>
-              <strong>Open the app in Safari.</strong>
+              <strong>Open the app full-screen.</strong>
               <p>
-                Use the web-app button, not a link preview inside another app.
+                Use Chrome on Android or Safari on iPhone, not a link preview
+                inside another app. The phone frame is for trying the app here.
               </p>
             </li>
             <li>
-              <strong>Share → Add to Home Screen.</strong>
-              <p>Choose Open as Web App if Safari offers it, then tap Add.</p>
+              <strong>Add it to your Home Screen.</strong>
+              <p>
+                Android: Chrome menu → Add to Home screen or Install app, if
+                offered. iPhone: Share → Add to Home Screen.
+              </p>
             </li>
             <li>
               <strong>Keep one home for your log.</strong>
