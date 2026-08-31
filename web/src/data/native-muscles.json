@@ -1,0 +1,709 @@
+{
+  "ANCHOR_OVERRIDES": {
+    "barbellfullsquat": {
+      "spinalErectors": 0.1,
+      "calves": 0.1,
+      "glutes": 0.2,
+      "adductors": 0.12,
+      "hamstrings": 0.1,
+      "quads": 0.38
+    },
+    "legcurlmachine": {
+      "adductors": 0.1,
+      "glutes": 0.1,
+      "hamstrings": 0.72,
+      "calves": 0.08
+    },
+    "barbelloverheadpress": {
+      "frontDelts": 0.34,
+      "sideDelts": 0.22,
+      "tricepsMedial": 0.08,
+      "tricepsLateral": 0.14,
+      "tricepsLong": 0.16,
+      "upperChest": 0.06
+    },
+    "legpress": {
+      "adductors": 0.14,
+      "glutes": 0.2,
+      "hamstrings": 0.12,
+      "calves": 0.12,
+      "quads": 0.42
+    },
+    "barbelldeadlift": {
+      "traps": 0.1,
+      "spinalErectors": 0.22,
+      "forearms": 0.1,
+      "glutes": 0.22,
+      "upperBack": 0.12,
+      "hamstrings": 0.24
+    },
+    "pullup": {
+      "bicepsLong": 0.12,
+      "lats": 0.42,
+      "upperBack": 0.18,
+      "bicepsShort": 0.12,
+      "forearms": 0.08,
+      "brachialis": 0.08
+    },
+    "barbellbenchpress": {
+      "frontDelts": 0.14,
+      "tricepsLateral": 0.1,
+      "tricepsMedial": 0.08,
+      "midChest": 0.42,
+      "tricepsLong": 0.08,
+      "upperChest": 0.18
+    },
+    "standingcalfraise": {
+      "quads": 0.06,
+      "hamstrings": 0.06,
+      "calves": 0.88
+    },
+    "latpulldown": {
+      "bicepsLong": 0.12,
+      "lats": 0.46,
+      "upperBack": 0.16,
+      "bicepsShort": 0.1,
+      "forearms": 0.08,
+      "brachialis": 0.08
+    },
+    "barbellbentoverrow": {
+      "traps": 0.12,
+      "spinalErectors": 0.06,
+      "bicepsShort": 0.08,
+      "lats": 0.28,
+      "rearDelts": 0.1,
+      "upperBack": 0.3,
+      "brachialis": 0.06
+    },
+    "legextension": {
+      "adductors": 0.1,
+      "calves": 0.08,
+      "quads": 0.82
+    },
+    "inclinebarbellbenchpress": {
+      "frontDelts": 0.18,
+      "tricepsLateral": 0.12,
+      "tricepsMedial": 0.1,
+      "midChest": 0.16,
+      "tricepsLong": 0.08,
+      "upperChest": 0.36
+    },
+    "romaniandeadlift": {
+      "spinalErectors": 0.2,
+      "forearms": 0.06,
+      "glutes": 0.26,
+      "upperBack": 0.08,
+      "adductors": 0.1,
+      "hamstrings": 0.3
+    },
+    "dumbbellbenchpress": {
+      "frontDelts": 0.14,
+      "tricepsLateral": 0.1,
+      "tricepsMedial": 0.1,
+      "midChest": 0.38,
+      "tricepsLong": 0.08,
+      "upperChest": 0.2
+    },
+    "seatedcalfraise": {
+      "calves": 0.9,
+      "hamstrings": 0.1
+    }
+  },
+  "FINE_MUSCLE_TO_REGION": {
+    "brachialis": "Arms",
+    "bicepsLong": "Arms",
+    "midChest": "Push",
+    "upperChest": "Push",
+    "sideDelts": "Shoulders",
+    "quads": "Legs",
+    "upperAbs": "Core",
+    "upperBack": "Pull",
+    "rearDelts": "Shoulders",
+    "abductors": "Legs",
+    "frontDelts": "Shoulders",
+    "tricepsLong": "Arms",
+    "traps": "Pull",
+    "lowerChest": "Push",
+    "bicepsShort": "Arms",
+    "hamstrings": "Legs",
+    "lowerAbs": "Core",
+    "forearms": "Arms",
+    "lats": "Pull",
+    "obliques": "Core",
+    "spinalErectors": "Pull",
+    "adductors": "Legs",
+    "glutes": "Legs",
+    "tricepsMedial": "Arms",
+    "tricepsLateral": "Arms",
+    "calves": "Legs"
+  },
+  "LIBRARY_GROUP_MAP": {
+    "lower abs": {
+      "upperAbs": 0.18,
+      "obliques": 0.2,
+      "lowerAbs": 0.62
+    },
+    "hamstrings": {
+      "adductors": 0.14,
+      "glutes": 0.18,
+      "hamstrings": 0.68
+    },
+    "shoulders": {
+      "frontDelts": 0.34,
+      "sideDelts": 0.34,
+      "rearDelts": 0.32
+    },
+    "glutes": {
+      "abductors": 0.2,
+      "glutes": 0.62,
+      "hamstrings": 0.18
+    },
+    "lats": {
+      "lats": 0.76,
+      "bicepsShort": 0.08,
+      "upperBack": 0.16
+    },
+    "triceps": {
+      "tricepsMedial": 0.24,
+      "forearms": 0.08,
+      "tricepsLateral": 0.34,
+      "tricepsLong": 0.34
+    },
+    "chest": {
+      "lowerChest": 0.2,
+      "midChest": 0.5,
+      "upperChest": 0.3
+    },
+    "biceps short head": {
+      "bicepsLong": 0.16,
+      "bicepsShort": 0.6,
+      "forearms": 0.14,
+      "brachialis": 0.1
+    },
+    "lat": {
+      "lats": 0.76,
+      "bicepsShort": 0.08,
+      "upperBack": 0.16
+    },
+    "calves": {
+      "calves": 0.9,
+      "hamstrings": 0.1
+    },
+    "upper abs": {
+      "upperAbs": 0.64,
+      "obliques": 0.18,
+      "lowerAbs": 0.18
+    },
+    "obliques": {
+      "obliques": 0.74,
+      "lowerAbs": 0.12,
+      "upperAbs": 0.14
+    },
+    "side delts": {
+      "frontDelts": 0.12,
+      "sideDelts": 0.78,
+      "rearDelts": 0.1
+    },
+    "adductors": {
+      "adductors": 0.78,
+      "hamstrings": 0.1,
+      "quads": 0.12
+    },
+    "triceps medial head": {
+      "tricepsMedial": 0.58,
+      "forearms": 0.08,
+      "tricepsLateral": 0.2,
+      "tricepsLong": 0.14
+    },
+    "biceps long head": {
+      "bicepsLong": 0.6,
+      "bicepsShort": 0.16,
+      "forearms": 0.14,
+      "brachialis": 0.1
+    },
+    "brachialis": {
+      "bicepsLong": 0.18,
+      "bicepsShort": 0.14,
+      "forearms": 0.12,
+      "brachialis": 0.56
+    },
+    "rear delts": {
+      "traps": 0.08,
+      "upperBack": 0.18,
+      "rearDelts": 0.74
+    },
+    "back": {
+      "spinalErectors": 0.1,
+      "lats": 0.34,
+      "traps": 0.14,
+      "upperBack": 0.42
+    },
+    "quadriceps": {
+      "adductors": 0.12,
+      "calves": 0.1,
+      "quads": 0.78
+    },
+    "front delts": {
+      "frontDelts": 0.76,
+      "sideDelts": 0.14,
+      "upperChest": 0.1
+    },
+    "middle back": {
+      "spinalErectors": 0.15,
+      "traps": 0.25,
+      "upperBack": 0.6
+    },
+    "abdominals": {
+      "upperAbs": 0.42,
+      "obliques": 0.26,
+      "lowerAbs": 0.32
+    },
+    "triceps lateral head": {
+      "tricepsMedial": 0.1,
+      "forearms": 0.08,
+      "tricepsLateral": 0.62,
+      "tricepsLong": 0.2
+    },
+    "biceps": {
+      "bicepsLong": 0.28,
+      "bicepsShort": 0.32,
+      "forearms": 0.2,
+      "brachialis": 0.2
+    },
+    "abductors": {
+      "abductors": 0.72,
+      "glutes": 0.28
+    },
+    "traps": {
+      "rearDelts": 0.08,
+      "traps": 0.74,
+      "upperBack": 0.18
+    },
+    "lower back": {
+      "spinalErectors": 0.72,
+      "glutes": 0.16,
+      "upperBack": 0.12
+    },
+    "forearms": {
+      "brachialis": 0.18,
+      "forearms": 0.82
+    },
+    "triceps long head": {
+      "tricepsMedial": 0.1,
+      "frontDelts": 0.08,
+      "tricepsLateral": 0.2,
+      "tricepsLong": 0.62
+    },
+    "trap": {
+      "rearDelts": 0.08,
+      "traps": 0.74,
+      "upperBack": 0.18
+    },
+    "rotator cuff": {
+      "traps": 0.1,
+      "frontDelts": 0.16,
+      "sideDelts": 0.16,
+      "forearms": 0.18,
+      "rearDelts": 0.28,
+      "upperBack": 0.12
+    },
+    "quads": {
+      "adductors": 0.12,
+      "calves": 0.1,
+      "quads": 0.78
+    },
+    "core": {
+      "upperAbs": 0.34,
+      "obliques": 0.2,
+      "spinalErectors": 0.18,
+      "lowerAbs": 0.28
+    }
+  },
+  "FAMILY_RULES": [
+    {
+      "score": 10,
+      "id": "incline_press",
+      "patterns": [
+        "incline.*press",
+        "incline.*bench",
+        "incline.*push"
+      ]
+    },
+    {
+      "score": 10,
+      "id": "decline_press",
+      "patterns": [
+        "decline.*press",
+        "decline.*bench",
+        "dip"
+      ]
+    },
+    {
+      "score": 9,
+      "id": "chest_fly",
+      "patterns": [
+        "fly",
+        "crossover",
+        "pec deck"
+      ]
+    },
+    {
+      "score": 8,
+      "id": "horizontal_press",
+      "patterns": [
+        "\\bbench\\b",
+        "\\bpress\\b",
+        "push.?up",
+        "pushup"
+      ]
+    },
+    {
+      "score": 10,
+      "id": "vertical_press",
+      "patterns": [
+        "shoulder press",
+        "overhead press",
+        "\\bohp\\b",
+        "military press",
+        "arnold press"
+      ]
+    },
+    {
+      "score": 9,
+      "id": "vertical_pull",
+      "patterns": [
+        "pull.?up",
+        "chin.?up",
+        "pulldown",
+        "lat pull"
+      ]
+    },
+    {
+      "score": 9,
+      "id": "horizontal_pull",
+      "patterns": [
+        "\\brow\\b",
+        "meadows",
+        "seal row",
+        "pullover"
+      ]
+    },
+    {
+      "score": 8,
+      "id": "shrug",
+      "patterns": [
+        "shrug"
+      ]
+    },
+    {
+      "score": 8,
+      "id": "rear_delt",
+      "patterns": [
+        "rear delt",
+        "reverse pec",
+        "reverse fly",
+        "face pull"
+      ]
+    },
+    {
+      "score": 8,
+      "id": "lateral_raise",
+      "patterns": [
+        "lateral raise",
+        "side raise"
+      ]
+    },
+    {
+      "score": 7,
+      "id": "front_raise",
+      "patterns": [
+        "front raise"
+      ]
+    },
+    {
+      "score": 9,
+      "id": "hammer_curl",
+      "patterns": [
+        "hammer curl",
+        "rope hammer"
+      ]
+    },
+    {
+      "score": 8,
+      "id": "biceps_curl",
+      "patterns": [
+        "curl",
+        "preacher",
+        "concentration",
+        "zottman"
+      ]
+    },
+    {
+      "score": 9,
+      "id": "triceps_overhead",
+      "patterns": [
+        "overhead extension",
+        "skull crusher",
+        "skullcrusher",
+        "lying extension"
+      ]
+    },
+    {
+      "score": 8,
+      "id": "triceps_pushdown",
+      "patterns": [
+        "pushdown",
+        "kickback"
+      ]
+    },
+    {
+      "score": 10,
+      "id": "hinge",
+      "patterns": [
+        "deadlift",
+        "\\brdl\\b",
+        "romanian",
+        "good morning",
+        "hip thrust",
+        "glute bridge"
+      ]
+    },
+    {
+      "score": 9,
+      "id": "lunge",
+      "patterns": [
+        "split squat",
+        "lunge",
+        "step.?up",
+        "walking lunge"
+      ]
+    },
+    {
+      "score": 10,
+      "id": "squat",
+      "patterns": [
+        "squat",
+        "hack squat",
+        "leg press",
+        "belt squat"
+      ]
+    },
+    {
+      "score": 10,
+      "id": "leg_extension",
+      "patterns": [
+        "leg extension"
+      ]
+    },
+    {
+      "score": 10,
+      "id": "leg_curl",
+      "patterns": [
+        "leg curl",
+        "nordic",
+        "glute ham"
+      ]
+    },
+    {
+      "score": 10,
+      "id": "calf_raise",
+      "patterns": [
+        "calf"
+      ]
+    },
+    {
+      "score": 10,
+      "id": "core_crunch",
+      "patterns": [
+        "crunch",
+        "sit.?up",
+        "cable crunch"
+      ]
+    },
+    {
+      "score": 10,
+      "id": "leg_raise",
+      "patterns": [
+        "leg raise",
+        "toes to bar",
+        "v.?up",
+        "hanging knee"
+      ]
+    },
+    {
+      "score": 9,
+      "id": "plank",
+      "patterns": [
+        "plank",
+        "ab wheel",
+        "hollow",
+        "carry"
+      ]
+    }
+  ],
+  "FAMILY_TEMPLATES": {
+    "core_crunch": {
+      "upperAbs": 0.44,
+      "obliques": 0.32,
+      "lowerAbs": 0.24
+    },
+    "leg_raise": {
+      "upperAbs": 0.24,
+      "obliques": 0.36,
+      "lowerAbs": 0.4
+    },
+    "vertical_pull": {
+      "bicepsLong": 0.12,
+      "lats": 0.42,
+      "upperBack": 0.16,
+      "bicepsShort": 0.12,
+      "forearms": 0.1,
+      "brachialis": 0.08
+    },
+    "chest_fly": {
+      "frontDelts": 0.1,
+      "bicepsLong": 0.08,
+      "lowerChest": 0.14,
+      "midChest": 0.46,
+      "upperChest": 0.22
+    },
+    "leg_extension": {
+      "adductors": 0.12,
+      "calves": 0.1,
+      "quads": 0.78
+    },
+    "triceps_pushdown": {
+      "tricepsMedial": 0.32,
+      "forearms": 0.12,
+      "tricepsLateral": 0.38,
+      "tricepsLong": 0.18
+    },
+    "rear_delt": {
+      "traps": 0.12,
+      "bicepsShort": 0.08,
+      "upperBack": 0.22,
+      "sideDelts": 0.12,
+      "rearDelts": 0.46
+    },
+    "squat": {
+      "spinalErectors": 0.1,
+      "calves": 0.1,
+      "glutes": 0.2,
+      "adductors": 0.12,
+      "hamstrings": 0.12,
+      "quads": 0.36
+    },
+    "decline_press": {
+      "frontDelts": 0.08,
+      "tricepsLateral": 0.16,
+      "tricepsMedial": 0.1,
+      "lowerChest": 0.38,
+      "midChest": 0.2,
+      "tricepsLong": 0.08
+    },
+    "horizontal_pull": {
+      "traps": 0.1,
+      "bicepsLong": 0.08,
+      "lats": 0.26,
+      "rearDelts": 0.12,
+      "upperBack": 0.3,
+      "bicepsShort": 0.08,
+      "brachialis": 0.06
+    },
+    "horizontal_press": {
+      "frontDelts": 0.16,
+      "tricepsLateral": 0.14,
+      "tricepsMedial": 0.08,
+      "midChest": 0.38,
+      "tricepsLong": 0.08,
+      "upperChest": 0.16
+    },
+    "biceps_curl": {
+      "bicepsLong": 0.24,
+      "bicepsShort": 0.28,
+      "forearms": 0.26,
+      "brachialis": 0.22
+    },
+    "hinge": {
+      "spinalErectors": 0.2,
+      "forearms": 0.08,
+      "glutes": 0.26,
+      "upperBack": 0.08,
+      "adductors": 0.1,
+      "hamstrings": 0.28
+    },
+    "triceps_overhead": {
+      "tricepsMedial": 0.2,
+      "frontDelts": 0.12,
+      "tricepsLateral": 0.26,
+      "tricepsLong": 0.42
+    },
+    "hammer_curl": {
+      "bicepsLong": 0.2,
+      "bicepsShort": 0.18,
+      "forearms": 0.3,
+      "brachialis": 0.32
+    },
+    "calf_raise": {
+      "quads": 0.08,
+      "hamstrings": 0.08,
+      "calves": 0.84
+    },
+    "front_raise": {
+      "frontDelts": 0.62,
+      "traps": 0.1,
+      "sideDelts": 0.12,
+      "upperChest": 0.16
+    },
+    "vertical_press": {
+      "frontDelts": 0.34,
+      "sideDelts": 0.22,
+      "tricepsMedial": 0.08,
+      "tricepsLateral": 0.14,
+      "tricepsLong": 0.16,
+      "upperChest": 0.06
+    },
+    "lateral_raise": {
+      "frontDelts": 0.14,
+      "traps": 0.16,
+      "sideDelts": 0.58,
+      "rearDelts": 0.12
+    },
+    "leg_curl": {
+      "adductors": 0.14,
+      "glutes": 0.12,
+      "hamstrings": 0.66,
+      "calves": 0.08
+    },
+    "shrug": {
+      "spinalErectors": 0.14,
+      "forearms": 0.08,
+      "traps": 0.56,
+      "upperBack": 0.22
+    },
+    "incline_press": {
+      "frontDelts": 0.2,
+      "tricepsLateral": 0.1,
+      "tricepsMedial": 0.08,
+      "midChest": 0.18,
+      "tricepsLong": 0.08,
+      "upperChest": 0.36
+    },
+    "lunge": {
+      "abductors": 0.12,
+      "calves": 0.08,
+      "glutes": 0.24,
+      "adductors": 0.14,
+      "hamstrings": 0.14,
+      "quads": 0.28
+    },
+    "plank": {
+      "spinalErectors": 0.16,
+      "glutes": 0.1,
+      "upperAbs": 0.26,
+      "frontDelts": 0.08,
+      "lowerAbs": 0.22,
+      "obliques": 0.18
+    }
+  }
+}

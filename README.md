@@ -10,12 +10,38 @@
 
 **A native Android strength-training companion for fast logging, recovery awareness, plans, and an honest record of the work.**
 
-[Features](#built-for-the-work-between-sets) · [Screens](#the-current-build) · [Architecture](#how-it-is-built) · [Build](#build-it-locally) · [Contributing](CONTRIBUTING.md)
+[Website & web app](#ironlog-web-preview) · [Features](#built-for-the-work-between-sets) · [Screens](#the-current-build) · [Architecture](#how-it-is-built) · [Build](#build-it-locally) · [Contributing](CONTRIBUTING.md)
 
 </div>
 
 > [!NOTE]
 > IronLog is under active development and physical-device QA. The signed build is not distributed from this repository yet; build locally or follow a future tagged release.
+
+## IronLog Web preview
+
+The website now has a separate product landing page and a local-first browser app under [`web/`](web/README.md). The production addresses are [the website](https://yannam-builds.github.io/Ironlog/) and [the web app](https://yannam-builds.github.io/Ironlog/app/); GitHub Pages deploys the new output only after the website workflow passes.
+
+The August 31 website update includes:
+
+- The current transparent monochrome IronLog mark, lighter Lexend landing typography, Forge Fox artwork and twelve native themes shared between the page and app. Native app headings keep their heavier weight.
+- Home, Plans, Log, Stats and Settings; saved onboarding, editable plans, custom exercises, notes, explicit warmup queues, resumable workouts, set editing/deletion, rest timers and plate calculation.
+- Local history, recovery estimates, Ledger progression, body measurements, photo comparison and validated backup/restore. No account, phone synchronization or browser cloud-AI backend.
+- Opaque modal sheets with keyboard focus wrapping, Escape dismissal and blocked background taps; mobile safe-area layouts and accessible numeric entry.
+- A six-paper research bibliography with limitations, separate software/font notices, and optional Home Screen installation.
+
+**Preview, not full native parity.** On Windows, 85 unit tests pass, the production build and scoped output scan pass, and 19 of 20 desktop Chromium/WebKit browser tests pass. The remaining WebKit simulated-offline reload fails even in an app-independent service-worker reproduction. Supplemental tests with the actual HTTP origin stopped pass in both engines. These results do not verify real iPhone Safari, Home Screen lifecycle or VoiceOver. See the [acceptance record](web/docs/acceptance.md), [native parity gaps](web/docs/domain-parity.md) and [offline investigation](web/diagnostics/OFFLINE-WEBKIT.md).
+
+Workout instruction media from OpenGym is **not bundled**: its media notice and upstream dataset require separate reuse permission. Kotlin source, APKs and phone data are unchanged by this website update.
+
+Run locally with Node 24:
+
+```sh
+cd web
+npm ci
+npm run dev
+```
+
+The landing page runs at `http://127.0.0.1:5173/Ironlog/`. See the [web README](web/README.md) for production-preview and test commands.
 
 ## Built for the work between sets
 

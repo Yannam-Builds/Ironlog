@@ -1,0 +1,1026 @@
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  useApp,
+  navigate,
+  canonicalWeight,
+  displayWeight,
+  formatNumber,
+} from "../ui/context";
+import {
+  Button,
+  Field,
+  Icon,
+  IconButton,
+  Sheet,
+  Empty,
+} from "../ui/components";
+import { ExercisePicker, planned } from "./Plans";
+import {
+  mutateWorkout,
+  finishWorkout,
+  hasFailedMutation,
+  acknowledgeFailedMutation,
+  discardWorkout,
+  addWarmups,
+  logSet,
+  swapExercise,
+  newId,
+} from "../data/store";
+import { plateCalculation, warmupTargets } from "../domain/engine";
+import { progressionSuggestion } from "../domain/engine";
+import type {
+  Exercise,
+  LoggedSet,
+  SessionExercise,
+  SetKind,
+  Workout as WorkoutData,
+  Tracking,
+} from "../domain/types";
+const colorFor = (weight: number) =>
+  weight >= 20
+    ? "#EF5454"
+    : weight >= 15
+      ? "#F0CB55"
+      : weight >= 10
+        ? "#5299ED"
+        : weight >= 5
+          ? "#67BE8D"
+          : "#C782E7";
+export function PlateView({
+  loadKg,
+  barKg,
+  platesKg,
+  unit,
+}: {
+  loadKg: number;
+  barKg: number;
+  platesKg: number[];
+  unit: string;
+}) {
+  const result = plateCalculation(loadKg, barKg, platesKg);
+  const plates = result.platesPerSide.flatMap((p) =>
+    Array.from({ length: Math.min(p.quantity, 25) }, () => p.weightKg),
+  );
+  const width = Math.max(4, Math.min(15, 130 / Math.max(1, plates.length)));
+  const weight = (kg: number) =>
+    `${formatNumber(displayWeight(kg, unit))} ${unit}`;
+  return (
+    <>
+      <h3>Load {weight(loadKg)}</h3>
+      <div className="barbell">
+        <svg
+          viewBox="0 0 400 180"
+          role="img"
+          aria-label={`${weight(barKg)} bar, ${result.platesPerSide.map((p) => `${p.quantity} × ${weight(p.weightKg)} each side`).join(", ")}`}
+        >
+          <rect x="12" y="86" width="376" height="8" rx="3" fill="#AEB4BC" />
+          <rect x="166" y="82" width="68" height="16" rx="3" fill="#E8EBEF" />
+          {[-1, 1].flatMap((side) =>
+            plates.map((kg, i) => {
+              const height = 42 + Math.min(kg / 25, 1) * 95;
+              const x =
+                side === -1
+                  ? 156 - (i + 1) * (width + 2)
+                  : 244 + i * (width + 2);
+              return (
+                <rect
+                  key={`${side}-${i}`}
+                  x={x}
+                  y={90 - height / 2}
+                  width={width}
+                  height={height}
+                  rx="2"
+                  fill={colorFor(kg)}
+                  stroke="#141414"
+                  strokeWidth="1.5"
+                />
+              );
+            }),
+          )}
+        </svg>
+      </div>
+      <div className="list-row">
+        <span>Bar</span>
+        <strong>{weight(barKg)}</strong>
+      </div>
+      {result.platesPerSide.map((p) => (
+        <div className="list-row" key={p.weightKg}>
+          <span>
+            <i
+              className="plate-dot"
+              style={{ background: colorFor(p.weightKg) }}
+            />
+            {weight(p.weightKg)}
+          </span>
+          <strong>{p.quantity} per side</strong>
+        </div>
+      ))}
+      <p>
+        Achievable: {weight(result.achievedWeightKg)}
+        {!result.isValid && ` · Remainder: ${weight(result.remainderKg)}`}
+      </p>
+      <p className="muted">
+        Assumes available pairs of each plate size. Check the actual plates at
+        your gym.
+      </p>
+    </>
+  );
+}
+export function SetEditor({
+  set,
+  unit,
+  effort,
+  onSave,
+  onClose,
+}: {
+  set: LoggedSet;
+  unit: string;
+  effort: string;
+  onSave: (set: LoggedSet) => void;
+  onClose: () => void;
+}) {
+  const [value, setValue] = useState({ ...set });
+  const update = (p: Partial<LoggedSet>) => setValue({ ...value, ...p });
+  return (
+    <Sheet title="Edit logged set" onClose={onClose}>
+      <Field label={`Weight (${unit})`}>
+        <input
+          type="number"
+          inputMode="decimal"
+          min="0"
+          value={displayWeight(value.weightKg, unit)}
+          onChange={(e) =>
+            update({ weightKg: canonicalWeight(Number(e.target.value), unit) })
+          }
+        />
+      </Field>
+      <Field label="Reps">
+        <input
+          type="number"
+          inputMode="numeric"
+          min="0"
+          value={value.reps}
+          onChange={(e) => update({ reps: Number(e.target.value) })}
+        />
+      </Field>
+      <Field label="Duration (seconds)">
+        <input
+          type="number"
+          min="0"
+          value={value.durationSeconds}
+          onChange={(e) => update({ durationSeconds: Number(e.target.value) })}
+        />
+      </Field>
+      <Field label="Distance (km)">
+        <input
+          type="number"
+          min="0"
+          step="0.01"
+          value={value.distanceKm}
+          onChange={(e) => update({ distanceKm: Number(e.target.value) })}
+        />
+      </Field>
+      <Field label={effort.toUpperCase()}>
+        <input
+          type="number"
+          min="0"
+          max="10"
+          step="0.5"
+          value={(effort === "rpe" ? value.rpe : value.rir) ?? ""}
+          onChange={(e) =>
+            update({
+              rpe: undefined,
+              rir: undefined,
+              [effort]:
+                e.target.value === "" ? undefined : Number(e.target.value),
+            })
+          }
+        />
+      </Field>
+      <Field label="Set type">
+        <select
+          value={value.kind}
+          onChange={(e) => update({ kind: e.target.value as SetKind })}
+        >
+          {["normal", "warmup", "failure", "drop", "amrap"].map((x) => (
+            <option key={x}>{x}</option>
+          ))}
+        </select>
+      </Field>
+      <Field label="Notes">
+        <textarea
+          value={value.notes}
+          onChange={(e) => update({ notes: e.target.value })}
+        />
+      </Field>
+      <Button onClick={() => onSave(value)}>Save set</Button>
+    </Sheet>
+  );
+}
+function ExerciseCard({
+  exercise: e,
+  workout: w,
+  index,
+}: {
+  exercise: SessionExercise;
+  workout: WorkoutData;
+  index: number;
+}) {
+  const { data, run, busy } = useApp();
+  const p = data.profile;
+  const last = e.loggedSets.at(-1);
+  const [weight, setWeight] = useState(
+    last
+      ? String(
+          e.tracking === "duration_distance"
+            ? last.distanceKm
+            : displayWeight(last.weightKg, p.unit),
+        )
+      : "",
+  );
+  const previousUnit = useRef(p.unit);
+  useLayoutEffect(() => {
+    if (previousUnit.current !== p.unit && e.tracking === "weight_reps") {
+      const oldUnit = previousUnit.current;
+      setWeight((value) =>
+        value === "" || !Number.isFinite(Number(value))
+          ? value
+          : String(
+              displayWeight(canonicalWeight(Number(value), oldUnit), p.unit),
+            ),
+      );
+    }
+    previousUnit.current = p.unit;
+  }, [p.unit, e.tracking]);
+  const [reps, setReps] = useState(
+    String(
+      (e.tracking.startsWith("duration")
+        ? last?.durationSeconds
+        : last?.reps) ??
+        (parseInt(e.reps) || 8),
+    ),
+  );
+  const [effort, setEffort] = useState("");
+  const [kind, setKind] = useState<SetKind>(e.isWarmup ? "warmup" : "normal");
+  const [note, setNote] = useState("");
+  const [menu, setMenu] = useState(false);
+  const [plates, setPlates] = useState(false);
+  const [editSet, setEditSet] = useState<LoggedSet>();
+  const [swapping, setSwapping] = useState(false);
+  const [replacement, setReplacement] = useState<Exercise>();
+  const [targets, setTargets] = useState(false);
+  const [targetDraft, setTargetDraft] = useState({
+    sets: e.sets,
+    reps: e.reps,
+    restSeconds: e.restSeconds,
+    notes: e.notes,
+    tracking: e.tracking,
+  });
+  const openTargets = () => {
+    setTargetDraft({
+      sets: e.sets,
+      reps: e.reps,
+      restSeconds: e.restSeconds,
+      notes: e.notes,
+      tracking: e.tracking,
+    });
+    setTargets(true);
+  };
+  const previous = data.workouts
+    .filter((x) => x.status === "completed")
+    .flatMap((x) => x.exercises)
+    .find((x) =>
+      x.exerciseId ? x.exerciseId === e.exerciseId : x.name === e.name,
+    );
+  const suggestion = previous ? progressionSuggestion(previous, p.unit) : null;
+  const mutate = (
+    recipe: (ex: SessionExercise, workout: WorkoutData) => void,
+    message?: string,
+  ) =>
+    run(
+      () =>
+        mutateWorkout(w.id, w.revision, (next) => {
+          const ex = next.exercises.find((x) => x.id === e.id);
+          if (!ex) throw Error("Exercise no longer exists");
+          recipe(ex, next);
+        }),
+      message,
+    );
+  const timed = e.tracking.startsWith("duration");
+  const kg = canonicalWeight(Number(weight), p.unit);
+  const log = () =>
+    mutate((ex, workout) => {
+      const set: LoggedSet = {
+        id: newId(),
+        weightKg: timed || e.tracking === "bodyweight_reps" ? 0 : kg,
+        reps: timed ? 0 : Number(reps),
+        durationSeconds: timed ? Number(reps) : 0,
+        distanceKm: e.tracking === "duration_distance" ? Number(weight) : 0,
+        kind,
+        notes: note,
+        loggedAt: Date.now(),
+        ...(effort !== "" ? { [p.effort]: Number(effort) } : {}),
+      };
+      if (set.kind === "warmup") {
+        const firstWork = ex.loggedSets.findIndex((s) => s.kind !== "warmup");
+        ex.loggedSets.splice(
+          firstWork < 0 ? ex.loggedSets.length : firstWork,
+          0,
+          set,
+        );
+      } else ex.loggedSets.push(set);
+      if (ex.restSeconds > 0) {
+        workout.restEndsAt = Date.now() + ex.restSeconds * 1000;
+        workout.restUsed = true;
+      }
+    }, "Set logged").then((ok) => {
+      if (ok) setNote("");
+    });
+  return (
+    <section className="card exercise-card">
+      <div className="section-title">
+        <div>
+          <h2>{e.name}</h2>
+          <p>
+            {e.sets} × {e.reps} · {e.tracking.replaceAll("_", " ")}
+            {e.supersetGroup && ` · Superset ${e.supersetGroup}`}
+          </p>
+        </div>
+        <IconButton
+          name="more"
+          label={`Options for ${e.name}`}
+          onClick={() => setMenu(true)}
+        />
+      </div>
+      {!e.exerciseId && (
+        <p className="notice">
+          Not linked to the library. Review the tracking type in exercise
+          options before logging.
+        </p>
+      )}
+      {e.notes && <p className="exercise-note">{e.notes}</p>}
+      <div className="sets">
+        {e.loggedSets.map((s, i) => (
+          <div className="set-row" key={s.id}>
+            <span className="set-number">
+              {s.kind === "warmup" ? "W" : i + 1}
+            </span>
+            <div>
+              <strong>
+                {timed
+                  ? `${s.durationSeconds}s${s.distanceKm ? ` · ${s.distanceKm} km` : ""}`
+                  : `${e.tracking === "bodyweight_reps" ? "BW" : `${displayWeight(s.weightKg, p.unit)} ${p.unit}`} × ${s.reps}`}
+              </strong>
+              <small>
+                {s.kind !== "normal" ? s.kind : ""}
+                {s.rpe !== undefined
+                  ? ` · RPE ${s.rpe}`
+                  : s.rir !== undefined
+                    ? ` · RIR ${s.rir}`
+                    : ""}
+                {s.notes ? ` · ${s.notes}` : ""}
+              </small>
+            </div>
+            <div className="set-actions">
+              <IconButton
+                name="edit"
+                label={`Edit set ${i + 1} of ${e.name}`}
+                onClick={() => setEditSet(s)}
+              />
+              <IconButton
+                name="trash"
+                label={`Delete set ${i + 1} of ${e.name}`}
+                disabled={busy}
+                onClick={() =>
+                  mutate((ex) => {
+                    ex.loggedSets = ex.loggedSets.filter((x) => x.id !== s.id);
+                  }, "Set deleted")
+                }
+              />
+              {i > 0 && (
+                <button
+                  className="icon-button"
+                  aria-label={`Move set ${i + 1} up`}
+                  disabled={busy}
+                  onClick={() =>
+                    mutate((ex) => {
+                      const idx = ex.loggedSets.findIndex((x) => x.id === s.id);
+                      [ex.loggedSets[idx - 1], ex.loggedSets[idx]] = [
+                        ex.loggedSets[idx],
+                        ex.loggedSets[idx - 1],
+                      ];
+                    })
+                  }
+                >
+                  ↑
+                </button>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+      {e.pendingWarmups.length > 0 && (
+        <div className="warmup-queue">
+          <h3>Warmup targets · not logged</h3>
+          {e.pendingWarmups.map((t) => (
+            <div className="row" key={t.id}>
+              <span>
+                {displayWeight(t.weightKg, p.unit)} {p.unit} × {t.reps}
+              </span>
+              <Button
+                variant="secondary"
+                disabled={busy}
+                onClick={() =>
+                  run(() =>
+                    logSet(w.id, w.revision, e.id, {
+                      ...t,
+                      id: t.id,
+                      kind: "warmup",
+                      durationSeconds: 0,
+                      distanceKm: 0,
+                      notes: "",
+                      loggedAt: Date.now(),
+                    }),
+                  )
+                }
+              >
+                Log warmup
+              </Button>
+              <IconButton
+                name="close"
+                label={`Skip ${t.weightKg} kg warmup`}
+                disabled={busy}
+                onClick={() =>
+                  mutate((ex) => {
+                    ex.pendingWarmups = ex.pendingWarmups.filter(
+                      (x) => x.id !== t.id,
+                    );
+                  })
+                }
+              />
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="workout-inputs">
+        {e.tracking !== "bodyweight_reps" && e.tracking !== "duration" && (
+          <Field label={timed ? "Distance (km)" : p.unit.toUpperCase()}>
+            <input
+              type="number"
+              min="0"
+              step="any"
+              inputMode="decimal"
+              value={weight}
+              onChange={(ev) => setWeight(ev.target.value)}
+            />
+          </Field>
+        )}
+        <Field label={timed ? "Seconds" : "Reps"}>
+          <input
+            type="number"
+            min="1"
+            step="1"
+            inputMode="numeric"
+            value={reps}
+            onChange={(ev) => setReps(ev.target.value)}
+          />
+        </Field>
+        <Button
+          disabled={
+            busy ||
+            Number(reps) <= 0 ||
+            (!timed &&
+              e.tracking === "weight_reps" &&
+              (weight === "" || kg < 0))
+          }
+          onClick={log}
+        >
+          Log
+        </Button>
+      </div>
+      {last && (
+        <Button
+          variant="ghost"
+          onClick={() => {
+            setWeight(
+              String(
+                e.tracking === "duration_distance"
+                  ? last.distanceKm
+                  : displayWeight(last.weightKg, p.unit),
+              ),
+            );
+            setReps(String(timed ? last.durationSeconds : last.reps));
+            setEffort(String((p.effort === "rpe" ? last.rpe : last.rir) ?? ""));
+            setKind(last.kind);
+          }}
+        >
+          Copy previous set
+        </Button>
+      )}
+      {suggestion && (
+        <p className="muted">
+          Last-session progression option:{" "}
+          {displayWeight(suggestion.weightKg, p.unit)} {p.unit} ×{" "}
+          {suggestion.reps}. Adjust for form, effort and recovery; this is not a
+          prescription.
+        </p>
+      )}
+      <details className="set-details">
+        <summary>Effort, type & note</summary>
+        <div className="two-col">
+          <Field label={p.effort.toUpperCase()}>
+            <input
+              type="number"
+              min="0"
+              max="10"
+              step="0.5"
+              inputMode="decimal"
+              value={effort}
+              onChange={(ev) => setEffort(ev.target.value)}
+            />
+          </Field>
+          <Field label="Set type">
+            <select
+              value={kind}
+              onChange={(ev) => setKind(ev.target.value as SetKind)}
+            >
+              {["normal", "warmup", "failure", "drop", "amrap"].map((x) => (
+                <option key={x}>{x}</option>
+              ))}
+            </select>
+          </Field>
+        </div>
+        <Field label="Set note">
+          <textarea value={note} onChange={(ev) => setNote(ev.target.value)} />
+        </Field>
+      </details>
+      <div className="exercise-tools">
+        <button
+          className="text-button"
+          disabled={busy || e.tracking !== "weight_reps" || kg <= 0}
+          onClick={() =>
+            run(async () => {
+              const queue = warmupTargets(kg, p.barKg);
+              if (!queue.length)
+                throw Error(
+                  "Use a higher target than the bar, or log a lighter warmup manually.",
+                );
+              await addWarmups(w.id, w.revision, e.id, queue);
+            })
+          }
+        >
+          <Icon name="plus" size={18} />
+          Insert warmups
+        </button>
+        <button
+          className="text-button"
+          onClick={() => {
+            setTargetDraft({
+              sets: e.sets,
+              reps: e.reps,
+              restSeconds: e.restSeconds,
+              notes: e.notes,
+              tracking: e.tracking,
+            });
+            setTargets(true);
+          }}
+        >
+          <Icon name="timer" size={18} />
+          {e.restSeconds}s rest
+        </button>
+      </div>
+      {(e.tracking !== "weight_reps" || kg <= 0) && (
+        <small className="muted">
+          Warmup queue needs a weighted target. Bodyweight and timed warmups can
+          be logged using the warmup set type.
+        </small>
+      )}
+      {menu && (
+        <Sheet title={e.name} onClose={() => setMenu(false)}>
+          <Button
+            variant="secondary"
+            disabled={e.loggedSets.length > 0}
+            onClick={() => {
+              setMenu(false);
+              setSwapping(true);
+            }}
+          >
+            Swap exercise
+          </Button>
+          {e.loggedSets.length > 0 && (
+            <p>Remove logged sets before swapping to preserve your history.</p>
+          )}
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setMenu(false);
+              openTargets();
+            }}
+          >
+            Targets, tracking & notes
+          </Button>
+          <Button
+            variant="secondary"
+            disabled={e.tracking !== "weight_reps" || kg <= 0}
+            onClick={() => {
+              setMenu(false);
+              setPlates(true);
+            }}
+          >
+            Plate calculator
+          </Button>
+          {index > 0 && (
+            <Button
+              variant="secondary"
+              disabled={busy}
+              onClick={() =>
+                mutate((_, next) => {
+                  [next.exercises[index - 1], next.exercises[index]] = [
+                    next.exercises[index],
+                    next.exercises[index - 1],
+                  ];
+                }).then((ok) => {
+                  if (ok) setMenu(false);
+                })
+              }
+            >
+              Move exercise up
+            </Button>
+          )}
+          <Button
+            variant="danger"
+            disabled={busy}
+            onClick={() =>
+              mutate((_, next) => {
+                next.exercises = next.exercises.filter((x) => x.id !== e.id);
+              }, "Exercise removed").then((ok) => {
+                if (ok) setMenu(false);
+              })
+            }
+          >
+            Remove exercise and its sets
+          </Button>
+        </Sheet>
+      )}
+      {plates && (
+        <Sheet title="Plate calculator" onClose={() => setPlates(false)}>
+          <PlateView
+            loadKg={kg}
+            barKg={p.barKg}
+            platesKg={p.platesKg}
+            unit={p.unit}
+          />
+        </Sheet>
+      )}
+      {editSet && (
+        <SetEditor
+          set={editSet}
+          unit={p.unit}
+          effort={p.effort}
+          onClose={() => setEditSet(undefined)}
+          onSave={(s) =>
+            mutate((ex) => {
+              const idx = ex.loggedSets.findIndex((x) => x.id === s.id);
+              if (idx < 0) throw Error("Set no longer exists");
+              ex.loggedSets[idx] = s;
+            }, "Set updated").then((ok) => {
+              if (ok) setEditSet(undefined);
+            })
+          }
+        />
+      )}
+      {swapping && (
+        <ExercisePicker
+          onClose={() => setSwapping(false)}
+          onPick={(ex) => {
+            setSwapping(false);
+            setReplacement(ex);
+          }}
+        />
+      )}
+      {replacement && (
+        <Sheet
+          title="Where should this change apply?"
+          onClose={() => setReplacement(undefined)}
+        >
+          <p>
+            Replace {e.name} with {replacement.name}.
+          </p>
+          <Button
+            disabled={busy}
+            onClick={() =>
+              run(
+                () => swapExercise(w.id, w.revision, e.id, replacement, false),
+                "Session exercise replaced",
+              ).then((ok) => {
+                if (ok) setReplacement(undefined);
+              })
+            }
+          >
+            This session only
+          </Button>
+          <Button
+            variant="secondary"
+            disabled={busy || !w.planId}
+            onClick={() =>
+              run(
+                () => swapExercise(w.id, w.revision, e.id, replacement, true),
+                "Session and plan updated",
+              ).then((ok) => {
+                if (ok) setReplacement(undefined);
+              })
+            }
+          >
+            This session and the plan
+          </Button>
+        </Sheet>
+      )}
+      {targets && (
+        <Sheet
+          title="Targets & exercise notes"
+          onClose={() => setTargets(false)}
+        >
+          <Field label="Target sets">
+            <input
+              type="number"
+              min="1"
+              max="100"
+              value={targetDraft.sets}
+              onChange={(ev) =>
+                setTargetDraft({
+                  ...targetDraft,
+                  sets: Number(ev.target.value),
+                })
+              }
+            />
+          </Field>
+          <Field label="Target reps / duration">
+            <input
+              value={targetDraft.reps}
+              onChange={(ev) =>
+                setTargetDraft({ ...targetDraft, reps: ev.target.value })
+              }
+            />
+          </Field>
+          <Field label="Rest seconds (0 = off)">
+            <input
+              type="number"
+              min="0"
+              max="3600"
+              value={targetDraft.restSeconds}
+              onChange={(ev) =>
+                setTargetDraft({
+                  ...targetDraft,
+                  restSeconds: Number(ev.target.value),
+                })
+              }
+            />
+          </Field>
+          <Field label="Tracking">
+            <select
+              disabled={e.loggedSets.length > 0}
+              value={targetDraft.tracking}
+              onChange={(ev) =>
+                setTargetDraft({
+                  ...targetDraft,
+                  tracking: ev.target.value as Tracking,
+                })
+              }
+            >
+              {[
+                "weight_reps",
+                "bodyweight_reps",
+                "duration",
+                "duration_distance",
+              ].map((x) => (
+                <option key={x}>{x}</option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Session exercise notes">
+            <textarea
+              value={targetDraft.notes}
+              onChange={(ev) =>
+                setTargetDraft({ ...targetDraft, notes: ev.target.value })
+              }
+            />
+          </Field>
+          <Button
+            disabled={busy}
+            onClick={() =>
+              mutate(
+                (ex) => Object.assign(ex, targetDraft),
+                "Targets saved",
+              ).then((ok) => {
+                if (ok) setTargets(false);
+              })
+            }
+          >
+            Save session targets
+          </Button>
+        </Sheet>
+      )}
+    </section>
+  );
+}
+export function Workout() {
+  const { data, run, busy } = useApp();
+  const w = data.workouts.find((w) => w.status === "active");
+  const [adding, setAdding] = useState(false);
+  const [confirm, setConfirm] = useState<"finish" | "discard">();
+  const [acknowledged, setAcknowledged] = useState(false);
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const tick = () => setNow(Date.now());
+    const timer = setInterval(tick, 1000);
+    document.addEventListener("visibilitychange", tick);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", tick);
+    };
+  }, []);
+  useEffect(() => {
+    if (!w || !data.profile.keepAwake || !("wakeLock" in navigator)) return;
+    let sentinel: WakeLockSentinel | undefined;
+    let disposed = false;
+    const request = async () => {
+      try {
+        if (document.visibilityState === "visible") {
+          const s = await navigator.wakeLock.request("screen");
+          if (disposed) await s.release();
+          else sentinel = s;
+        }
+      } catch {
+        /* Wake lock is optional. Timers use timestamps. */
+      }
+    };
+    void request();
+    document.addEventListener("visibilitychange", request);
+    return () => {
+      disposed = true;
+      void sentinel?.release();
+      document.removeEventListener("visibilitychange", request);
+    };
+  }, [w?.id, data.profile.keepAwake]);
+  if (!w)
+    return (
+      <Empty title="No active workout">
+        <p>Choose a program or start a freestyle session from Home.</p>
+        <Button onClick={() => navigate("home")}>Go Home</Button>
+      </Empty>
+    );
+  const remaining = Math.max(0, Math.ceil(((w.restEndsAt ?? 0) - now) / 1000));
+  return (
+    <>
+      <div className="page-title">
+        <div>
+          <span className="eyebrow">
+            Active workout · {Math.floor((now - w.startedAt) / 60000)} min
+          </span>
+          <h1>{w.name}</h1>
+        </div>
+        <IconButton
+          name="close"
+          label="Minimize workout"
+          onClick={() => navigate("home")}
+        />
+      </div>
+      {w.restEndsAt && (
+        <aside className="rest-banner" role="status">
+          <Icon name="timer" />
+          <strong>
+            {remaining
+              ? `${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, "0")}`
+              : "Rest complete"}
+          </strong>
+          <span>Rest timer</span>
+          <button
+            onClick={() =>
+              run(() =>
+                mutateWorkout(w.id, w.revision, (x) => {
+                  x.restEndsAt = undefined;
+                }),
+              )
+            }
+          >
+            Dismiss
+          </button>
+        </aside>
+      )}
+      {w.exercises.map((e, i) => (
+        <ExerciseCard
+          key={`${e.id}-${e.exerciseId}-${e.tracking}`}
+          exercise={e}
+          workout={w}
+          index={i}
+        />
+      ))}
+      <Button variant="secondary" onClick={() => setAdding(true)}>
+        <Icon name="plus" />
+        Add exercise
+      </Button>
+      <p className="muted">
+        Changes save after every action. Keep this screen open for timer
+        feedback; locked-screen alarms aren’t supported.
+      </p>
+      <div className="sticky-actions">
+        <Button
+          disabled={busy}
+          onClick={() => {
+            setAcknowledged(false);
+            setConfirm("finish");
+          }}
+        >
+          Finish workout
+        </Button>
+        <Button variant="ghost" onClick={() => setConfirm("discard")}>
+          Discard
+        </Button>
+      </div>
+      {adding && (
+        <ExercisePicker
+          onClose={() => setAdding(false)}
+          onPick={(e) =>
+            run(() =>
+              mutateWorkout(w.id, w.revision, (x) => {
+                x.exercises.push({
+                  ...planned(e),
+                  tracking: e.tracking,
+                  muscle: e.muscle,
+                  equipment: e.equipment,
+                  secondaryMuscles: e.secondaryMuscles,
+                  loggedSets: [],
+                  pendingWarmups: [],
+                });
+              }),
+            ).then((ok) => {
+              if (ok) setAdding(false);
+            })
+          }
+        />
+      )}
+      {confirm && (
+        <Sheet
+          title={
+            confirm === "finish"
+              ? "Finish this workout?"
+              : "Discard this workout?"
+          }
+          onClose={() => setConfirm(undefined)}
+        >
+          <p>
+            {confirm === "finish"
+              ? "Only logged sets will be saved in History. Pending warmup targets do not count."
+              : "This session will not count toward your training history."}
+          </p>
+          {confirm === "finish" && hasFailedMutation(w.id) && (
+            <div className="notice">
+              <h3>A previous change was not saved.</h3>
+              <p>
+                Return to the workout and retry the missing change. Before
+                finishing, review the visible sets. This confirmation accepts
+                only those saved sets; it cannot recover an unsaved change.
+              </p>
+              <label className="check-label">
+                <input
+                  type="checkbox"
+                  checked={acknowledged}
+                  onChange={(e) => setAcknowledged(e.target.checked)}
+                />
+                I reviewed the workout and accept its saved sets.
+              </label>
+            </div>
+          )}
+          <Button
+            disabled={
+              busy ||
+              (confirm === "finish" && hasFailedMutation(w.id) && !acknowledged)
+            }
+            variant={confirm === "finish" ? "primary" : "danger"}
+            onClick={() =>
+              run(
+                async () => {
+                  if (confirm === "finish") {
+                    if (hasFailedMutation(w.id))
+                      await acknowledgeFailedMutation(w.id);
+                    await finishWorkout(w.id);
+                  } else await discardWorkout(w.id);
+                },
+                confirm === "finish" ? "Workout saved" : "Workout discarded",
+              ).then((ok) => {
+                if (ok) {
+                  setConfirm(undefined);
+                  navigate("log");
+                }
+              })
+            }
+          >
+            {confirm === "finish"
+              ? "Save completed workout"
+              : "Discard session"}
+          </Button>
+        </Sheet>
+      )}
+    </>
+  );
+}

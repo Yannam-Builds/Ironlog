@@ -1,0 +1,68 @@
+name: IronLog Web
+
+on:
+  pull_request:
+    paths: ['web/**', '.github/workflows/web-pages.yml']
+  push:
+    branches: [main]
+    paths: ['web/**', '.github/workflows/web-pages.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ironlog-web-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - run: npm run verify:output
+      - run: npx playwright install --with-deps chromium webkit
+      - name: Browser acceptance
+        run: |
+          npm run preview -- --port 4173 > /tmp/ironlog-preview.log 2>&1 &
+          for i in {1..30}; do curl -fsS http://127.0.0.1:4173/Ironlog/ >/dev/null && break; sleep 1; done
+          curl -fsS http://127.0.0.1:4173/Ironlog/ >/dev/null
+          npx playwright test
+      - name: Origin-unavailable workout acceptance
+        run: npx playwright test --config=diagnostics/playwright.config.ts
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: browser-failures
+          path: |
+            web/playwright-report
+            web/test-results
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        with:
+          path: web/dist
+  deploy:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d
+      - uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128
+        id: deployment

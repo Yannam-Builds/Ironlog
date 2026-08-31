@@ -1,0 +1,98 @@
+{
+  "revision": "b851eb0575a07d6ca9487aa3a1ad710d189e6457",
+  "reference": "Native working tree (file hashes are authoritative)",
+  "files": [
+    {
+      "path": "app/src/main/java/com/ironlog/app/ui/theme/IronLogThemes.kt",
+      "sha256": "faaf6a83571055f6ffc7427d09f70f9021fbde33e5e9b6b5a40f4d0975013efb"
+    },
+    {
+      "path": "app/src/main/assets/exerciseLibrary.json",
+      "sha256": "85c5f422ece979b5d07396c3986986dfa16ecfd59c02f6de84ee6d30743fd62d"
+    },
+    {
+      "path": "app/src/main/java/com/ironlog/app/data/seed/ProgramTemplates.kt",
+      "sha256": "90544e6744f96bb80ce4b54b4e35b4d237b4ecb10a72b79872fb74456c1e260a"
+    },
+    {
+      "path": "app/src/main/assets/ironlog/body_map_paths.json",
+      "sha256": "4f299e8a4c374de97edf43b62432819214ba447f6164df73ebd734a09b00aa96"
+    },
+    {
+      "path": "app/src/main/res/drawable-nodpi/forgefox_07_determined.png",
+      "sha256": "a8363cd4a4228527cbe41d4ddfe22f750aaf1442569fed03bf0b56972c5a39fa"
+    },
+    {
+      "path": "app/src/main/res/drawable-nodpi/forgefox_16_proud.png",
+      "sha256": "59127b35642747ae26c96ffa6ac58c1a3f74a859599c5338d3975608edc4901d"
+    },
+    {
+      "path": "app/src/main/res/drawable-nodpi/forgefox_20_clipboard.png",
+      "sha256": "36df8264a7c535291ab4026a6cc3823ca2dbdd4a929e7c2b41410b527bd87ba5"
+    },
+    {
+      "path": "app/src/main/res/drawable-nodpi/forgefox_22_dumbbell.png",
+      "sha256": "dba29ecb0fb79e7de3fc7ef5a67747bebef107b63ad98bf4a8bb8876a44af166"
+    },
+    {
+      "path": "app/src/main/res/drawable-nodpi/forgefox_28_rest_blanket.png",
+      "sha256": "5364baeda4068077b082bb4dbcce60ad76ce9a18a3fdf34531ef332a4ecf7d09"
+    },
+    {
+      "path": "app/src/main/res/drawable-nodpi/forgefox_32_level_up.png",
+      "sha256": "45fbe704e898a69ede2a88fce716ef40c2021c3cb8fb2cc7c109424bf05dfb67"
+    },
+    {
+      "path": "app/src/main/res/drawable-nodpi/ic_forge_streak_dumbbell.png",
+      "sha256": "4dbdda90696fd5048889bb178892d988afff4e81ce0754cb2a50071aae94b944"
+    },
+    {
+      "path": "app/src/main/res/drawable-nodpi/iron_grade_aether.png",
+      "sha256": "205daac1dbda10af755cd1317336bb8898b403078c3892e66cacabe662e4a9e9"
+    },
+    {
+      "path": "app/src/main/res/drawable-nodpi/iron_grade_apex.png",
+      "sha256": "f2d0b91dfeb7c5834f3f0113ce906d61b98d0fbde8e78f5e0c870932a9989551"
+    },
+    {
+      "path": "app/src/main/res/drawable-nodpi/iron_grade_graphite.png",
+      "sha256": "d691fc077b3dcddf1a9cfd362f9f3f0ae971900dd837c7e805b9915113d9522b"
+    },
+    {
+      "path": "app/src/main/res/drawable-nodpi/iron_grade_iridium.png",
+      "sha256": "73487952073cb00874fce8295f25b467b6253c311ca59d075987742420d22023"
+    },
+    {
+      "path": "app/src/main/res/drawable-nodpi/iron_grade_iron.png",
+      "sha256": "f62c9e996c5e8248e23c3a06bba72698e801d9c543b7faebd47046d28e23f298"
+    },
+    {
+      "path": "app/src/main/res/drawable-nodpi/iron_grade_obsidian.png",
+      "sha256": "d2fa79d731ffd5ed8764eb9aa42604864880627f2db259e454a0525802daefac"
+    },
+    {
+      "path": "app/src/main/res/drawable-nodpi/iron_grade_steel.png",
+      "sha256": "ea2c790ac7b06e98f9da17c7b02cca0c90aff3d8b772681b4e7dc4ad5f4c389f"
+    },
+    {
+      "path": "app/src/main/res/drawable-nodpi/iron_grade_titanium.png",
+      "sha256": "428854db16f54799afa94a80cb08b0d9f2dfe9d824e7087c3676e6dd31cf12aa"
+    },
+    {
+      "path": "app/src/main/res/drawable-nodpi/iron_grade_uncalibrated.png",
+      "sha256": "53751863bdf817f7d021ac9e07281e9737817c5be30ec0e3f99f7ad63033a612"
+    },
+    {
+      "path": "app/src/main/res/drawable-nodpi/recovery_circuit_emblem.png",
+      "sha256": "900ce192db3f6c91d5a8c0e58c5219bbf834256c5cfe07ea192a7ab75f2aa969"
+    },
+    {
+      "path": "app/src/main/res/font/lexend_variable.ttf",
+      "sha256": "3add53e641fbc81da64da4bb254285e2831b52b029527bc0714e2b9610832ee6"
+    },
+    {
+      "path": "app/src/main/res/drawable/ic_launcher_foreground.xml",
+      "sha256": "65dcbc4d667c7e4c3187125b3a38b48d64c0acd8eef542ef2027c512f13ffc78"
+    }
+  ]
+}
