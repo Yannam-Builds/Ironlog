@@ -44,12 +44,19 @@ Files: `ui/theme/IronLogTypography.kt`, new typography registry/runtime/preferen
 
 ## 4. Verification, review and publication
 
-- [ ] Browser tests: all 21 families load, persisted preference across landing/iframe/full-screen, invalid storage, all presets, 320px/large text, menus/inputs and complete workout after switching; offline reload retains the choice.
-- [ ] Run `npm test`, `npm run build`, `npm run verify:output`, complete Playwright suite and separate origin-stopped tests. Check screenshots and font payload totals.
+- [x] Browser tests: all 21 families load, persisted preference across landing/iframe/full-screen, invalid storage, all presets, 320px/large text, menus/inputs and complete workout after switching; offline reload retains the choice.
+- [x] Run `npm test`, `npm run build`, `npm run verify:output`, complete Playwright suite and separate origin-stopped tests. Check screenshots and font payload totals.
 - [x] Independent spec review followed by code-quality review; resolve findings and rerun affected gates.
-- [ ] Update README and font acknowledgments. Publish only website-scoped changes via existing verified GitHub Pages workflow; native changes stay separate from unrelated Android work.
-- [ ] Verify the live website. Report native build/emulator evidence separately from physical-device testing and distinguish bundled font choices from platform-controlled text.
+- [x] Update README and font acknowledgments. Publish only website-scoped changes via existing verified GitHub Pages workflow; native changes stay separate from unrelated Android work.
+- [x] Verify the live website. Report native build/emulator evidence separately from physical-device testing and distinguish bundled font choices from platform-controlled text.
 
 ## Added scope: global UI spacing
 
 The user additionally requested a Settings slider to adjust spacing everywhere, on both platforms. Implement 85–125% in 5% steps, 100% default and a reset. Scale layout padding/gaps without changing text, icons, touch-target minimums, safe-area insets or chart/body-map geometry. Persist independently of training data; apply across screen navigation and process reload. Verify bounds, invalid settings, write failures, compact/spacious extremes, 320px/large text, responsive controls and safe dismissal.
+
+## Delivery evidence
+
+- Website implementation `51e5a61` deployed successfully through [GitHub Pages run 33378594968](https://github.com/Yannam-Builds/Ironlog/actions/runs/33378594968): 94 unit tests, 49 browser tests and 2 origin-stopped workout tests passed, alongside build/output checks.
+- Nine follow-up tests against the public GitHub Pages URL passed in Chromium, desktop WebKit and Pixel 7 Chrome emulation: all font files/presets, landing/iframe synchronization, completed workouts, spacing extremes and reload persistence.
+- Native: 205 JVM tests passed, lint reported zero errors, final debug APK installed with data preserved on the emulator, and bundled-font instrumentation passed (21 families/252 measurements). Native work remains separate and uncommitted in the existing Android workspace. No physical phone update or public APK release.
+- Remaining limits: physical iPhone/Home Screen/VoiceOver verification is still outstanding. Native bottom-navigation labels have existing clipping at 320dp/200% system text. Geometry, platform-owned text and minimum touch targets deliberately do not scale with layout spacing.
