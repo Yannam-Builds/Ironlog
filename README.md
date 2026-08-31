@@ -31,6 +31,8 @@ The August 31 website update includes:
 
 **Preview, not full native parity.** On Windows, 85 unit tests pass, the production build and scoped output scan pass, and 19 of 20 desktop Chromium/WebKit browser tests pass. The remaining WebKit simulated-offline reload fails even in an app-independent service-worker reproduction. Supplemental tests with the actual HTTP origin stopped pass in both engines. These results do not verify real iPhone Safari, Home Screen lifecycle or VoiceOver. See the [acceptance record](web/docs/acceptance.md), [native parity gaps](web/docs/domain-parity.md) and [offline investigation](web/diagnostics/OFFLINE-WEBKIT.md).
 
+**Deployment status:** website source and documentation are on `main`, but the redesigned site is not live yet. [Linux CI for the website commit](https://github.com/Yannam-Builds/Ironlog/actions/runs/33369416266) passed unit tests/build/output checks and 19/20 browser tests, then reproduced the same WebKit offline-reload error. Deployment was blocked; the existing Pages publishing setup was not changed. The failing test remains enabled.
+
 Workout instruction media from OpenGym is **not bundled**: its media notice and upstream dataset require separate reuse permission. Kotlin source, APKs and phone data are unchanged by this website update.
 
 Run locally with Node 24:
