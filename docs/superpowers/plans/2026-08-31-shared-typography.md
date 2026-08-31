@@ -36,17 +36,17 @@ Files: create `web/src/ui/typography.ts`, `web/src/ui/FontPicker.tsx`, `web/src/
 
 Files: `ui/theme/IronLogTypography.kt`, new typography registry/runtime/preferences and picker files, `ui/IronLogApp.kt`, `ui/screens/settings/SettingsScreen.kt`, affected centralized text wrappers and tests under `app/src/test`/`app/src/androidTest`.
 
-- [ ] Write failing JVM tests for registry/preset normalization, range clamping and invalid stored preference recovery.
-- [ ] Implement persistent selection in existing settings or isolated SharedPreferences, never requiring ObjectBox schema changes; load before screen rendering and update the root immediately after a successful save.
-- [ ] Map all Material text styles to the chosen family and preset, including explicit screen weights through a centralized wrapper if needed. Audit custom Canvas/Paint text separately; never replace icon glyphs.
-- [ ] Add a scrollable opaque picker with family names, preview, selected state and weight preset. Preserve all pre-existing dirty edits.
-- [ ] Run focused tests, complete JVM tests/lint/build and emulator checks where available. No phone install/uninstall/clear and no release publication in this task.
+- [x] Write failing JVM tests for registry/preset normalization, range clamping and invalid stored preference recovery.
+- [x] Implement persistent selection in existing settings or isolated SharedPreferences, never requiring ObjectBox schema changes; load before screen rendering and update the root immediately after a successful save.
+- [x] Map all Material text styles to the chosen family and preset, including explicit screen weights through a centralized wrapper if needed. Audit custom Canvas/Paint text separately; never replace icon glyphs.
+- [x] Add a scrollable opaque picker with family names, preview, selected state and weight preset. Preserve all pre-existing dirty edits.
+- [x] Run focused tests, complete JVM tests/lint/build and emulator checks where available. No phone install/uninstall/clear and no release publication in this task.
 
 ## 4. Verification, review and publication
 
 - [ ] Browser tests: all 21 families load, persisted preference across landing/iframe/full-screen, invalid storage, all presets, 320px/large text, menus/inputs and complete workout after switching; offline reload retains the choice.
 - [ ] Run `npm test`, `npm run build`, `npm run verify:output`, complete Playwright suite and separate origin-stopped tests. Check screenshots and font payload totals.
-- [ ] Independent spec review followed by code-quality review; resolve findings and rerun affected gates.
+- [x] Independent spec review followed by code-quality review; resolve findings and rerun affected gates.
 - [ ] Update README and font acknowledgments. Publish only website-scoped changes via existing verified GitHub Pages workflow; native changes stay separate from unrelated Android work.
 - [ ] Verify the live website. Report native build/emulator evidence separately from physical-device testing and distinguish bundled font choices from platform-controlled text.
 

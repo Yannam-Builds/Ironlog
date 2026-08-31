@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, lazy, Suspense } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, lazy, Suspense } from "react";
 import { readSnapshot, subscribeSnapshot, reconcileBadges } from "./data/store";
 import type { AppSnapshot } from "./domain/types";
 import { deriveSnapshot } from "./domain/engine";
@@ -37,6 +37,12 @@ export function App() {
   const [now, setNow] = useState(Date.now());
   const [online, setOnline] = useState(navigator.onLine);
   const main = useRef<HTMLElement>(null);
+  useLayoutEffect(() => {
+    // Focus the committed route before it can be interacted with. A deferred
+    // animation frame can otherwise steal focus between Enter's key events.
+    window.scrollTo(0, 0);
+    main.current?.focus({ preventScroll: true });
+  }, [route]);
   useEffect(() => {
     applyTheme(currentTheme());
     return subscribeSnapshot(setData, (e) =>
@@ -48,8 +54,6 @@ export function App() {
   useEffect(() => {
     const hash = () => {
       setRoute(location.hash.replace(/^#\//, "") || "home");
-      window.scrollTo(0, 0);
-      requestAnimationFrame(() => main.current?.focus());
     };
     const visible = () => {
       if (document.visibilityState === "visible") {

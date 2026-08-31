@@ -17,6 +17,30 @@ async function onboard(page: Page) {
   await expect(page.getByRole("heading", { name: "Overlay QA" })).toBeVisible();
 }
 
+test("route focus does not steal a newly focused control on a delayed frame", async ({ page }) => {
+  await onboard(page);
+  await page.evaluate(() => {
+    const callbacks: FrameRequestCallback[] = [];
+    const original = window.requestAnimationFrame;
+    window.requestAnimationFrame = (callback) => callbacks.push(callback);
+    Object.assign(window, {
+      flushRouteFrames: () => {
+        window.requestAnimationFrame = original;
+        callbacks.splice(0).forEach((callback) => callback(performance.now()));
+      },
+    });
+    location.hash = "#/plans";
+  });
+  const opener = page.getByRole("button", { name: "Import JSON", exact: true });
+  await opener.focus();
+  await page.evaluate(() => {
+    (window as unknown as { flushRouteFrames: () => void }).flushRouteFrames();
+  });
+  await expect(opener).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("dialog", { name: "Import a plan" })).toBeVisible();
+});
+
 test("all themes keep sheets opaque, modal and keyboard dismissible", async ({
   page,
 }, info) => {

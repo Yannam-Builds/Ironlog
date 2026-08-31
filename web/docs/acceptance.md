@@ -18,10 +18,11 @@ Status: implementation and hardening in progress; **not fully accepted**. The ow
 ### Appearance update — 31 August 2026
 
 - 94 JVM-independent web unit tests pass; production build and scoped scan of 95 output files pass. Original font bytes total 5.84 MiB; revisioned offline precache is approximately 7.75 MiB.
-- All 47 browser tests pass on Windows with two workers. CI remains single-worker. New coverage loads every actual font family, all explicit weight presets, semantic heading weights, malformed preferences, storage denial, font-load failure, landing/iframe/full-screen synchronization, a complete workout after changing fonts, and offline selection of a previously unused font with the HTTP origin stopped.
+- All 49 browser tests pass on Windows with two workers. CI remains single-worker. New coverage loads every actual font family, all explicit weight presets, semantic heading weights, malformed preferences, storage denial, font-load failure, landing/iframe/full-screen synchronization, a complete workout after changing fonts, and offline selection of a previously unused font with the HTTP origin stopped.
 - Global spacing is tested at 85% and 125%, with reset/reload, 320px and 200% text, preserved text/icon sizes and representative 48px-or-larger controls. WebKit testing exposed and fixed long header/tab/link overflow and native-select overflow; navigation labels now wrap and bottom clearance accommodates enlarged text.
-- Both supplemental origin-stopped workout tests pass (2/2, 21 seconds). Typography and spacing received independent spec/code reviews; heading-role findings were fixed. Native code is developed in a separate dirty workspace and is not part of this website deployment.
+- Both supplemental origin-stopped workout tests pass (2/2, 23.1 seconds). Typography and spacing received independent spec/code reviews; heading-role findings were fixed. Native code is developed in a separate dirty workspace and is not part of this website deployment.
 - These are automated/emulated checks, not physical Safari, Home Screen or VoiceOver acceptance. Existing broader parity gaps below remain open.
+- The first appearance CI run exposed a route-focus race in the existing keyboard-overlay test. A delayed animation frame could steal focus between Enter events. Route focus now runs after the React route commit, before paint; a controlled delayed-frame regression failed before the fix and passes afterward. The complete local suite passes without weakening the original keyboard assertions.
 
 The final run results should accompany this document. Current covered cases include:
 
