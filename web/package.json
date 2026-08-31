@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "prebuild": "node scripts/build-assets.mjs",
+    "prebuild": "node scripts/build-assets.mjs && node scripts/font-faces.mjs",
     "verify:output": "node scripts/verify-output.mjs",
     "dev": "vite --host 127.0.0.1",
     "build": "tsc -b && vite build",

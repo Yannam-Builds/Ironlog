@@ -53,6 +53,18 @@ Native tokens remain intact. The landing page uses lighter Lexend weights (350 h
 
 ## Storage and portability
 
+### Fonts and layout spacing
+
+Use **Settings → Typography** for font family and weight, and **Settings → Layout spacing** for the compact-to-spacious slider. The landing page has the same font picker. Original preserves existing screen weights; Light uses body/control/heading weights 350/450/450, Regular 400/500/600, and Bold 500/650/750. Weights are clamped to each variable font's supported range. **Lexend + Light** gives the lighter landing-page feel throughout the app.
+
+The 21 families are Lexend, Inter, Manrope, DM Sans, Plus Jakarta Sans, Outfit, Sora, Urbanist, Nunito, Nunito Sans, Rubik, Work Sans, Public Sans, Figtree, Assistant, Mulish, Quicksand, Raleway, Montserrat, Exo 2 and Source Sans 3. Original TTF files total **5.84 MiB**. All have SIL Open Font License notices linked from the picker and bundled for offline reading. The app precaches all fonts after startup so changing to an unused family also works offline; the landing picker itself does not preload every family.
+
+`src/generated/fonts.json` records ranges, source URLs, SHA-256 hashes and the pinned Google Fonts revision `ade3d1533e06b2b1462ffcde8e08b129627ca360`. `scripts/fetch-fonts.mjs` is an explicit maintenance command, not a network build step. `scripts/font-faces.mjs` regenerates CSS locally during builds. No runtime font provider receives requests.
+
+Spacing ranges from 85% to 125% in 5% steps. It changes positive CSS padding, margins and layout gaps, not text size, icons, chart/body-map geometry or minimum control sizes. Safe-area insets stay unscaled. Reset spacing restores 100%. Browser/OS-controlled menus and controls may retain platform styling.
+
+Typography and spacing use separate validated localStorage preferences, synchronized across same-origin tabs and the embedded preview. They are **device preferences, not workout records**: browser backups and Android-compatible exports do not carry them, and they do not sync to the Kotlin app. Failed preference writes leave the previous appearance intact and show an error. Clearing site storage resets them. The separately implemented native controls are not shipped by the website deployment.
+
 IndexedDB is the source of truth. There is no backend, account, analytics, automatic external-AI request or phone synchronization. Version 2 adds a single-row bundled catalog while preserving version-1 custom exercise overrides.
 
 Complete browser ZIP backups contain photo bytes. Android-compatible JSON is a separate export; Android photo URIs do not transfer image files. Restore is validated before clearing and committed atomically. Restoring is blocked transactionally while any workout is active, including a session started in another tab after preview.
@@ -69,7 +81,7 @@ The PWA uses prompt updates. Pending writes and active workouts disable update c
 
 **Preview publication requested by the owner on 31 August 2026.** Repository publication is separate from full product acceptance. The workflow must pass before Pages deployment; never skip a failed test to publish. Real iPhone testing and the documented parity/acceptance gaps remain open. Do not include unrelated Android edits, APKs, keystores or user backups.
 
-On Windows, the latest run passed 85 unit tests and all 29 main browser tests. The phone-preview journeys run in desktop Chromium/WebKit and Pixel 7 Chrome emulation; a complete workout is logged and finished inside the frame. Both supplemental origin-unavailable workout tests pass with `npx playwright test --config=diagnostics/playwright.config.ts`. The main offline test now closes its actual HTTP server; the standalone WebKit offline-emulation failure remains documented and reproducible. See [the diagnostic evidence and limitations](diagnostics/OFFLINE-WEBKIT.md); this is not physical-device or installed-PWA verification.
+On Windows, the appearance update passed 94 unit tests and all 47 main browser tests (2 workers, 2 minutes); CI retains its single-worker configuration. All 21 fonts and presets are checked on the landing/embedded app at 320px and 200% text in Chromium/WebKit/Pixel 7 Chrome emulation. Settings changes, completed workouts, failed font/preference loads, both spacing extremes, unchanged text/icon dimensions and control minimums are covered. Both supplemental origin-unavailable workout tests pass (2/2, 21 seconds). The main offline test closes its actual HTTP server; the standalone WebKit offline-emulation failure remains documented and reproducible. See [the diagnostic evidence and limitations](diagnostics/OFFLINE-WEBKIT.md); this is not physical-device or installed-PWA verification.
 
 OpenGym exercise pictures/GIFs are not included. Its [media notice](https://gitlab.com/DuarteSantos8/opengym/-/blob/main/NOTICE.md) and the [upstream dataset terms](https://github.com/hasaneyldrm/exercises-dataset#license--usage) require separate media permission; software licenses do not grant those image rights.
 

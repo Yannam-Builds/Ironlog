@@ -1,0 +1,141 @@
+/* Generated from fonts.json. Original font files and OFL licenses retained. */
+@font-face {
+  font-family: "IronLog inter";
+  src: url("/Ironlog/fonts/inter_variable.ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "IronLog manrope";
+  src: url("/Ironlog/fonts/manrope_variable.ttf") format("truetype");
+  font-weight: 200 800;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "IronLog dmsans";
+  src: url("/Ironlog/fonts/dmsans_variable.ttf") format("truetype");
+  font-weight: 100 1000;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "IronLog plusjakartasans";
+  src: url("/Ironlog/fonts/plusjakartasans_variable.ttf") format("truetype");
+  font-weight: 200 800;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "IronLog outfit";
+  src: url("/Ironlog/fonts/outfit_variable.ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "IronLog sora";
+  src: url("/Ironlog/fonts/sora_variable.ttf") format("truetype");
+  font-weight: 100 800;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "IronLog urbanist";
+  src: url("/Ironlog/fonts/urbanist_variable.ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "IronLog nunito";
+  src: url("/Ironlog/fonts/nunito_variable.ttf") format("truetype");
+  font-weight: 200 1000;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "IronLog nunitosans";
+  src: url("/Ironlog/fonts/nunitosans_variable.ttf") format("truetype");
+  font-weight: 200 1000;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "IronLog rubik";
+  src: url("/Ironlog/fonts/rubik_variable.ttf") format("truetype");
+  font-weight: 300 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "IronLog worksans";
+  src: url("/Ironlog/fonts/worksans_variable.ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "IronLog publicsans";
+  src: url("/Ironlog/fonts/publicsans_variable.ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "IronLog figtree";
+  src: url("/Ironlog/fonts/figtree_variable.ttf") format("truetype");
+  font-weight: 300 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "IronLog assistant";
+  src: url("/Ironlog/fonts/assistant_variable.ttf") format("truetype");
+  font-weight: 200 800;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "IronLog mulish";
+  src: url("/Ironlog/fonts/mulish_variable.ttf") format("truetype");
+  font-weight: 200 1000;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "IronLog quicksand";
+  src: url("/Ironlog/fonts/quicksand_variable.ttf") format("truetype");
+  font-weight: 300 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "IronLog raleway";
+  src: url("/Ironlog/fonts/raleway_variable.ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "IronLog montserrat";
+  src: url("/Ironlog/fonts/montserrat_variable.ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "IronLog exo2";
+  src: url("/Ironlog/fonts/exo2_variable.ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "IronLog sourcesans3";
+  src: url("/Ironlog/fonts/sourcesans3_variable.ttf") format("truetype");
+  font-weight: 200 900;
+  font-style: normal;
+  font-display: swap;
+}

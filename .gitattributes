@@ -1,0 +1,3 @@
+# Preserve pinned, unmodified upstream font and license bytes on every OS.
+/web/public/fonts/*.ttf -text
+/web/public/licenses/fonts/*.txt -text -whitespace

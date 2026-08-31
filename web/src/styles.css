@@ -5,7 +5,7 @@
   font-display: swap;
 }
 :root {
-  font-family: Lexend, system-ui, sans-serif;
+  font-family: var(--font-family, Lexend, system-ui, sans-serif);
   color: var(--text, #eee);
   background: var(--bg, #121212);
   font-synthesis: none;
@@ -75,13 +75,13 @@ h1 {
   font-size: 2rem;
   line-height: 1.18;
   letter-spacing: -0.035em;
-  font-weight: 800;
-  margin: 10px 0 20px;
+  font-weight: var(--type-w800, 800);
+  margin: calc(10px * var(--ui-spacing, 1)) 0 calc(20px * var(--ui-spacing, 1));
 }
 h2 {
   font-size: 1.2rem;
   line-height: 1.3;
-  font-weight: 700;
+  font-weight: var(--type-w700, 700);
 }
 h3 {
   font-size: 1rem;
@@ -90,7 +90,7 @@ h3 {
 p {
   line-height: 1.6;
   max-width: 70ch;
-  margin: 10px 0 18px;
+  margin: calc(10px * var(--ui-spacing, 1)) 0 calc(18px * var(--ui-spacing, 1));
   color: var(--subtext);
 }
 small {
@@ -98,7 +98,7 @@ small {
   line-height: 1.5;
 }
 strong {
-  font-weight: 650;
+  font-weight: var(--type-w650, 650);
 }
 img,
 svg {
@@ -121,15 +121,15 @@ button:active {
   transform: translateY(1px);
 }
 section {
-  margin-bottom: 28px;
+  margin-bottom: calc(28px * var(--ui-spacing, 1));
 }
 ul,
 ol {
   line-height: 1.65;
-  padding-left: 24px;
+  padding-left: calc(24px * var(--ui-spacing, 1));
 }
 li {
-  margin: 8px 0;
+  margin: calc(8px * var(--ui-spacing, 1)) 0;
 }
 pre {
   white-space: pre-wrap;
@@ -138,15 +138,15 @@ pre {
 .app-shell {
   max-width: 620px;
   margin: auto;
-  padding: 0 22px;
+  padding: 0 calc(22px * var(--ui-spacing, 1));
 }
 .app-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 84px;
+  min-height: 84px;
   padding-top: env(safe-area-inset-top);
-  gap: 15px;
+  gap: calc(15px * var(--ui-spacing, 1));
 }
 .app-header img {
   width: 42px;
@@ -155,12 +155,16 @@ pre {
 }
 [data-theme="light"] .app-header img,
 [data-theme="light"] .onboard-brand img,
-[data-theme="light"] .brand img { filter: invert(1); }
+[data-theme="light"] .brand img {
+  filter: invert(1);
+}
 .app-header a {
+  min-width: 0;
+  overflow-wrap: anywhere;
   color: var(--text);
   text-decoration: none;
   font-size: 1.15rem;
-  font-weight: 900;
+  font-weight: var(--type-w900, 900);
   letter-spacing: 0.02em;
 }
 .app-header a span {
@@ -172,7 +176,9 @@ pre {
   font-size: 0.75rem;
 }
 .app-content {
-  padding-bottom: calc(115px + env(safe-area-inset-bottom));
+  padding-bottom: calc(
+    max(calc(115px * var(--ui-spacing, 1)), 7rem) + env(safe-area-inset-bottom)
+  );
   outline: 0;
 }
 .page-title,
@@ -180,13 +186,13 @@ pre {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 12px;
+  gap: calc(12px * var(--ui-spacing, 1));
 }
 .page-title h1 {
-  margin-bottom: 16px;
+  margin-bottom: calc(16px * var(--ui-spacing, 1));
 }
 .section-title {
-  margin-bottom: 10px;
+  margin-bottom: calc(10px * var(--ui-spacing, 1));
 }
 .section-title > div:first-child {
   min-width: 0;
@@ -195,7 +201,7 @@ pre {
 .row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: calc(12px * var(--ui-spacing, 1));
   justify-content: space-between;
 }
 .row > .field {
@@ -206,18 +212,18 @@ pre {
   font-size: 0.75rem;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  font-weight: 700;
+  font-weight: var(--type-w700, 700);
   color: var(--subtext);
 }
 .muted {
   color: var(--subtext);
 }
 .card {
-  padding: 22px;
+  padding: calc(22px * var(--ui-spacing, 1));
   background: var(--card);
   border: 1px solid var(--cardBorder);
   border-radius: 24px;
-  margin-bottom: 18px;
+  margin-bottom: calc(18px * var(--ui-spacing, 1));
   text-align: left;
 }
 .card > p:last-child {
@@ -227,12 +233,12 @@ pre {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: calc(10px * var(--ui-spacing, 1));
   min-height: 50px;
   border: 1px solid transparent;
   border-radius: 999px;
-  padding: 12px 22px;
-  font-weight: 700;
+  padding: calc(12px * var(--ui-spacing, 1)) calc(22px * var(--ui-spacing, 1));
+  font-weight: var(--type-w700, 700);
   text-align: center;
   text-decoration: none;
   line-height: 1.4;
@@ -276,29 +282,29 @@ pre {
 }
 .text-button {
   display: inline-flex;
-  gap: 6px;
+  gap: calc(6px * var(--ui-spacing, 1));
   align-items: center;
   min-height: 48px;
   border: 0;
   background: transparent;
   color: var(--link);
-  padding: 4px 0;
+  padding: calc(4px * var(--ui-spacing, 1)) 0;
   font-size: 0.85rem;
 }
 .toolbar {
   display: flex;
-  gap: 8px;
+  gap: calc(8px * var(--ui-spacing, 1));
   flex-wrap: wrap;
-  margin: 16px 0;
+  margin: calc(16px * var(--ui-spacing, 1)) 0;
 }
 .field {
   display: flex;
   flex-direction: column;
-  gap: 9px;
-  margin: 16px 0;
+  gap: calc(9px * var(--ui-spacing, 1));
+  margin: calc(16px * var(--ui-spacing, 1)) 0;
   min-width: 0;
   font-size: 0.875rem;
-  font-weight: 500;
+  font-weight: var(--type-w500, 500);
 }
 .field > span {
   color: var(--subtext);
@@ -312,7 +318,7 @@ textarea {
   border-radius: 12px;
   min-height: 50px;
   width: 100%;
-  padding: 12px;
+  padding: calc(12px * var(--ui-spacing, 1));
   font-size: 1rem;
   max-width: 100%;
 }
@@ -320,6 +326,20 @@ input::placeholder,
 textarea::placeholder {
   color: var(--subtext);
   opacity: 1;
+}
+select {
+  appearance: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-right: 32px;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--subtext) 50%),
+    linear-gradient(135deg, var(--subtext) 50%, transparent 50%);
+  background-position:
+    calc(100% - 17px) 50%,
+    calc(100% - 12px) 50%;
+  background-size: 5px 5px;
+  background-repeat: no-repeat;
 }
 textarea {
   resize: vertical;
@@ -334,6 +354,7 @@ input[type="checkbox"] {
 }
 input[type="range"] {
   padding: 0;
+  margin: 0;
   accent-color: var(--accent);
 }
 input[type="file"] {
@@ -341,17 +362,17 @@ input[type="file"] {
   font-size: 0.875rem;
 }
 input[type="file"]::file-selector-button {
-  padding: 9px;
+  padding: calc(9px * var(--ui-spacing, 1));
   border: 0;
   border-radius: 7px;
-  margin-right: 10px;
+  margin-right: calc(10px * var(--ui-spacing, 1));
   background: var(--card);
   color: var(--text);
 }
 .check-label {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: calc(12px * var(--ui-spacing, 1));
   min-height: 48px;
   font-size: 0.875rem;
   line-height: 1.5;
@@ -359,17 +380,17 @@ input[type="file"]::file-selector-button {
 fieldset {
   border: 1px solid var(--subtext);
   border-radius: 12px;
-  margin: 20px 0;
-  padding: 15px;
+  margin: calc(20px * var(--ui-spacing, 1)) 0;
+  padding: calc(15px * var(--ui-spacing, 1));
 }
 legend {
-  padding: 0 8px;
+  padding: 0 calc(8px * var(--ui-spacing, 1));
 }
 .two-col,
 .three-col {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: calc(12px * var(--ui-spacing, 1));
 }
 .three-col {
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -377,8 +398,8 @@ legend {
 .workout-inputs {
   display: flex;
   align-items: flex-end;
-  gap: 12px;
-  margin: 16px 0;
+  gap: calc(12px * var(--ui-spacing, 1));
+  margin: calc(16px * var(--ui-spacing, 1)) 0;
 }
 .workout-inputs .field {
   flex: 1;
@@ -387,20 +408,21 @@ legend {
 }
 .workout-inputs input {
   font-size: 1.35rem;
-  font-weight: 600;
+  font-weight: var(--type-w600, 600);
   height: 62px;
 }
 .workout-inputs .button {
   min-width: 85px;
   min-height: 56px;
-  margin-bottom: 3px;
+  margin-bottom: calc(3px * var(--ui-spacing, 1));
 }
 .list-row {
+  overflow-wrap: anywhere;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding: 17px 0;
+  gap: calc(16px * var(--ui-spacing, 1));
+  padding: calc(17px * var(--ui-spacing, 1)) 0;
   border: 0;
   border-bottom: 1px solid var(--cardBorder);
   text-align: left;
@@ -420,13 +442,13 @@ legend {
 .list-row small {
   display: block;
   color: var(--subtext);
-  margin-top: 5px;
+  margin-top: calc(5px * var(--ui-spacing, 1));
 }
 .list-row:hover:not(:disabled) {
   color: var(--link);
 }
 .link-list {
-  margin: 24px 0;
+  margin: calc(24px * var(--ui-spacing, 1)) 0;
 }
 .pill,
 .chips button {
@@ -436,15 +458,15 @@ legend {
   background: var(--accentSoft);
   color: var(--link);
   font-size: 0.75rem;
-  font-weight: 600;
-  padding: 7px 12px;
+  font-weight: var(--type-w600, 600);
+  padding: calc(7px * var(--ui-spacing, 1)) calc(12px * var(--ui-spacing, 1));
   line-height: 1.3;
 }
 .chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin: 18px 0;
+  gap: calc(8px * var(--ui-spacing, 1));
+  margin: calc(18px * var(--ui-spacing, 1)) 0;
 }
 .chips button {
   min-height: 44px;
@@ -454,7 +476,7 @@ legend {
   background: var(--cardBorder);
   border-radius: 8px;
   overflow: hidden;
-  margin: 12px 0;
+  margin: calc(12px * var(--ui-spacing, 1)) 0;
 }
 .progress i {
   display: block;
@@ -475,15 +497,19 @@ legend {
   grid-template-columns: repeat(5, minmax(0, 1fr));
   background: var(--tabBg);
   border-top: 1px solid var(--cardBorder);
-  padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
+  padding: calc(8px * var(--ui-spacing, 1)) calc(8px * var(--ui-spacing, 1))
+    calc(calc(8px * var(--ui-spacing, 1)) + env(safe-area-inset-bottom));
 }
 .bottom-nav a {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: calc(6px * var(--ui-spacing, 1));
   align-items: center;
   justify-content: center;
   min-height: 56px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  text-align: center;
   text-decoration: none;
   color: var(--subtext);
   border-radius: 14px;
@@ -495,7 +521,7 @@ legend {
 }
 .resume {
   display: flex;
-  gap: 10px;
+  gap: calc(10px * var(--ui-spacing, 1));
   align-items: center;
   justify-content: space-between;
   width: 100%;
@@ -504,8 +530,8 @@ legend {
   border-radius: 14px;
   background: var(--surface);
   color: var(--link);
-  padding: 10px 14px;
-  margin: 5px 0 24px;
+  padding: calc(10px * var(--ui-spacing, 1)) calc(14px * var(--ui-spacing, 1));
+  margin: calc(5px * var(--ui-spacing, 1)) 0 calc(24px * var(--ui-spacing, 1));
   font-size: 0.875rem;
 }
 .resume span {
@@ -513,14 +539,14 @@ legend {
   text-align: left;
 }
 .greeting {
-  margin: 12px 0 26px;
+  margin: calc(12px * var(--ui-spacing, 1)) 0 calc(26px * var(--ui-spacing, 1));
 }
 .greeting p {
   font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.12em;
-  font-weight: 600;
-  margin-bottom: 10px;
+  font-weight: var(--type-w600, 600);
+  margin-bottom: calc(10px * var(--ui-spacing, 1));
 }
 .greeting > span {
   color: var(--subtext);
@@ -528,7 +554,7 @@ legend {
 }
 .greeting h1 {
   color: var(--link);
-  margin-top: 5px;
+  margin-top: calc(5px * var(--ui-spacing, 1));
 }
 .fox {
   object-fit: contain;
@@ -538,8 +564,8 @@ legend {
 .daily-proof {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 16px 20px;
+  gap: calc(12px * var(--ui-spacing, 1));
+  padding: calc(16px * var(--ui-spacing, 1)) calc(20px * var(--ui-spacing, 1));
   min-height: 110px;
 }
 .daily-proof > div {
@@ -551,7 +577,7 @@ legend {
   height: 98px;
 }
 .daily-proof h2 {
-  margin-top: 8px;
+  margin-top: calc(8px * var(--ui-spacing, 1));
   font-size: 1.05rem;
 }
 .daily-proof p {
@@ -559,23 +585,23 @@ legend {
   margin-bottom: 0;
 }
 .today-card {
-  padding: 25px;
+  padding: calc(25px * var(--ui-spacing, 1));
   border-color: var(--accentBorder);
 }
 .today-card h2 {
   font-size: 1.8rem;
   letter-spacing: -0.025em;
-  margin-top: 25px;
+  margin-top: calc(25px * var(--ui-spacing, 1));
 }
 .today-card .button {
   width: 100%;
-  margin-top: 8px;
+  margin-top: calc(8px * var(--ui-spacing, 1));
 }
 .recovery-summary {
   display: flex;
   align-items: center;
-  gap: 18px;
-  margin: 12px 0;
+  gap: calc(18px * var(--ui-spacing, 1));
+  margin: calc(12px * var(--ui-spacing, 1)) 0;
 }
 .recovery-summary > strong {
   font-size: 2.7rem;
@@ -583,7 +609,7 @@ legend {
 }
 .recovery-summary strong small {
   font-size: 1rem;
-  font-weight: 400;
+  font-weight: var(--type-w400, 400);
   color: var(--subtext);
 }
 .recovery-summary p {
@@ -593,7 +619,7 @@ legend {
 .body-pair {
   display: flex;
   justify-content: center;
-  gap: 18px;
+  gap: calc(18px * var(--ui-spacing, 1));
   height: 210px;
 }
 .body-pair > div {
@@ -612,13 +638,13 @@ legend {
   overflow: hidden;
 }
 .body-pair small {
-  margin-top: 4px;
+  margin-top: calc(4px * var(--ui-spacing, 1));
 }
 .legend {
   display: flex;
   justify-content: space-between;
-  gap: 8px;
-  margin-top: 25px;
+  gap: calc(8px * var(--ui-spacing, 1));
+  margin-top: calc(25px * var(--ui-spacing, 1));
   font-size: 0.75rem;
 }
 .legend span:nth-child(1) {
@@ -634,7 +660,7 @@ legend {
   width: 100%;
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: calc(16px * var(--ui-spacing, 1));
   color: var(--text);
   cursor: pointer;
 }
@@ -644,7 +670,7 @@ legend {
 }
 .ledger-link p {
   font-size: 0.75rem;
-  margin: 8px 0;
+  margin: calc(8px * var(--ui-spacing, 1)) 0;
 }
 .grade-art {
   object-fit: contain;
@@ -652,35 +678,36 @@ legend {
 }
 .ledger-hero {
   text-align: center;
-  padding: 12px 25px 25px;
+  padding: calc(12px * var(--ui-spacing, 1)) calc(25px * var(--ui-spacing, 1))
+    calc(25px * var(--ui-spacing, 1));
 }
 .ledger-hero h2 {
   font-size: 1.8rem;
-  margin: 8px;
+  margin: calc(8px * var(--ui-spacing, 1));
 }
 .grade-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-  margin: 20px 0 32px;
+  gap: calc(12px * var(--ui-spacing, 1));
+  margin: calc(20px * var(--ui-spacing, 1)) 0 calc(32px * var(--ui-spacing, 1));
 }
 .grade-grid > div {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: calc(6px * var(--ui-spacing, 1));
   font-size: 0.75rem;
 }
 .stat-pair {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
-  margin: 22px 0;
+  gap: calc(14px * var(--ui-spacing, 1));
+  margin: calc(22px * var(--ui-spacing, 1)) 0;
 }
 .stat-pair > div {
   border: 1px solid var(--cardBorder);
   border-radius: 20px;
-  padding: 20px;
+  padding: calc(20px * var(--ui-spacing, 1));
   background: var(--card);
 }
 .stat-pair span {
@@ -691,7 +718,7 @@ legend {
 }
 .stat-pair strong {
   display: block;
-  margin-top: 16px;
+  margin-top: calc(16px * var(--ui-spacing, 1));
   font-size: 1.7rem;
   overflow-wrap: anywhere;
 }
@@ -700,14 +727,14 @@ legend {
 }
 .full-map {
   height: 480px;
-  margin: 22px 0;
+  margin: calc(22px * var(--ui-spacing, 1)) 0;
 }
 .segmented {
   display: flex;
   background: var(--surface);
-  padding: 5px;
+  padding: calc(5px * var(--ui-spacing, 1));
   border-radius: 99px;
-  gap: 5px;
+  gap: calc(5px * var(--ui-spacing, 1));
 }
 .segmented button {
   flex: 1;
@@ -720,10 +747,10 @@ legend {
 .segmented button[aria-pressed="true"] {
   background: var(--accent);
   color: var(--button-ink);
-  font-weight: 700;
+  font-weight: var(--type-w700, 700);
 }
 .region-list {
-  margin-bottom: 25px;
+  margin-bottom: calc(25px * var(--ui-spacing, 1));
 }
 .region-list span {
   font-size: 0.8rem;
@@ -752,32 +779,33 @@ legend {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 14px;
+  gap: calc(14px * var(--ui-spacing, 1));
   background: var(--card);
-  padding: 16px 22px;
+  padding: calc(16px * var(--ui-spacing, 1)) calc(22px * var(--ui-spacing, 1));
   border-bottom: 1px solid var(--cardBorder);
   z-index: 1;
 }
 .sheet-body {
-  padding: 8px 24px calc(30px + env(safe-area-inset-bottom));
+  padding: calc(8px * var(--ui-spacing, 1)) calc(24px * var(--ui-spacing, 1))
+    calc(calc(30px * var(--ui-spacing, 1)) + env(safe-area-inset-bottom));
   overflow-wrap: anywhere;
 }
 .sheet-body > .button {
   width: 100%;
-  margin-top: 14px;
+  margin-top: calc(14px * var(--ui-spacing, 1));
 }
 .sheet-body > .search-results {
-  margin-top: 18px;
+  margin-top: calc(18px * var(--ui-spacing, 1));
 }
 .notice,
 .error {
-  padding: 16px;
+  padding: calc(16px * var(--ui-spacing, 1));
   border: 1px solid var(--warning);
   border-radius: 14px;
   background: var(--surface);
   color: var(--text);
   line-height: 1.6;
-  margin: 16px 0;
+  margin: calc(16px * var(--ui-spacing, 1)) 0;
 }
 .message {
   position: fixed;
@@ -786,11 +814,11 @@ legend {
   left: 50%;
   transform: translateX(-50%);
   display: flex;
-  gap: 12px;
+  gap: calc(12px * var(--ui-spacing, 1));
   align-items: center;
   max-width: 580px;
   width: calc(100% - 24px);
-  padding: 14px 18px;
+  padding: calc(14px * var(--ui-spacing, 1)) calc(18px * var(--ui-spacing, 1));
   border: 1px solid var(--subtext);
   border-radius: 14px;
   background: var(--card);
@@ -813,14 +841,14 @@ legend {
   position: fixed;
   bottom: 100px;
   right: 20px;
-  padding: 10px;
+  padding: calc(10px * var(--ui-spacing, 1));
   background: var(--card);
   border: 1px solid var(--cardBorder);
   border-radius: 10px;
   font-size: 0.75rem;
 }
 .offline {
-  padding: 8px;
+  padding: calc(8px * var(--ui-spacing, 1));
   text-align: center;
   background: var(--surface);
   color: var(--subtext);
@@ -832,37 +860,40 @@ legend {
   top: -100px;
   z-index: 50;
   background: var(--card);
-  padding: 16px;
+  padding: calc(16px * var(--ui-spacing, 1));
 }
 .skip-link:focus {
   top: 10px;
 }
 .empty {
   text-align: center;
-  padding: 30px 15px;
+  padding: calc(30px * var(--ui-spacing, 1)) calc(15px * var(--ui-spacing, 1));
 }
 .empty .fox {
   width: 150px;
   height: 170px;
 }
 .empty h2 {
-  margin-top: 12px;
+  margin-top: calc(12px * var(--ui-spacing, 1));
 }
 .empty .button {
-  margin-top: 12px;
+  margin-top: calc(12px * var(--ui-spacing, 1));
 }
 .onboarding {
   max-width: 540px;
   margin: 0 auto;
-  padding: 28px 26px calc(35px + env(safe-area-inset-bottom));
-  padding-top: calc(28px + env(safe-area-inset-top));
+  padding: calc(28px * var(--ui-spacing, 1)) calc(26px * var(--ui-spacing, 1))
+    calc(calc(35px * var(--ui-spacing, 1)) + env(safe-area-inset-bottom));
+  padding-top: calc(
+    calc(28px * var(--ui-spacing, 1)) + env(safe-area-inset-top)
+  );
 }
 .onboard-brand {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 25px;
-  font-weight: 800;
+  gap: calc(12px * var(--ui-spacing, 1));
+  margin-bottom: calc(25px * var(--ui-spacing, 1));
+  font-weight: var(--type-w800, 800);
 }
 .onboard-brand img {
   width: 42px;
@@ -874,12 +905,13 @@ legend {
 }
 .onboarding > .fox {
   display: block;
-  margin: 20px auto 10px;
+  margin: calc(20px * var(--ui-spacing, 1)) auto
+    calc(10px * var(--ui-spacing, 1));
   width: 170px;
   height: 175px;
 }
 .onboarding h1 {
-  margin-top: 32px;
+  margin-top: calc(32px * var(--ui-spacing, 1));
   font-size: 2.2rem;
 }
 .onboarding > .progress {
@@ -887,8 +919,8 @@ legend {
 }
 .onboard-actions {
   display: flex;
-  gap: 10px;
-  margin: 30px 0;
+  gap: calc(10px * var(--ui-spacing, 1));
+  margin: calc(30px * var(--ui-spacing, 1)) 0;
 }
 .onboard-actions .button {
   flex: 1;
@@ -900,8 +932,9 @@ legend {
 }
 .number-wheel {
   container-type: inline-size;
-  margin: 18px 0;
-  padding: 14px 14px 7px;
+  margin: calc(18px * var(--ui-spacing, 1)) 0;
+  padding: calc(14px * var(--ui-spacing, 1)) calc(14px * var(--ui-spacing, 1))
+    calc(7px * var(--ui-spacing, 1));
   border: 1px solid var(--cardBorder);
   border-radius: 18px;
   background: var(--card);
@@ -914,7 +947,7 @@ legend {
 .wheel-control {
   display: flex;
   align-items: center;
-  margin-top: 10px;
+  margin-top: calc(10px * var(--ui-spacing, 1));
 }
 .wheel-control button {
   height: 48px;
@@ -930,8 +963,8 @@ legend {
   border: 0;
   background: var(--surface);
   font-size: 1.65rem;
-  font-weight: 600;
-  padding: 8px;
+  font-weight: var(--type-w600, 600);
+  padding: calc(8px * var(--ui-spacing, 1));
   -moz-appearance: textfield;
 }
 .wheel-control input::-webkit-inner-spin-button {
@@ -940,7 +973,7 @@ legend {
 .wheel-neighbors {
   font-size: 0.75rem;
   color: var(--subtext);
-  margin-top: 7px;
+  margin-top: calc(7px * var(--ui-spacing, 1));
   word-spacing: 10px;
 }
 @container (max-width: 210px) {
@@ -960,16 +993,16 @@ legend {
 .theme-picker {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 9px;
-  margin: 22px 0;
+  gap: calc(9px * var(--ui-spacing, 1));
+  margin: calc(22px * var(--ui-spacing, 1)) 0;
 }
 .theme-picker button {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: calc(10px * var(--ui-spacing, 1));
   text-align: left;
   min-height: 66px;
-  padding: 10px;
+  padding: calc(10px * var(--ui-spacing, 1));
   border: 1px solid var(--cardBorder);
   border-radius: 14px;
   background: var(--card);
@@ -986,6 +1019,10 @@ legend {
 }
 .theme-picker svg {
   margin-left: auto;
+}
+.theme-picker button > span:not(.swatch) {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .swatch {
   display: flex;
@@ -1006,8 +1043,8 @@ legend {
 .set-row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 9px 0;
+  gap: calc(10px * var(--ui-spacing, 1));
+  padding: calc(9px * var(--ui-spacing, 1)) 0;
   border-bottom: 1px solid var(--cardBorder);
   min-height: 64px;
   flex-wrap: wrap;
@@ -1044,40 +1081,40 @@ legend {
 }
 .exercise-card .section-title p {
   font-size: 0.8rem;
-  margin: 8px 0;
+  margin: calc(8px * var(--ui-spacing, 1)) 0;
 }
 .exercise-note {
   font-size: 0.875rem;
   background: var(--surface);
-  padding: 12px;
+  padding: calc(12px * var(--ui-spacing, 1));
   border-radius: 10px;
 }
 .exercise-tools {
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
-  gap: 8px;
+  gap: calc(8px * var(--ui-spacing, 1));
 }
 .set-details {
-  margin: 14px 0;
+  margin: calc(14px * var(--ui-spacing, 1)) 0;
 }
 .set-details summary,
 details > summary {
   min-height: 48px;
   display: list-item;
-  padding: 13px 0;
+  padding: calc(13px * var(--ui-spacing, 1)) 0;
   cursor: pointer;
   color: var(--subtext);
   font-size: 0.875rem;
 }
 .warmup-queue {
-  padding: 15px 0;
+  padding: calc(15px * var(--ui-spacing, 1)) 0;
   border-bottom: 1px solid var(--cardBorder);
 }
 .warmup-queue .row {
   flex-wrap: wrap;
-  gap: 6px;
-  margin: 10px 0;
+  gap: calc(6px * var(--ui-spacing, 1));
+  margin: calc(10px * var(--ui-spacing, 1)) 0;
 }
 .warmup-queue .row > span {
   flex: 1;
@@ -1085,17 +1122,17 @@ details > summary {
 }
 .warmup-queue .button {
   font-size: 0.75rem;
-  padding: 10px 12px;
+  padding: calc(10px * var(--ui-spacing, 1)) calc(12px * var(--ui-spacing, 1));
 }
 .rest-banner {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: calc(10px * var(--ui-spacing, 1));
   background: var(--surface);
   border: 1px solid var(--accentBorder);
   border-radius: 16px;
-  padding: 12px 15px;
-  margin: 16px 0 22px;
+  padding: calc(12px * var(--ui-spacing, 1)) calc(15px * var(--ui-spacing, 1));
+  margin: calc(16px * var(--ui-spacing, 1)) 0 calc(22px * var(--ui-spacing, 1));
   position: sticky;
   top: 8px;
   z-index: 2;
@@ -1111,20 +1148,20 @@ details > summary {
 }
 .sticky-actions {
   display: flex;
-  gap: 10px;
+  gap: calc(10px * var(--ui-spacing, 1));
   align-items: center;
-  margin: 26px 0;
+  margin: calc(26px * var(--ui-spacing, 1)) 0;
   flex-wrap: wrap;
 }
 .sticky-actions > .primary {
   flex: 1;
 }
 .barbell {
-  margin: 20px 0;
+  margin: calc(20px * var(--ui-spacing, 1)) 0;
   background: var(--surface);
   border-radius: 18px;
   border: 1px solid var(--cardBorder);
-  padding: 15px;
+  padding: calc(15px * var(--ui-spacing, 1));
 }
 .barbell svg {
   display: block;
@@ -1136,18 +1173,18 @@ details > summary {
   width: 12px;
   height: 24px;
   border-radius: 4px;
-  margin-right: 10px;
+  margin-right: calc(10px * var(--ui-spacing, 1));
   vertical-align: middle;
 }
 .plan-exercise {
-  padding: 20px 0;
+  padding: calc(20px * var(--ui-spacing, 1)) 0;
   border-bottom: 1px solid var(--cardBorder);
-  margin-bottom: 15px;
+  margin-bottom: calc(15px * var(--ui-spacing, 1));
 }
 .history-row {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: calc(20px * var(--ui-spacing, 1));
   width: 100%;
   color: var(--text);
 }
@@ -1167,28 +1204,28 @@ details > summary {
 }
 .history-row p {
   font-size: 0.8rem;
-  margin: 8px 0 0;
+  margin: calc(8px * var(--ui-spacing, 1)) 0 0;
 }
 .history-row h2 {
   font-size: 1.1rem;
 }
 .analytics-row {
-  margin: 26px 0;
+  margin: calc(26px * var(--ui-spacing, 1)) 0;
 }
 .volume-bar {
   height: 8px;
   background: var(--chartPrimary);
   border-radius: 8px;
-  margin: 14px 0;
+  margin: calc(14px * var(--ui-spacing, 1)) 0;
 }
 .analytics-row p {
   font-size: 0.8rem;
 }
 .bmi-card {
-  margin-top: 24px;
+  margin-top: calc(24px * var(--ui-spacing, 1));
 }
 .photo-entry {
-  margin-top: 25px;
+  margin-top: calc(25px * var(--ui-spacing, 1));
 }
 .photo-entry figure,
 .photo-compare figure {
@@ -1203,7 +1240,7 @@ details > summary {
 .photo-compare {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 10px;
+  gap: calc(10px * var(--ui-spacing, 1));
 }
 .photo-compare img {
   aspect-ratio: 3/4;
@@ -1213,44 +1250,44 @@ details > summary {
 figcaption {
   font-size: 0.75rem;
   color: var(--subtext);
-  margin: 10px 0;
+  margin: calc(10px * var(--ui-spacing, 1)) 0;
 }
 .research {
   scroll-margin-top: 30px;
 }
 .research h2 {
   font-size: 1.7rem;
-  margin-bottom: 20px;
+  margin-bottom: calc(20px * var(--ui-spacing, 1));
 }
 .research h3 {
-  margin-top: 30px;
+  margin-top: calc(30px * var(--ui-spacing, 1));
 }
 .research li {
   min-width: 0;
   overflow-wrap: anywhere;
-  padding: 15px 0;
+  padding: calc(15px * var(--ui-spacing, 1)) 0;
 }
 .research li > a {
   color: var(--text);
-  font-weight: 600;
+  font-weight: var(--type-w600, 600);
   line-height: 1.6;
 }
 .research li p {
   font-size: 0.8rem;
-  margin: 7px 0;
+  margin: calc(7px * var(--ui-spacing, 1)) 0;
 }
 .research li small {
   color: var(--subtext);
 }
 @media (min-width: 800px) {
   .app-shell {
-    padding: 0 30px;
+    padding: 0 calc(30px * var(--ui-spacing, 1));
   }
   .app-header {
     height: 94px;
   }
   .app-content {
-    padding-top: 8px;
+    padding-top: calc(8px * var(--ui-spacing, 1));
   }
   .sheet {
     margin: auto;
@@ -1262,22 +1299,22 @@ figcaption {
     border-radius: 24px 24px 0 0;
   }
   .sheet-body {
-    padding-bottom: 28px;
+    padding-bottom: calc(28px * var(--ui-spacing, 1));
   }
 }
 @media (max-width: 370px) {
   .app-shell {
-    padding: 0 14px;
+    padding: 0 calc(14px * var(--ui-spacing, 1));
   }
   .card {
-    padding: 17px;
+    padding: calc(17px * var(--ui-spacing, 1));
   }
   .workout-inputs {
     flex-wrap: wrap;
   }
   .workout-inputs > .button {
     width: 100%;
-    margin-top: 2px;
+    margin-top: calc(2px * var(--ui-spacing, 1));
   }
   .theme-picker {
     grid-template-columns: 1fr;
@@ -1286,7 +1323,7 @@ figcaption {
     margin-left: auto;
   }
   .onboarding {
-    padding: 20px;
+    padding: calc(20px * var(--ui-spacing, 1));
   }
   .three-col {
     grid-template-columns: 1fr 1fr;
@@ -1299,7 +1336,7 @@ figcaption {
     height: 80px;
   }
   .stat-pair > div {
-    padding: 14px;
+    padding: calc(14px * var(--ui-spacing, 1));
   }
   .stat-pair strong {
     font-size: 1.35rem;
@@ -1308,7 +1345,7 @@ figcaption {
     font-size: 0.75rem;
   }
   .ledger-link {
-    gap: 9px;
+    gap: calc(9px * var(--ui-spacing, 1));
   }
   .ledger-link .grade-art {
     width: 54px;
@@ -1332,7 +1369,7 @@ figcaption {
   bottom: calc(84px + env(safe-area-inset-bottom));
   margin-inline: auto;
   max-width: 520px;
-  padding: 16px;
+  padding: calc(16px * var(--ui-spacing, 1));
   border: 1px solid var(--muted);
   border-radius: 20px;
   background: var(--card);
@@ -1341,8 +1378,8 @@ figcaption {
 }
 .update-notice button {
   min-height: 48px;
-  padding: 10px 16px;
-  margin: 4px;
+  padding: calc(10px * var(--ui-spacing, 1)) calc(16px * var(--ui-spacing, 1));
+  margin: calc(4px * var(--ui-spacing, 1));
   border-radius: 12px;
   background: var(--surface);
   color: var(--text);

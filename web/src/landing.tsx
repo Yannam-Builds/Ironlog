@@ -14,6 +14,13 @@ import { BodyMap } from "./ui/BodyMap";
 import { Research } from "./research";
 import "./styles.css";
 import "./landing.css";
+import "./generated/font-faces.css";
+import "./typography.css";
+import { FontPicker } from "./ui/FontPicker";
+import { initializeTypography } from "./ui/typography";
+initializeTypography();
+import { initializeSpacing } from "./ui/spacing";
+initializeSpacing();
 const appUrl = `${import.meta.env.BASE_URL}app/`;
 const sampleRecovery = {
   Push: 62,
@@ -315,6 +322,17 @@ function Landing() {
           </div>
           <ThemePicker value={theme} onChange={applyTheme} />
         </section>
+        <section className="font-showcase" aria-labelledby="font-heading">
+          <div>
+            <span className="eyebrow">Typography</span>
+            <h2 id="font-heading">Find your type.</h2>
+            <p>
+              Twenty-one fonts. One familiar training log. Try a lighter touch
+              or a stronger weight—the phone preview changes with you.
+            </p>
+          </div>
+          <FontPicker />
+        </section>
         <section className="practical">
           <div className="practical-copy">
             <h2>
@@ -438,9 +456,11 @@ function Landing() {
           <p>
             IronLog and its Forge Fox, logo, and grade artwork come from the
             native project. Lexend by Bonnie Shaver-Troup, Thomas Jockin and
-            contributors is distributed under the SIL Open Font License. The
-            browser app uses React, Vite, TypeScript, Dexie, Zod, fflate, and
-            Workbox. Research acknowledgments above are separate from these
+            contributors is distributed under the SIL Open Font License. Twenty
+            additional open font families are bundled with their original
+            copyright and license notices; each is available in the font picker.
+            The browser app uses React, Vite, TypeScript, Dexie, Zod, fflate,
+            and Workbox. Research acknowledgments above are separate from these
             software credits.
           </p>
           <a href={`${import.meta.env.BASE_URL}licenses/IronLog-LICENSE.txt`}>

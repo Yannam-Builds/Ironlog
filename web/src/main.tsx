@@ -6,6 +6,12 @@ import type { Exercise } from "./domain/types";
 import { loadCatalog } from "./catalog";
 import { applyTheme, currentTheme } from "./ui/theme";
 import "./styles.css";
+import "./generated/font-faces.css";
+import "./typography.css";
+import { initializeTypography } from "./ui/typography";
+initializeTypography();
+import { initializeSpacing } from "./ui/spacing";
+initializeSpacing();
 class Boundary extends Component<{ children: ReactNode }, { error: string }> {
   state = { error: "" };
   static getDerivedStateFromError(error: unknown) {

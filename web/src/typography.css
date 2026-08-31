@@ -1,0 +1,85 @@
+body {
+  font-weight: var(--type-w400, 400);
+}
+:root[data-font-preset]:not([data-font-preset="original"])
+  :where(h1, h2, h3, h4, h5, h6) {
+  font-weight: var(--type-heading-weight);
+}
+:root[data-font-preset]:not([data-font-preset="original"])
+  :where(input, select, textarea) {
+  font-weight: var(--type-w400);
+}
+:root[data-font-preset]:not([data-font-preset="original"])
+  :where(button, .button, label > span) {
+  font-weight: var(--type-label-weight);
+}
+.font-showcase {
+  max-width: 1240px;
+  padding: 48px 44px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 48px;
+  align-items: start;
+}
+.font-showcase h2 {
+  font-size: clamp(2rem, 3.5vw, 3rem);
+  font-weight: var(--type-w450, 450);
+  line-height: 1.15;
+}
+.font-picker {
+  min-width: 0;
+}
+.font-picker .two-col {
+  align-items: start;
+}
+.font-picker .field,
+.font-picker select {
+  min-width: 0;
+  width: 100%;
+}
+.font-picker select {
+  min-height: 48px;
+  font-size: 1rem;
+}
+.font-preview {
+  margin-top: calc(16px * var(--ui-spacing, 1));
+  padding: calc(24px * var(--ui-spacing, 1));
+  border: 1px solid var(--cardBorder);
+  border-radius: 20px;
+  background: var(--card);
+  overflow-wrap: anywhere;
+}
+.font-preview h3 {
+  font-size: 1.55rem;
+  margin: calc(12px * var(--ui-spacing, 1)) 0;
+  font-weight: var(--type-w700, 700);
+}
+.font-preview p {
+  margin: calc(8px * var(--ui-spacing, 1)) 0;
+}
+.font-numerals {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.025em;
+}
+.font-help {
+  font-size: 0.875rem;
+}
+.font-license {
+  display: inline-flex;
+  align-items: center;
+  min-height: 48px;
+  font-size: 0.875rem;
+}
+@media (max-width: 800px) {
+  .font-showcase {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 20px;
+    padding: 32px 24px;
+  }
+}
+@media (max-width: 360px) {
+  .font-picker .two-col {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

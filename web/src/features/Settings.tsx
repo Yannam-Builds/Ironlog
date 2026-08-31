@@ -9,6 +9,8 @@ import {
   ThemePicker,
 } from "../ui/components";
 import { useTheme, applyTheme } from "../ui/theme";
+import { FontPicker } from "../ui/FontPicker";
+import { SpacingPicker } from "../ui/SpacingPicker";
 import {
   saveProfile,
   restoreSnapshot,
@@ -133,6 +135,14 @@ export function Settings() {
             void run(() => saveProfile({ theme: id }));
           }}
         />
+      </section>
+      <section>
+        <h2>Typography</h2>
+        <FontPicker />
+      </section>
+      <section>
+        <h2>Layout spacing</h2>
+        <SpacingPicker />
       </section>
       <section>
         <h2>Training tools</h2>

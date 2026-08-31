@@ -16,19 +16,21 @@ main > .research {
   padding-right: 44px;
 }
 .site-header {
-  height: 108px;
+  min-height: 108px;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 25px;
 }
 .brand {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   color: var(--text);
   text-decoration: none;
   font-size: 1.2rem;
-  font-weight: 500;
+  font-weight: var(--type-w500, 500);
   letter-spacing: 0.025em;
   gap: 0;
 }
@@ -57,7 +59,7 @@ main > .research {
 }
 .site-header nav .nav-open {
   color: var(--link);
-  font-weight: 500;
+  font-weight: var(--type-w500, 500);
 }
 .hero {
   display: grid;
@@ -87,7 +89,7 @@ main > .research {
   font-size: clamp(4rem, 6.7vw, 6rem);
   line-height: 0.99;
   letter-spacing: -0.04em;
-  font-weight: 350;
+  font-weight: var(--type-w350, 350);
   margin: 0 0 30px;
 }
 .hero h1 span {
@@ -197,7 +199,7 @@ html[data-theme="light"] .phone-welcome img {
 }
 .phone-welcome h2 {
   font-size: 2rem;
-  font-weight: 450;
+  font-weight: var(--type-w450, 450);
   line-height: 1.15;
   margin: 0;
 }
@@ -234,7 +236,7 @@ html[data-theme="light"] .phone-welcome img {
   width: 100%;
 }
 .walkthrough h2 {
-  font-weight: 450;
+  font-weight: var(--type-w450, 450);
   font-size: clamp(2rem, 3.5vw, 3rem);
   line-height: 1.12;
 }
@@ -290,22 +292,25 @@ html[data-theme="light"] .phone-welcome img {
 }
 .demo-tabs {
   display: flex;
+  flex-wrap: wrap;
   padding: 15px 20px;
   gap: 8px;
 }
 .demo-tabs button {
-  flex: 1;
+  flex: 1 1 5em;
+  min-width: 0;
+  overflow-wrap: anywhere;
   border: 0;
   background: transparent;
   border-radius: 99px;
   color: var(--subtext);
   font-size: 0.75rem;
-  min-height: 40px;
+  min-height: 48px;
 }
 .demo-tabs button[aria-pressed="true"] {
   background: var(--accent);
   color: var(--button-ink);
-  font-weight: 600;
+  font-weight: var(--type-w600, 600);
 }
 .demo-stage {
   padding: 14px 25px 10px;
@@ -363,7 +368,7 @@ html[data-theme="light"] .phone-welcome img {
   min-height: 43px;
   margin-top: 20px;
   font-size: 0.85rem;
-  font-weight: 700;
+  font-weight: var(--type-w700, 700);
 }
 .demo-foot {
   display: flex;
@@ -376,6 +381,7 @@ html[data-theme="light"] .phone-welcome img {
 }
 .demo-control {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 12px;
   border-top: 1px solid var(--cardBorder);
@@ -475,7 +481,7 @@ html[data-theme="light"] .phone-welcome img {
   font-size: clamp(2rem, 3.8vw, 3.3rem);
   line-height: 1.12;
   letter-spacing: -0.035em;
-  font-weight: 450;
+  font-weight: var(--type-w450, 450);
 }
 .theme-showcase h2 > span {
   color: var(--subtext);
@@ -529,7 +535,7 @@ html[data-theme="light"] .phone-welcome img {
 }
 .practical-note > span {
   color: var(--text);
-  font-weight: 700;
+  font-weight: var(--type-w700, 700);
 }
 .practical-note p {
   font-size: 0.8rem;
@@ -600,7 +606,7 @@ html[data-theme="light"] .phone-welcome img {
   left: 0;
   top: 0;
   font-size: 1.2rem;
-  font-weight: 700;
+  font-weight: var(--type-w700, 700);
   color: var(--link);
 }
 .install li strong {
@@ -623,7 +629,7 @@ html[data-theme="light"] .phone-welcome img {
 }
 .research h2 {
   font-size: 2.4rem;
-  font-weight: 450;
+  font-weight: var(--type-w450, 450);
   letter-spacing: -0.025em;
 }
 .research > p {
@@ -644,11 +650,11 @@ html[data-theme="light"] .phone-welcome img {
 }
 .privacy h2 {
   font-size: 1.6rem;
-  font-weight: 450;
+  font-weight: var(--type-w450, 450);
 }
 .privacy h3 {
   margin-top: 35px;
-  font-weight: 500;
+  font-weight: var(--type-w500, 500);
 }
 .privacy p {
   max-width: 950px;
@@ -730,7 +736,7 @@ html[data-theme="light"] .phone-welcome img {
     padding-right: 23px;
   }
   .site-header {
-    height: 86px;
+    min-height: 86px;
   }
   .site-header nav {
     gap: 15px;

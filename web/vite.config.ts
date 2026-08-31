@@ -40,7 +40,7 @@ export default defineConfig({
       workbox: {
         // Public native artwork has stable names: revision it on every content change.
         dontCacheBustURLsMatching: /-[A-Za-z0-9_-]{8}\.(?:js|css)$/,
-        globPatterns: ["**/*.{js,css,html,png,webp,svg,ttf,json}"],
+        globPatterns: ["**/*.{js,css,html,png,webp,svg,ttf,json}", "licenses/fonts/*.txt", "licenses/Lexend-OFL.txt"],
         globIgnores: [
           "**/assets/forgefox_*.png",
           "**/assets/iron_grade_*.png",
