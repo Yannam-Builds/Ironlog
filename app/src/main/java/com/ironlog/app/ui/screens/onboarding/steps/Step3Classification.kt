@@ -41,7 +41,7 @@ fun Step3Classification(
         OnboardingPageHeader(
             step = "Training level",
             title = "How should progression begin?",
-            body = "Choose the closest fit. IronLog will replace this estimate with verified training evidence over time.",
+            body = "Choose the closest fit. IronLog will refine guidance around this starting point with verified training evidence over time.",
         )
         Spacer(Modifier.height(appGapDp(28.dp)))
 

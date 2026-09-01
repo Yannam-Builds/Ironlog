@@ -144,6 +144,73 @@ class CurrentAthleteBodyweightRepositoryTest {
         }
 
     @Test
+    fun `onboarding baseline weight remains frozen when current measurements change`() =
+        runBlocking(Dispatchers.IO) {
+            MyObjectBox.builder().directory(temporary.newFolder("bodyweight-frozen-baseline")).build().use { store ->
+                store.boxFor(AppSettingEntity::class.java).put(AppSettingEntity().apply {
+                    key = "baseline_bodyweight_kg"
+                    value = "70"
+                    valueType = "string"
+                    updatedAt = 1_000L
+                })
+                val calibration = AthleteCalibrationEntity(
+                    offlineUserId = "local",
+                    bodyweightKg = 70.0,
+                    updatedAt = 1_000L,
+                )
+                store.boxFor(AthleteCalibrationEntity::class.java).put(calibration)
+                BodyMeasurementRepository(store).addBodyMeasurement(
+                    BodyMeasurementInput(measuredAt = 2_000L, bodyweight = 82.0),
+                )
+
+                val currentCalibration = store.boxFor(AthleteCalibrationEntity::class.java).all.single()
+                assertEquals(82.0, currentAthleteBodyweightKg(store)!!, 0.0)
+                assertEquals(70.0, onboardingBaselineBodyweightKg(store, currentCalibration)!!, 0.0)
+
+                store.boxFor(AppSettingEntity::class.java).put(AppSettingEntity().apply {
+                    key = "baseline_bodyweight_kg"
+                    value = "0"
+                    valueType = "string"
+                    updatedAt = 3_000L
+                })
+                assertNull(onboardingBaselineBodyweightKg(store, currentCalibration))
+            }
+        }
+
+    @Test
+    fun `corrected onboarding weight updates only its generated baseline row`() =
+        runBlocking(Dispatchers.IO) {
+            MyObjectBox.builder().directory(temporary.newFolder("bodyweight-onboarding-retry")).build().use { store ->
+                val calibration = AthleteCalibrationEntity(offlineUserId = "local")
+                persistOnboardingAthleteBodyweight(store, calibration, bodyweightKg = 70.0, measuredAt = 1_000L)
+                BodyMeasurementRepository(store).addBodyMeasurement(
+                    BodyMeasurementInput(measuredAt = 2_000L, bodyweight = 82.0),
+                )
+
+                persistOnboardingAthleteBodyweight(store, calibration, bodyweightKg = 75.0, measuredAt = 3_000L)
+
+                val afterCorrection = store.boxFor(BodyMeasurementEntity::class.java).all
+                assertEquals(2, afterCorrection.size)
+                assertEquals(
+                    75.0,
+                    afterCorrection.single { it.uid == LEGACY_BODYWEIGHT_BASELINE_UID }.bodyweight!!,
+                    0.0,
+                )
+                assertEquals(82.0, currentAthleteBodyweightKg(store)!!, 0.0)
+                assertEquals(75.0, onboardingBaselineBodyweightKg(store)!!, 0.0)
+
+                persistOnboardingAthleteBodyweight(store, calibration, bodyweightKg = null, measuredAt = 4_000L)
+
+                assertEquals(
+                    listOf(82.0),
+                    store.boxFor(BodyMeasurementEntity::class.java).all.mapNotNull { it.bodyweight },
+                )
+                assertEquals(82.0, currentAthleteBodyweightKg(store)!!, 0.0)
+                assertNull(onboardingBaselineBodyweightKg(store))
+            }
+        }
+
+    @Test
     fun `invalid legacy weights are ignored rather than becoming athlete context`() =
         runBlocking(Dispatchers.IO) {
             MyObjectBox.builder().directory(temporary.newFolder("bodyweight-invalid")).build().use { store ->

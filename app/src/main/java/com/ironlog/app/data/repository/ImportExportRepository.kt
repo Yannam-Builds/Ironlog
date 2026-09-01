@@ -1461,6 +1461,9 @@ internal fun deriveFallbackAthleteCalibration(
     fun longSetting(key: String, default: Long = 0L): Long = stringSetting(key)?.toLongOrNull() ?: default
     fun doubleSetting(key: String): Double? = stringSetting(key)?.toDoubleOrNull()
     fun booleanSetting(key: String, default: Boolean = false): Boolean = stringSetting(key)?.equals("true", ignoreCase = true) ?: default
+    val nestedWeeklyGoalDays = stringSetting("ironlog_settings")
+        ?.let { raw -> runCatching { JSONObject(raw).optInt("weeklyGoalDays", 0) }.getOrNull() }
+        ?.takeIf { it in 1..7 }
 
     return FallbackAthleteCalibrationRow(
         trainingAgeMonths = intSetting("baseline_training_age_months"),
@@ -1469,7 +1472,7 @@ internal fun deriveFallbackAthleteCalibration(
         weightUnit = stringSetting("weightUnit") ?: "kg",
         bodyweightKg = doubleSetting("baseline_bodyweight_kg"),
         goalMode = stringSetting("goalMode") ?: "hypertrophy",
-        weeklyGoalDays = intSetting("weeklyGoalDays", 4).coerceIn(1, 7),
+        weeklyGoalDays = (nestedWeeklyGoalDays ?: intSetting("weeklyGoalDays", 4)).coerceIn(1, 7),
         importedHistory = booleanSetting("ledger_imported_history", hasImportedWorkouts),
         confidence = 0.5,
         updatedAt = nowMs,

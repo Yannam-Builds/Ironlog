@@ -4,8 +4,13 @@ import com.ironlog.app.data.objectbox.*
 import io.objectbox.BoxStore
 import org.json.JSONObject
 
-/** Called with canonical ledger XP, in the same transaction as the reward rebuild. */
-internal fun migrateLegacyBonusXpBlocking(store: BoxStore, profileXp: Long, ledgerXp: Long, nowEpochMs: Long) = store.runInTx {
+/** Called with proof-only ledger XP, before provisional onboarding XP is added. */
+internal fun migrateLegacyBonusXpBlocking(
+    store: BoxStore,
+    profileXp: Long,
+    ledgerXp: Long,
+    nowEpochMs: Long,
+) = store.runInTx {
     val settings = SettingsRepository(store.boxFor(AppSettingEntity::class.java))
     val key = "gamification_bonus_events_v2_migrated"
     if (settings.getStringBlocking(key)?.toBooleanStrictOrNull() == true) return@runInTx

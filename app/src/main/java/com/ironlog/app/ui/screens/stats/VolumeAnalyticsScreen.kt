@@ -351,8 +351,8 @@ fun VolumeAnalyticsScreen(
                     // GAP-07: convert to user's weight unit before display
                     val totalVolumeDisplay = if (weightUnit == "lbs") totalVolumeKg * 2.2046226218 else totalVolumeKg
                     val formattedVolume = if (totalVolumeDisplay >= 1000.0)
-                        "${String.format(Locale.US, "%.1f", totalVolumeDisplay / 1000.0)}k$weightUnit"
-                    else "${String.format(Locale.US, "%.0f", totalVolumeDisplay)}$weightUnit"
+                        "${String.format(Locale.US, "%.1f", totalVolumeDisplay / 1000.0)}k"
+                    else String.format(Locale.US, "%.0f", totalVolumeDisplay)
                     listOf(
                         sessionCount.toString() to "Sessions",
                         actualWorkingSets.toString() to "Sets",

@@ -1,48 +1,23 @@
 package com.ironlog.app.ui.components
 
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ShowChart
-import androidx.compose.material.icons.automirrored.filled.TrendingUp
-import androidx.compose.material.icons.filled.AccountTree
-import androidx.compose.material.icons.filled.AllInclusive
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Bolt
-import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.Diamond
-import androidx.compose.material.icons.filled.EmojiEvents
-import androidx.compose.material.icons.filled.FitnessCenter
-import androidx.compose.material.icons.filled.HourglassBottom
-import androidx.compose.material.icons.filled.Landscape
-import androidx.compose.material.icons.filled.LocalFireDepartment
-import androidx.compose.material.icons.filled.Security
-import androidx.compose.material.icons.filled.Stars
-import androidx.compose.material.icons.filled.WorkspacePremium
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
+import androidx.annotation.DrawableRes
+import androidx.compose.foundation.Image
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.ColorMatrix
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import com.ironlog.app.R
 import com.ironlog.app.domain.badges.BadgeDefinition
 import com.ironlog.app.domain.badges.BadgeTier
 
 /**
- * Scalable artwork for app achievements. The previous UI reduced every badge to
- * two letters or a diamond character, even though each definition has a distinct
- * visual identity. Keeping the artwork native also makes locked, dark-theme and
- * compact Home variants readable without maintaining many raster sizes.
+ * Shared achievement artwork used by Home, Iron Ledger and the Achievement Atlas.
+ * Each canonical badge owns a transparent high-resolution emblem; locked badges
+ * retain their silhouette while using a desaturated, lower-emphasis treatment.
  */
 @Composable
 fun AchievementBadge(
@@ -50,33 +25,18 @@ fun AchievementBadge(
     unlocked: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val tierColor = badgeTierColor(definition.tier)
-    val contentColor = if (unlocked) tierColor else MaterialTheme.colorScheme.onSurfaceVariant
-
-    Surface(
-        modifier = modifier.alpha(if (unlocked) 1f else 0.48f),
-        shape = CircleShape,
-        color = if (unlocked) tierColor.copy(alpha = 0.14f) else MaterialTheme.colorScheme.surfaceVariant,
-        border = BorderStroke(2.dp, contentColor.copy(alpha = if (unlocked) 0.82f else 0.35f)),
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(5.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.9f))
-                .border(1.dp, contentColor.copy(alpha = 0.3f), CircleShape)
-                .padding(10.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = achievementIcon(definition.id),
-                contentDescription = definition.title,
-                tint = contentColor,
-                modifier = Modifier.fillMaxSize(),
-            )
-        }
+    val lockedFilter = if (unlocked) {
+        null
+    } else {
+        ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(0f) })
     }
+    Image(
+        painter = painterResource(achievementBadgeDrawable(definition.id)),
+        contentDescription = definition.title,
+        contentScale = ContentScale.Fit,
+        colorFilter = lockedFilter,
+        modifier = modifier.alpha(if (unlocked) 1f else 0.34f),
+    )
 }
 
 fun badgeTierColor(tier: BadgeTier): Color = when (tier) {
@@ -86,22 +46,22 @@ fun badgeTierColor(tier: BadgeTier): Color = when (tier) {
     BadgeTier.BLUE -> Color(0xFF4D9FFF)
 }
 
-private fun achievementIcon(id: String): ImageVector = when (id) {
-    "first_workout" -> Icons.Filled.FitnessCenter
-    "streak_3" -> Icons.Filled.LocalFireDepartment
-    "first_rest_timer" -> Icons.Filled.HourglassBottom
-    "first_plan" -> Icons.Filled.AccountTree
-    "workouts_10" -> Icons.Filled.Bolt
-    "consistency_4w" -> Icons.Filled.CalendarMonth
-    "first_pr" -> Icons.AutoMirrored.Filled.TrendingUp
-    "ai_activated" -> Icons.Filled.AutoAwesome
-    "progressive_streak" -> Icons.AutoMirrored.Filled.ShowChart
-    "workouts_50" -> Icons.Filled.EmojiEvents
-    "streak_30" -> Icons.Filled.Security
-    "workouts_100" -> Icons.Filled.WorkspacePremium
-    "volume_milestone" -> Icons.Filled.Landscape
-    "member_365" -> Icons.Filled.AllInclusive
-    "all_goal_modes" -> Icons.Filled.Stars
-    "s_rank" -> Icons.Filled.Diamond
-    else -> Icons.Filled.FitnessCenter
+@DrawableRes
+internal fun achievementBadgeDrawable(id: String): Int = when (id) {
+    "first_workout" -> R.drawable.ic_badge_dumbbell
+    "streak_3" -> R.drawable.ic_badge_flame
+    "first_rest_timer" -> R.drawable.ic_badge_hourglass
+    "first_plan" -> R.drawable.ic_badge_twin_dumbbells
+    "workouts_10" -> R.drawable.ic_badge_lightning
+    "consistency_4w" -> R.drawable.ic_badge_calendar
+    "first_pr" -> R.drawable.ic_badge_flexed_arm
+    "ai_activated" -> R.drawable.ic_badge_atom
+    "progressive_streak" -> R.drawable.ic_badge_chart
+    "workouts_50" -> R.drawable.ic_badge_trophy
+    "streak_30" -> R.drawable.ic_badge_shield
+    "workouts_100" -> R.drawable.ic_badge_crown
+    "volume_milestone" -> R.drawable.ic_badge_mountain
+    "member_365" -> R.drawable.ic_badge_infinity
+    "all_goal_modes" -> R.drawable.ic_badge_3stars
+    else -> R.drawable.ic_badge_dumbbell
 }

@@ -7,13 +7,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.snapping.SnapPosition
 import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -36,17 +37,23 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.setProgress
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.launch
 import kotlin.math.abs
-
-private const val WHEEL_ROWS = 5
-private val WheelRowHeight = 54.dp
+import kotlin.math.roundToInt
 
 internal fun virtualWheelStart(valueCount: Int, selectedIndex: Int): Int {
     require(valueCount > 0)
@@ -70,10 +77,15 @@ fun InfiniteNumberWheelSheet(
     val initialCenter = remember(title, values, selectedIndex) {
         virtualWheelStart(values.size, selectedIndex)
     }
-    val state = rememberLazyListState(initialFirstVisibleItemIndex = initialCenter - (WHEEL_ROWS / 2))
+    val rowSpec = wheelRowLayoutSpec(LocalDensity.current.fontScale)
+    val rowHeight = rowSpec.heightDp.dp
+    val state = rememberLazyListState(
+        initialFirstVisibleItemIndex = initialCenter - (rowSpec.visibleRowCount / 2),
+    )
     val flingBehavior = rememberSnapFlingBehavior(state, SnapPosition.Center)
     val scope = rememberCoroutineScope()
     var pendingIndex by remember(title, selected) { mutableIntStateOf(selectedIndex) }
+    val headerSpec = remember { wheelSheetHeaderLayoutSpec() }
 
     LaunchedEffect(state, values) {
         snapshotFlow { state.layoutInfo }
@@ -96,47 +108,95 @@ fun InfiniteNumberWheelSheet(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
+                .padding(horizontal = 12.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel", color = OnboardingConfig.textMuted)
+            TextButton(
+                onClick = onDismiss,
+                modifier = Modifier
+                    .weight(headerSpec.actionSlotWeight)
+                    .heightIn(min = headerSpec.minTouchTargetDp.dp),
+                contentPadding = PaddingValues(horizontal = 4.dp),
+            ) {
+                Text(
+                    "Cancel",
+                    color = OnboardingConfig.textMuted,
+                    maxLines = headerSpec.actionMaxLines,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
             Text(
                 title,
                 color = OnboardingConfig.textPrimary,
-                fontSize = 18.sp,
+                fontSize = 16.sp,
                 fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+                maxLines = headerSpec.titleMaxLines,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(headerSpec.titleSlotWeight),
             )
             TextButton(
                 onClick = {
                     onConfirm(values[pendingIndex])
                     onDismiss()
                 },
+                modifier = Modifier
+                    .weight(headerSpec.actionSlotWeight)
+                    .heightIn(min = headerSpec.minTouchTargetDp.dp),
+                contentPadding = PaddingValues(horizontal = 4.dp),
             ) {
-                Text("Done", color = OnboardingConfig.accentBlue, fontWeight = FontWeight.ExtraBold)
+                Text(
+                    "Done",
+                    color = OnboardingConfig.accentBlue,
+                    fontWeight = FontWeight.ExtraBold,
+                    maxLines = headerSpec.actionMaxLines,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
         }
 
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(WheelRowHeight * WHEEL_ROWS)
+                .height(rowHeight * rowSpec.visibleRowCount)
                 .padding(horizontal = 28.dp),
             contentAlignment = Alignment.Center,
         ) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(WheelRowHeight)
+                    .height(rowHeight)
                     .background(OnboardingConfig.surfaceRaised, RoundedCornerShape(16.dp)),
             )
 
             LazyColumn(
                 state = state,
                 flingBehavior = flingBehavior,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clearAndSetSemantics {
+                        contentDescription = title
+                        stateDescription = labelFor(values[pendingIndex])
+                        progressBarRangeInfo = ProgressBarRangeInfo(
+                            current = pendingIndex.toFloat(),
+                            range = 0f..values.lastIndex.toFloat(),
+                            steps = (values.size - 2).coerceAtLeast(0),
+                        )
+                        setProgress { target ->
+                            val targetIndex = target.roundToInt().coerceIn(values.indices)
+                            scope.launch {
+                                state.animateScrollToItem(
+                                    index = (
+                                        virtualWheelStart(values.size, targetIndex) -
+                                            rowSpec.visibleRowCount / 2
+                                        ).coerceAtLeast(0),
+                                )
+                            }
+                            true
+                        }
+                    },
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 items(Int.MAX_VALUE) { virtualIndex ->
@@ -145,12 +205,14 @@ fun InfiniteNumberWheelSheet(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(WheelRowHeight)
+                            .height(rowHeight)
                             .alpha(if (active) 1f else 0.34f)
                             .clickable {
                                 scope.launch {
                                     state.animateScrollToItem(
-                                        index = (virtualIndex - WHEEL_ROWS / 2).coerceAtLeast(0),
+                                        index = (
+                                            virtualIndex - rowSpec.visibleRowCount / 2
+                                            ).coerceAtLeast(0),
                                     )
                                 }
                             },
@@ -162,6 +224,9 @@ fun InfiniteNumberWheelSheet(
                             fontSize = if (active) 27.sp else 19.sp,
                             fontWeight = if (active) FontWeight.Black else FontWeight.Medium,
                             textAlign = TextAlign.Center,
+                            maxLines = rowSpec.valueMaxLines,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis,
                         )
                     }
                 }

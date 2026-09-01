@@ -23,6 +23,7 @@ import {
 import { resolveExercise } from "../domain/codecs";
 import { creditedProof, deriveSnapshot } from "../domain/engine";
 import { isoWeekKey } from "../domain/dates";
+import { recomputeOnboardingBaseline } from "../domain/onboarding-baseline";
 
 export const newId = () => crypto.randomUUID();
 interface CatalogRow {
@@ -129,8 +130,19 @@ export async function bootstrap(exercises: Exercise[], database = db) {
     database.profiles,
     database.catalog,
     async () => {
-      if (!(await database.profiles.get("local")))
+      const existing = await database.profiles.get("local");
+      if (!existing)
         await database.profiles.add({ ...defaultProfile, id: "local" });
+      else {
+        const profile = profileSchema.parse({
+          ...defaultProfile,
+          ...existing,
+        });
+        await database.profiles.put({
+          ...recomputeOnboardingBaseline(profile),
+          id: "local",
+        });
+      }
       // One structured-clone write replaces thousands of individual indexed writes on WebKit.
       await database.catalog.put({ id: "bundled", exercises: catalog });
     },
@@ -196,8 +208,13 @@ export function subscribeSnapshot(
 export async function saveProfile(partial: Partial<Profile>) {
   await db.transaction("rw", db.profiles, async () => {
     const row = await db.profiles.get("local");
+    const profile = profileSchema.parse({
+      ...defaultProfile,
+      ...row,
+      ...partial,
+    });
     await db.profiles.put({
-      ...profileSchema.parse({ ...defaultProfile, ...row, ...partial }),
+      ...recomputeOnboardingBaseline(profile),
       id: "local",
     });
   });
@@ -541,7 +558,10 @@ export async function restoreSnapshot(snapshot: AppSnapshot) {
         "Finish or discard the active workout before restoring a backup.",
       );
     await Promise.all(db.tables.map((t) => t.clear()));
-    await db.profiles.put({ ...valid.profile, id: "local" });
+    await db.profiles.put({
+      ...recomputeOnboardingBaseline(valid.profile),
+      id: "local",
+    });
     await Promise.all([
       db.plans.bulkPut(valid.plans),
       db.workouts.bulkPut(valid.workouts),
@@ -607,7 +627,7 @@ export async function completeRecoveryCircuit(now = Date.now()) {
 export async function reconcileBadges(now = Date.now()) {
   return db.transaction("rw", db.tables, async () => {
     const snapshot = await readSnapshot();
-    const earned = deriveSnapshot(snapshot, now).unlockedBadges;
+    const earned = deriveSnapshot(snapshot, now).durableUnlockedBadges;
     const old = snapshot.profile.badgeUnlocks;
     const added = earned.filter((id) => !(id in old));
     if (added.length)

@@ -1,9 +1,18 @@
 import { useState } from "react";
 import { useApp, navigate, hasTrainingHistory } from "../ui/context";
-import { Button, Field, Sheet, Grade, Progress, asset } from "../ui/components";
+import {
+  AchievementBadge,
+  Button,
+  Field,
+  Sheet,
+  Grade,
+  Progress,
+  asset,
+} from "../ui/components";
 import { BodyMap } from "../ui/BodyMap";
 import { newId, saveCheckin, completeRecoveryCircuit } from "../data/store";
 import { isoWeekKey } from "../domain/dates";
+import { badgeDefinition } from "../domain/badges";
 export function Recovery() {
   const { data, derived: d, run, busy } = useApp();
   const [side, setSide] = useState<"front" | "back">("front");
@@ -182,6 +191,10 @@ export function Ledger() {
         <p>
           Level {d.level} · {d.xp} all-time XP
         </p>
+        <p className="muted">
+          {d.xpBreakdown.selfReported.toLocaleString()} self-reported ·{" "}
+          {d.xpBreakdown.verified.toLocaleString()} verified XP
+        </p>
         <Progress value={d.levelProgress * 100} label="Level progress" />
         <small>
           {d.level === 100
@@ -203,6 +216,31 @@ export function Ledger() {
         {d.weeklyStreak} week streak · {d.streak} day streak · Integrity{" "}
         {Math.round(d.integrity * 100)}%
       </p>
+      {d.onboardingBaseline && (
+        <section className="card">
+          <h2>Self-reported onboarding baseline</h2>
+          <p>
+            {d.onboardingBaseline.estimatedLifetimeSessions.toLocaleString()}{" "}
+            estimated lifetime sessions ·{" "}
+            {d.onboardingBaseline.xp.toLocaleString()} provisional XP · 50%
+            trust
+          </p>
+          <p>
+            Provisional profile rank: {d.onboardingBaseline.grade}, capped at
+            Titanium. Verified workout XP adds separately and never turns an
+            estimate into a credited session.
+          </p>
+        </section>
+      )}
+      <h2>Training signals</h2>
+      <div className="stat-pair">
+        {Object.entries(d.trainingSignals).map(([label, value]) => (
+          <div key={label}>
+            <span>{label}</span>
+            <strong>{value}</strong>
+          </div>
+        ))}
+      </div>
       <details>
         <summary>What counts as proof?</summary>
         <p>
@@ -236,31 +274,29 @@ export function Ledger() {
       <h2>Earned badges</h2>
       {d.unlockedBadges.length ? (
         <div className="badge-list">
-          {d.unlockedBadges.map((b) => (
-            <div className="list-row" key={b}>
-              <img
-                src={asset("ic_forge_streak_dumbbell.png")}
-                alt=""
-                width="48"
-                height="48"
-              />
-              <div>
-                <strong>{b.replaceAll("_", " ")}</strong>
-                <small>
-                  {data.profile.badgeUnlocks[b]
-                    ? new Date(
-                        data.profile.badgeUnlocks[b],
-                      ).toLocaleDateString()
-                    : "Earned"}
-                </small>
+          {d.unlockedBadges.map((id) => {
+            const badge = badgeDefinition(id);
+            return (
+              <div className="list-row" key={id}>
+                <AchievementBadge id={id} />
+                <div>
+                  <strong>{badge.title}</strong>
+                  <small>
+                    {data.profile.badgeUnlocks[id]
+                      ? new Date(
+                          data.profile.badgeUnlocks[id],
+                        ).toLocaleDateString()
+                      : "Earned"}
+                  </small>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       ) : (
         <p>
-          First proof awaits. Badges are earned from your training, never from
-          onboarding answers.
+          No history badge can be inferred yet. Action badges still require
+          verified use of the matching feature.
         </p>
       )}
       <section className="card">

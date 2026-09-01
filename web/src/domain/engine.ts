@@ -2,10 +2,12 @@ import type {
   AppSnapshot,
   LoggedSet,
   SessionExercise,
+  TrainingSignals,
   Workout,
   WarmupTarget,
 } from "./types";
 import { isoWeekKey, localDateKey, previousDay } from "./dates";
+import { calculateOnboardingBaseline } from "./onboarding-baseline";
 import muscles from "../data/native-muscles.json";
 
 // Ported from CreditedProof.kt, IronLedgerEngine.kt, GamificationSummary.kt,
@@ -272,10 +274,29 @@ const grades: [string, number, number, number][] = [
   ["Apex", 650, 200, 1460],
 ];
 export function deriveSnapshot(snapshot: AppSnapshot, now = Date.now()) {
+  const storedOnboardingBaseline = snapshot.profile.onboarded
+    ? (snapshot.profile.ledgerBaseline ??
+      calculateOnboardingBaseline(snapshot.profile, 0))
+    : undefined;
   const history = snapshot.workouts
     .filter((w) => w.status === "completed" && when(w) <= now)
     .sort((a, b) => when(a) - when(b));
   const qualified = history.filter((w) => creditedProof(w, now));
+  const baselineOverlap = storedOnboardingBaseline
+    ? qualified.filter((w) => when(w) <= storedOnboardingBaseline.seededAt)
+        .length
+    : 0;
+  const onboardingBaseline = storedOnboardingBaseline
+    ? {
+        ...storedOnboardingBaseline,
+        xp:
+          Math.max(
+            0,
+            storedOnboardingBaseline.estimatedLifetimeSessions -
+              baselineOverlap,
+          ) * 20,
+      }
+    : undefined;
   const daily: Record<string, number> = {};
   for (const w of qualified) {
     const k = localDateKey(when(w));
@@ -289,7 +310,7 @@ export function deriveSnapshot(snapshot: AppSnapshot, now = Date.now()) {
     0.35,
     1,
   );
-  let xp = 0;
+  let verifiedXp = 0;
   const verifiedPrWorkouts = new Set<string>();
   const bestPerformance: Record<string, number> = {};
   const prs: Record<
@@ -305,7 +326,7 @@ export function deriveSnapshot(snapshot: AppSnapshot, now = Date.now()) {
   for (const w of qualified) {
     const count = daily[localDateKey(when(w))];
     const trust = integrity * (count <= 1 ? 1 : count === 2 ? 0.45 : 0);
-    xp += Math.round((40 + Math.min(18, hardSets(w)) * 2) * trust);
+    verifiedXp += Math.round((40 + Math.min(18, hardSets(w)) * 2) * trust);
     const sessionBest: Record<string, number> = {};
     for (const e of w.exercises) {
       const key = e.exerciseId || e.name.toLowerCase();
@@ -323,7 +344,7 @@ export function deriveSnapshot(snapshot: AppSnapshot, now = Date.now()) {
         v > bestPerformance[k] * 1.025 &&
         trust >= 0.75
       ) {
-        xp += 35;
+        verifiedXp += 35;
         verifiedPrWorkouts.add(w.id);
       }
       bestPerformance[k] = Math.max(bestPerformance[k] ?? 0, v);
@@ -347,6 +368,8 @@ export function deriveSnapshot(snapshot: AppSnapshot, now = Date.now()) {
             oneRmKg: one,
           };
       }
+  const selfReportedXp = onboardingBaseline?.xp ?? 0;
+  const xp = selfReportedXp + verifiedXp;
   let level = 1,
     remaining = xp;
   while (level < 100 && remaining >= 125 * level * level) {
@@ -379,15 +402,70 @@ export function deriveSnapshot(snapshot: AppSnapshot, now = Date.now()) {
     ),
     120,
   );
+  const power = toStat(
+    working.filter(
+      ({ e, s }) =>
+        !isCardio(e) &&
+        s.weightKg > 0 &&
+        nativeReps(e, s) >= 1 &&
+        nativeReps(e, s) <= 5,
+    ).length,
+    20,
+  );
   const hypertrophy = toStat(working.length, 80);
+  const endurance = toStat(
+    sum(
+      working
+        .filter(({ e }) => isCardio(e))
+        .map(({ e, s }) => Math.max(0, nativeReps(e, s)) / 60),
+    ) +
+      qualified.filter((w) => duration(w) >= 45 * 60).length * 2,
+    20,
+  );
+  const agility = toStat(
+    working.filter(({ e }) => {
+      const name = e.name.toLowerCase();
+      const category = `${e.muscle} ${e.equipment}`.toLowerCase();
+      return (
+        ["jump", "lunge", "single", "carry", "crawl"].some((term) =>
+          name.includes(term),
+        ) || category.includes("conditioning")
+      );
+    }).length,
+    20,
+  );
   const discipline = toStat(
     weeks.size * 4 +
       working.filter(({ s }) => s.rpe !== undefined || s.rir !== undefined)
         .length,
     50,
   );
+  const recoverySignal = toStat(
+    weeks.size * 3 +
+      qualified.filter((w) => duration(w) >= 20 * 60 && duration(w) <= 120 * 60)
+        .length,
+    50,
+  );
+  const verifiedSignals: TrainingSignals = {
+    strength,
+    power,
+    hypertrophy,
+    endurance,
+    agility,
+    discipline,
+    recovery: recoverySignal,
+  };
+  const trainingSignals: TrainingSignals = Object.fromEntries(
+    Object.entries(verifiedSignals).map(([key, value]) => [
+      key,
+      Math.max(
+        value,
+        onboardingBaseline?.stats[key as keyof TrainingSignals] ?? 0,
+      ),
+    ]),
+  ) as unknown as TrainingSignals;
   const balance = (strength + hypertrophy + discipline) / 3;
-  const grade = grades
+  const verifiedGrade = grades
     .filter(
       ([, sessions, weeksNeeded, days], index) =>
         qualified.length >= sessions &&
@@ -398,6 +476,12 @@ export function deriveSnapshot(snapshot: AppSnapshot, now = Date.now()) {
         (index < 8 || integrity >= 0.95),
     )
     .at(-1)![0];
+  const grade = onboardingBaseline
+    ? grades.findIndex(([name]) => name === onboardingBaseline.grade) >
+      grades.findIndex(([name]) => name === verifiedGrade)
+      ? onboardingBaseline.grade
+      : verifiedGrade
+    : verifiedGrade;
   const dates = new Set(qualified.map((w) => localDateKey(when(w))));
   let cursor = dates.has(localDateKey(now)) ? now : previousDay(now),
     streak = 0;
@@ -456,7 +540,12 @@ export function deriveSnapshot(snapshot: AppSnapshot, now = Date.now()) {
         99,
       );
   }
-  const unlocked = new Set(Object.keys(snapshot.profile.badgeUnlocks));
+  const durableUnlocked = new Set(
+    Object.keys(snapshot.profile.badgeUnlocks).filter((id) => id !== "s_rank"),
+  );
+  const unlocked = new Set(durableUnlocked);
+  for (const id of onboardingBaseline?.supportedBadgeIds ?? [])
+    unlocked.add(id);
   let progression = 0;
   for (const w of [...qualified].reverse()) {
     if (verifiedPrWorkouts.has(w.id)) progression++;
@@ -489,11 +578,17 @@ export function deriveSnapshot(snapshot: AppSnapshot, now = Date.now()) {
       !!qualified.length &&
         Math.floor((now - when(qualified[0])) / 86400000) >= 365,
     ],
-    ["s_rank", ["Obsidian", "Iridium", "Aether", "Apex"].includes(grade)],
   ];
-  for (const [id, ok] of earned) if (ok) unlocked.add(id);
+  for (const [id, ok] of earned)
+    if (ok) {
+      unlocked.add(id);
+      durableUnlocked.add(id);
+    }
   return {
     xp,
+    xpBreakdown: { selfReported: selfReportedXp, verified: verifiedXp },
+    onboardingBaseline,
+    trainingSignals,
     level,
     nextLevelXp,
     levelProgress: nextLevelXp ? remaining / nextLevelXp : 1,
@@ -510,6 +605,7 @@ export function deriveSnapshot(snapshot: AppSnapshot, now = Date.now()) {
       readiness >= 85 ? "ready" : readiness >= 60 ? "recovering" : "fatigued",
     limitingRegion: rows[0]?.[0],
     unlockedBadges: [...unlocked],
+    durableUnlockedBadges: [...durableUnlocked],
     integrity,
     qualifyingWeeks: weeks.size,
     tenureDays,

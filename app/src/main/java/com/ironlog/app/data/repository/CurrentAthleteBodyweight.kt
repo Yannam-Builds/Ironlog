@@ -30,8 +30,12 @@ internal fun isCanonicalAthleteBodyweightKg(value: Double): Boolean =
 private fun canonicalBodyweightKg(value: Double?): Double? =
     value?.takeIf(::isCanonicalAthleteBodyweightKg)
 
-private fun latestHistoricalBodyweight(store: BoxStore): HistoricalBodyweight? =
+private fun latestHistoricalBodyweight(
+    store: BoxStore,
+    excludingUid: String? = null,
+): HistoricalBodyweight? =
     store.boxFor(BodyMeasurementEntity::class.java).all.asSequence()
+        .filter { it.uid != excludingUid }
         .mapNotNull { row ->
             canonicalBodyweightKg(row.bodyweight)?.let { value ->
                 HistoricalBodyweight(value, row.measuredAt, row.updatedAt, row.uid)
@@ -71,6 +75,23 @@ internal fun currentAthleteBodyweightKg(store: BoxStore): Double? {
     return legacyBaselineBodyweight(store)?.first
 }
 
+/**
+ * Immutable onboarding input used only by the provisional Ledger baseline.
+ *
+ * Presence of the setting is authoritative even when its value is zero/invalid: that represents
+ * an explicitly unclaimed weight and must not later inherit a newly logged current measurement.
+ */
+internal fun onboardingBaselineBodyweightKg(
+    store: BoxStore,
+    calibration: AthleteCalibrationEntity? = localCalibration(store),
+): Double? {
+    val baselineSetting = setting(store, LEGACY_BASELINE_BODYWEIGHT_KEY)
+    if (baselineSetting != null) {
+        return canonicalBodyweightKg(baselineSetting.value.toDoubleOrNull())
+    }
+    return canonicalBodyweightKg(calibration?.bodyweightKg)
+}
+
 private fun putReconciliationMarker(store: BoxStore, nowMs: Long) {
     val box = store.boxFor(AppSettingEntity::class.java)
     val row = setting(store, CURRENT_BODYWEIGHT_RECONCILED_KEY) ?: AppSettingEntity().apply {
@@ -79,6 +100,21 @@ private fun putReconciliationMarker(store: BoxStore, nowMs: Long) {
     row.value = "true"
     row.valueType = "boolean"
     row.updatedAt = nowMs
+    box.put(row)
+}
+
+private fun putImmutableOnboardingBodyweight(
+    store: BoxStore,
+    valueKg: Double?,
+    nowMs: Long,
+) {
+    val box = store.boxFor(AppSettingEntity::class.java)
+    val row = setting(store, LEGACY_BASELINE_BODYWEIGHT_KEY) ?: AppSettingEntity().apply {
+        key = LEGACY_BASELINE_BODYWEIGHT_KEY
+    }
+    row.value = canonicalBodyweightKg(valueKg)?.toString() ?: "0"
+    row.valueType = "string"
+    row.updatedAt = maxOf(row.updatedAt, nowMs)
     box.put(row)
 }
 
@@ -177,37 +213,58 @@ internal fun persistOnboardingAthleteBodyweight(
     bodyweightKg: Double?,
     measuredAt: Long = System.currentTimeMillis(),
 ) {
-    val canonicalKg = canonicalBodyweightKg(bodyweightKg)
     store.runInTx {
-        val calibrationBox = store.boxFor(AthleteCalibrationEntity::class.java)
-        localCalibration(store)?.let { existing ->
-            if (calibration.id == 0L) calibration.id = existing.id
-        }
-        calibration.offlineUserId = LOCAL_ATHLETE_ID
-        calibration.bodyweightKg = canonicalKg
-        calibration.updatedAt = maxOf(calibration.updatedAt, measuredAt)
-        calibrationBox.put(calibration)
-
-        if (latestHistoricalBodyweight(store) == null && canonicalKg != null) {
-            val bodyBox = store.boxFor(BodyMeasurementEntity::class.java)
-            val baseline = bodyBox.query(BodyMeasurementEntity_.uid.equal(LEGACY_BODYWEIGHT_BASELINE_UID))
-                .build().use { it.findFirst() }
-                ?: BodyMeasurementEntity().apply {
-                    uid = LEGACY_BODYWEIGHT_BASELINE_UID
-                    this.measuredAt = measuredAt
-                    createdAt = measuredAt
-                }
-            baseline.bodyweight = canonicalKg
-            baseline.updatedAt = maxOf(baseline.updatedAt, measuredAt)
-            bodyBox.put(baseline)
-        }
-        syncCurrentAthleteBodyweightFromHistoryInTransaction(
+        persistOnboardingAthleteBodyweightInTransaction(
             store = store,
-            clearWhenNoHistory = canonicalKg == null,
-            nowMs = measuredAt,
+            calibration = calibration,
+            bodyweightKg = bodyweightKg,
+            measuredAt = measuredAt,
         )
-        putReconciliationMarker(store, measuredAt)
     }
+}
+
+internal fun persistOnboardingAthleteBodyweightInTransaction(
+    store: BoxStore,
+    calibration: AthleteCalibrationEntity,
+    bodyweightKg: Double?,
+    measuredAt: Long,
+) {
+    val canonicalKg = canonicalBodyweightKg(bodyweightKg)
+    putImmutableOnboardingBodyweight(store, canonicalKg, measuredAt)
+    val calibrationBox = store.boxFor(AthleteCalibrationEntity::class.java)
+    localCalibration(store)?.let { existing ->
+        if (calibration.id == 0L) calibration.id = existing.id
+    }
+    calibration.offlineUserId = LOCAL_ATHLETE_ID
+    calibration.bodyweightKg = canonicalKg
+    calibration.updatedAt = maxOf(calibration.updatedAt, measuredAt)
+    calibrationBox.put(calibration)
+
+    val bodyBox = store.boxFor(BodyMeasurementEntity::class.java)
+    val baseline = bodyBox.query(BodyMeasurementEntity_.uid.equal(LEGACY_BODYWEIGHT_BASELINE_UID))
+        .build().use { it.findFirst() }
+    if (canonicalKg == null) {
+        baseline?.let(bodyBox::remove)
+    } else if (baseline != null || latestHistoricalBodyweight(
+            store,
+            excludingUid = LEGACY_BODYWEIGHT_BASELINE_UID,
+        ) == null
+    ) {
+        val row = baseline ?: BodyMeasurementEntity().apply {
+                uid = LEGACY_BODYWEIGHT_BASELINE_UID
+                this.measuredAt = measuredAt
+                createdAt = measuredAt
+            }
+        row.bodyweight = canonicalKg
+        row.updatedAt = maxOf(row.updatedAt, measuredAt)
+        bodyBox.put(row)
+    }
+    syncCurrentAthleteBodyweightFromHistoryInTransaction(
+        store = store,
+        clearWhenNoHistory = canonicalKg == null,
+        nowMs = measuredAt,
+    )
+    putReconciliationMarker(store, measuredAt)
 }
 
 internal fun currentAthleteBodyweightKgFlow(store: BoxStore): Flow<Double?> =

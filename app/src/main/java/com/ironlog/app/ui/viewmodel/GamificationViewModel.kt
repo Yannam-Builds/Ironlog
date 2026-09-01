@@ -16,10 +16,13 @@ import com.ironlog.app.data.objectbox.GamificationProfileEntity_
 import com.ironlog.app.data.objectbox.PlanEntity
 import com.ironlog.app.data.objectbox.WorkoutImportProvenanceMigration
 import com.ironlog.app.data.repository.SettingsRepository
-import com.ironlog.app.data.repository.currentAthleteBodyweightKg
+import com.ironlog.app.data.repository.onboardingBaselineBodyweightKg
+import com.ironlog.app.data.repository.onboardingBaselineOccurredAtMs
+import com.ironlog.app.data.repository.upsertOnboardingBaselineEvent
 import com.ironlog.app.domain.badges.AppStats
 import com.ironlog.app.domain.badges.BadgeDefinitions
 import com.ironlog.app.domain.gamification.AthleteCalibration
+import com.ironlog.app.domain.gamification.BaselineCalibrationEngine
 import com.ironlog.app.domain.gamification.DailyProofStatus
 import com.ironlog.app.domain.gamification.IronGrade
 import com.ironlog.app.domain.gamification.IronGradeGate
@@ -34,6 +37,7 @@ import com.ironlog.app.domain.gamification.XpEngine
 import com.ironlog.app.domain.gamification.buildDailyProofSummary
 import com.ironlog.app.domain.gamification.CreditedProof
 import com.ironlog.app.domain.gamification.dailyWorkoutStreakDays
+import com.ironlog.app.domain.gamification.effectiveOnboardingBaselineAward
 import com.ironlog.app.domain.intelligence.CloudAiKeyStore
 import com.ironlog.app.domain.intelligence.canonicalIntelligenceMode
 import com.ironlog.app.ui.model.HistoryEntry
@@ -87,6 +91,15 @@ data class GamificationUiState(
 
 internal fun totalXpFromLedger(ledgerTotalXp: Long, bonusXp: Long): Long =
     ledgerTotalXp.coerceAtLeast(0L) + bonusXp.coerceAtLeast(0L)
+
+internal fun proofOnlyLedgerXp(snapshotTotalXp: Long, effectiveBaselineXp: Long): Long =
+    (snapshotTotalXp - effectiveBaselineXp.coerceAtLeast(0L)).coerceAtLeast(0L)
+
+internal fun combinedBaselineAndEvidenceBadgeIds(
+    baselineSupported: Set<String>,
+    evaluated: Set<String>,
+    historical: Set<String>,
+): Set<String> = baselineSupported + evaluated + historical
 
 internal fun isCloudAiBadgeActive(
     intelligenceMode: String,
@@ -254,13 +267,43 @@ class GamificationViewModel(
             val settingsJson = currentSettingsJson()
             val weeklyGoal = settingsJson.optInt("weeklyGoalDays", 4).coerceIn(1, 7)
             val profile = getOrCreateProfile()
-            val snapshot = engine.rebuild(history, weeklyGoal, readCalibration(weeklyGoal))
-            com.ironlog.app.data.repository.migrateLegacyBonusXpBlocking(boxStore, profile.totalXp, snapshot.totalXp, nowEpochMs)
+            val calibration = readCalibration(weeklyGoal)
+            val baseline = BaselineCalibrationEngine().calculate(calibration)
+            val baselineOccurredAtMs = onboardingBaselineOccurredAtMs(boxStore, nowEpochMs)
+            val effectiveBaseline = effectiveOnboardingBaselineAward(
+                baseline = baseline,
+                history = history,
+                baselineOccurredAt = java.time.Instant.ofEpochMilli(baselineOccurredAtMs),
+                zoneId = zone,
+            )
+            upsertOnboardingBaselineEvent(
+                store = boxStore,
+                calibration = calibration,
+                result = baseline,
+                effectiveAward = effectiveBaseline,
+                occurredAtMs = baselineOccurredAtMs,
+            )
+            val snapshot = engine.rebuild(
+                history,
+                weeklyGoal,
+                calibration,
+                effectiveBaselineXp = effectiveBaseline.xp,
+            )
+            com.ironlog.app.data.repository.migrateLegacyBonusXpBlocking(
+                boxStore,
+                profile.totalXp,
+                proofOnlyLedgerXp(snapshot.totalXp, effectiveBaseline.xp),
+                nowEpochMs,
+            )
             val bonusEvents = bonusLedgerEvents()
             val historicalUnlocks = com.ironlog.app.domain.gamification.historicalBadgeUnlocks(history, now, zone) +
                 com.ironlog.app.domain.gamification.historicalPrBadgeUnlocks(history, snapshot.events, now, zone)
-            val badges = mergedUnlockedBadges(profile.unlockedBadges, snapshot.grade,
-                evaluateAppBadges(history, snapshot, settingsJson, capturedClock) + historicalUnlocks.keys)
+            val badgeEvidence = combinedBaselineAndEvidenceBadgeIds(
+                baselineSupported = baseline.supportedBadgeIds,
+                evaluated = evaluateAppBadges(history, snapshot, settingsJson, capturedClock),
+                historical = historicalUnlocks.keys,
+            )
+            val badges = mergedUnlockedBadges(profile.unlockedBadges, snapshot.grade, badgeEvidence)
             val durable = runCatching { Json.decodeFromString<Map<String, Long>>(profile.badgeUnlocksJson.orEmpty()) }
                 .getOrDefault(emptyMap())
             profile.unlockedBadges = badges.joinToString(",")
@@ -321,7 +364,7 @@ class GamificationViewModel(
     }
 
     private fun bonusLedgerEvents(): List<IronLedgerEventEntity> = ledgerEventBox.all
-        .filter { !it.invalidated && it.sourceType == "bonus" }
+        .filter { !it.invalidated && it.sourceType in setOf("bonus", "onboarding") }
 
     private fun bonusEventLogEntry(event: IronLedgerEventEntity): XpLogEntry {
         val metadata = runCatching { JSONObject(event.metadataJson) }.getOrDefault(JSONObject())
@@ -350,7 +393,7 @@ class GamificationViewModel(
             historicalTrainingDaysPerWeek = historicalTrainingDays,
             importedHistory = entity?.importedHistory ?: (settingsRepo.getStringBlocking("ledger_imported_history")?.toBooleanStrictOrNull() ?: false),
             weeklyGoalDays = entity?.weeklyGoalDays ?: weeklyGoal,
-            bodyweightKg = currentAthleteBodyweightKg(boxStore),
+            bodyweightKg = onboardingBaselineBodyweightKg(boxStore, entity),
             hasPastTraining = entity?.hasPastTraining ?: (settingsRepo.getStringBlocking("baseline_has_past_training")?.toBooleanStrictOrNull() ?: false),
             hasGymAccess = entity?.hasGymAccess ?: (settingsRepo.getStringBlocking("baseline_has_gym_access")?.toBooleanStrictOrNull() ?: true),
             baselinePushups = entity?.baselinePushups ?: settingInt("baseline_pushups"),

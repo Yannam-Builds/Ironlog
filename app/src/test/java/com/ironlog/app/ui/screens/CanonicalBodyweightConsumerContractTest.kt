@@ -15,10 +15,11 @@ class CanonicalBodyweightConsumerContractTest {
     }
 
     @Test
-    fun `gamification does not fall back to stale baseline bodyweight`() {
+    fun `gamification reads the immutable onboarding baseline instead of mutable current weight`() {
         val source = File("src/main/java/com/ironlog/app/ui/viewmodel/GamificationViewModel.kt").readText()
 
-        assertTrue(source.contains("currentAthleteBodyweightKg(boxStore)"))
+        assertTrue(source.contains("onboardingBaselineBodyweightKg(boxStore, entity)"))
+        assertFalse(source.contains("bodyweightKg = currentAthleteBodyweightKg(boxStore)"))
         assertFalse(source.contains("bodyweightKg = entity?.bodyweightKg ?: settingInt(\"baseline_bodyweight_kg\")"))
     }
 }

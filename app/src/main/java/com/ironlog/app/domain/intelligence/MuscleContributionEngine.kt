@@ -321,6 +321,23 @@ private fun normalize(raw: Map<String, Double>): Map<String, Double> {
     return cleaned.mapValues { it.value / total }
 }
 
+private fun storedContribution(exercise: HistoryExercise): Map<String, Double> {
+    val expanded = linkedMapOf<String, Double>()
+    exercise.muscleContributions.forEach { (rawMuscle, fraction) ->
+        if (!fraction.isFinite() || fraction <= 0.0) return@forEach
+        val muscle = rawMuscle.trim()
+        val fineMuscle = FINE_MUSCLES.firstOrNull { it.equals(muscle, ignoreCase = true) }
+        if (fineMuscle != null) {
+            expanded[fineMuscle] = (expanded[fineMuscle] ?: 0.0) + fraction
+        } else {
+            LIBRARY_GROUP_MAP[muscle.lowercase()]?.forEach { (fine, groupFraction) ->
+                expanded[fine] = (expanded[fine] ?: 0.0) + fraction * groupFraction
+            }
+        }
+    }
+    return normalize(expanded)
+}
+
 private fun mergeWeighted(a: Map<String, Double>, wA: Double, b: Map<String, Double>, wB: Double): Map<String, Double> {
     val merged = linkedMapOf<String, Double>()
     a.forEach { (k, v) -> merged[k] = (merged[k] ?: 0.0) + v * wA }
@@ -341,15 +358,18 @@ private fun libraryContribution(exercise: HistoryExercise): Map<String, Double> 
 
 /** Resolve fractional contribution map for a single exercise (sums to ≈1.0). */
 fun resolveContribution(exercise: HistoryExercise): Map<String, Double> {
-    // 1. Anchor override — exercise-specific ground truth
+    // 1. Persisted exercise-muscle rows are the performed exercise's historical ground truth.
+    storedContribution(exercise).takeIf { it.isNotEmpty() }?.let { return it }
+
+    // 2. Anchor override — exercise-specific ground truth
     val anchorKey = normalizeKey(exercise.name)
     ANCHOR_OVERRIDES[anchorKey]?.let { return normalize(it) }
 
-    // 2. Family template from movement pattern detection
+    // 3. Family template from movement pattern detection
     val family = detectFamily(exercise.name)
     val template = FAMILY_TEMPLATES[family]?.let(::normalize) ?: emptyMap()
 
-    // 3. Library expansion from primaryMuscles metadata
+    // 4. Library expansion from primaryMuscles metadata
     val library = libraryContribution(exercise)
 
     return when {

@@ -5,23 +5,17 @@ import com.ironlog.app.ui.theme.appPadding
 import com.ironlog.app.ui.theme.appSpacedBy
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Surface
 import com.ironlog.app.ui.theme.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -33,13 +27,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ironlog.app.ui.screens.onboarding.GlowButton
 import com.ironlog.app.ui.screens.onboarding.InfiniteNumberWheelSheet
 import com.ironlog.app.ui.screens.onboarding.OnboardingConfig
+import com.ironlog.app.ui.screens.onboarding.OnboardingInfoBanner
 import com.ironlog.app.ui.screens.onboarding.OnboardingPageHeader
-import com.ironlog.app.ui.screens.onboarding.SetupReward
+import com.ironlog.app.ui.screens.onboarding.OnboardingScrollablePage
+import com.ironlog.app.ui.screens.onboarding.OnboardingTrainingProfilePreview
+import com.ironlog.app.ui.screens.onboarding.baselinePickerFieldLayoutSpec
 import java.time.Year
 import kotlin.math.roundToInt
 
@@ -75,25 +73,19 @@ fun Step3Baseline(
     onBenchChange: (Int) -> Unit,
     onLatPulldownChange: (Int) -> Unit,
     onMileRunChange: (Int) -> Unit,
-    seededGrade: String,
-    seededStats: Map<String, Int>,
+    profilePreview: OnboardingTrainingProfilePreview,
     onNext: () -> Unit,
 ) {
     var picker by remember { mutableStateOf<PickerSpec?>(null) }
     var showMovementChecks by remember { mutableStateOf(false) }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(OnboardingConfig.bgDark)
-            .verticalScroll(rememberScrollState())
-            .appPadding(start = 24.dp, top = 32.dp, end = 24.dp, bottom = 64.dp),
+    OnboardingScrollablePage(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         OnboardingPageHeader(
             step = "Baseline",
             title = "Give IronLog a starting signal.",
-            body = "These values personalize recovery, load suggestions and your provisional ledger. Verified workouts always outrank self-reported numbers.",
+            body = "These answers personalize initial recovery and load suggestions. Verified workouts refine and build on this estimate with your own training evidence.",
         )
         Spacer(Modifier.height(appGapDp(26.dp)))
 
@@ -142,7 +134,7 @@ fun Step3Baseline(
         BaselineCard(if (showMovementChecks) "Optional movement checks" else "Improve your starting estimate") {
             if (!showMovementChecks) {
                 Text(
-                    "Add a few recent best efforts for a more accurate starting badge. You can skip this and let verified workouts calibrate you.",
+                    "Add a few recent best efforts for more tailored starting guidance. You can skip this and let verified workouts calibrate you.",
                     color = OnboardingConfig.textMuted,
                     fontSize = 13.sp,
                     lineHeight = 18.sp,
@@ -183,9 +175,12 @@ fun Step3Baseline(
             }
         }
 
-        BaselineResultCard(grade = seededGrade, stats = seededStats)
+        TrainingProfilePreviewCard(preview = profilePreview)
 
-        SetupReward("Your badge remains provisional until training evidence confirms it", Modifier.fillMaxWidth())
+        OnboardingInfoBanner(
+            text = "Self-reported onboarding rewards use reduced trust. Verified workouts add proof XP, refine and build on these signals; action badges still require matching evidence.",
+            modifier = Modifier.fillMaxWidth(),
+        )
         Spacer(Modifier.height(appGapDp(14.dp)))
         GlowButton(text = "Save baseline", onClick = onNext)
         Spacer(Modifier.height(appGapDp(24.dp)))
@@ -220,6 +215,7 @@ private fun BaselineCard(title: String, content: @Composable () -> Unit) {
 
 @Composable
 private fun PickerField(label: String, value: String, onClick: () -> Unit) {
+    val layout = remember { baselinePickerFieldLayoutSpec() }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -229,10 +225,32 @@ private fun PickerField(label: String, value: String, onClick: () -> Unit) {
             .padding(horizontal = 16.dp, vertical = 15.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(label, color = OnboardingConfig.textMuted, fontSize = 14.sp, modifier = Modifier.weight(1f))
-        Text(value, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, textAlign = TextAlign.End)
-        Spacer(Modifier.width(appGapDp(8.dp)))
-        Text("›", color = OnboardingConfig.accentBlue, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+        Text(
+            label,
+            color = OnboardingConfig.textMuted,
+            fontSize = 14.sp,
+            maxLines = layout.labelMaxLines,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(layout.labelWeight),
+        )
+        Row(
+            modifier = Modifier.weight(layout.valueWeight),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                value,
+                color = Color.White,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.ExtraBold,
+                textAlign = TextAlign.End,
+                maxLines = layout.valueMaxLines,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            Spacer(Modifier.width(appGapDp(8.dp)))
+            Text("›", color = OnboardingConfig.accentBlue, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+        }
     }
 }
 
@@ -268,39 +286,123 @@ private fun ToggleChip(label: String, selected: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun BaselineResultCard(grade: String, stats: Map<String, Int>) {
-    BaselineCard("Starting estimate") {
+private fun TrainingProfilePreviewCard(preview: OnboardingTrainingProfilePreview) {
+    BaselineCard("Training profile preview") {
         Text(
-            "Provisional $grade",
+            "SELF-REPORTED ESTIMATE",
             color = OnboardingConfig.accentBlue,
-            fontSize = 24.sp,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.ExtraBold,
+            letterSpacing = 1.sp,
+        )
+        Spacer(Modifier.height(appGapDp(6.dp)))
+        Text(
+            "Provisional profile rank",
+            color = OnboardingConfig.textFaint,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+        )
+        Text(
+            preview.provisionalRankLabel,
+            color = OnboardingConfig.accentBlue,
+            fontSize = 26.sp,
             fontWeight = FontWeight.Black,
         )
         Spacer(Modifier.height(appGapDp(6.dp)))
         Text(
-            "Self-reported values are capped. Higher grades require verified sessions, consistency, and integrity.",
+            "Estimated from ${preview.estimatedLifetimeSessions} lifetime sessions using your training age, weekly rhythm, and movement checks.",
             color = OnboardingConfig.textMuted,
             fontSize = 13.sp,
             lineHeight = 18.sp,
         )
         Spacer(Modifier.height(appGapDp(14.dp)))
-        stats.entries.chunked(2).forEach { row ->
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = appSpacedBy(10.dp)) {
+        ProfilePreviewRow("Training age", preview.experienceLabel)
+        ProfilePreviewRow("Usual rhythm", preview.weeklyRhythmLabel)
+        ProfilePreviewRow("History", preview.historyLabel)
+        ProfilePreviewRow("Equipment", preview.equipmentLabel)
+        ProfilePreviewRow("Calibration", preview.calibrationLabel)
+        Spacer(Modifier.height(appGapDp(14.dp)))
+
+        preview.estimatedStats.entries.chunked(2).forEach { row ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = appSpacedBy(10.dp),
+            ) {
                 row.forEach { (label, value) ->
                     Column(
                         modifier = Modifier
                             .weight(1f)
-                            .background(OnboardingConfig.bgDark.copy(alpha = 0.45f), RoundedCornerShape(16.dp))
+                            .background(OnboardingConfig.bgDark.copy(alpha = 0.55f), RoundedCornerShape(14.dp))
                             .appPadding(12.dp),
                     ) {
-                        Text(label, color = OnboardingConfig.textMuted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                        Text(value.toString(), color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Black)
+                        Text(label, color = OnboardingConfig.textFaint, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Text(value.toString(), color = OnboardingConfig.textPrimary, fontSize = 20.sp, fontWeight = FontWeight.Black)
                     }
                 }
                 if (row.size == 1) Spacer(Modifier.weight(1f))
             }
             Spacer(Modifier.height(appGapDp(10.dp)))
         }
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(OnboardingConfig.bgDark.copy(alpha = 0.55f), RoundedCornerShape(16.dp))
+                .appPadding(14.dp),
+        ) {
+            Text("Baseline estimate", color = OnboardingConfig.textPrimary, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold)
+            Spacer(Modifier.height(appGapDp(4.dp)))
+            Text(
+                "Level ${preview.seededLevel} · ${preview.seededXp} XP",
+                color = OnboardingConfig.accentGold,
+                fontSize = 13.sp,
+                lineHeight = 18.sp,
+                fontWeight = FontWeight.Bold,
+            )
+            Spacer(Modifier.height(appGapDp(8.dp)))
+            Text(
+                "Supported starting badges",
+                color = OnboardingConfig.textFaint,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                preview.supportedBadgeLabels.takeIf { it.isNotEmpty() }?.joinToString(" · ")
+                    ?: "No exposure milestone badges yet",
+                color = OnboardingConfig.textMuted,
+                fontSize = 12.sp,
+                lineHeight = 17.sp,
+            )
+            Spacer(Modifier.height(appGapDp(8.dp)))
+            Text(
+                "Verified workouts refine and build on every signal while adding proof-backed progress without duplicating this baseline.",
+                color = OnboardingConfig.textMuted,
+                fontSize = 12.sp,
+                lineHeight = 17.sp,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ProfilePreviewRow(label: String, value: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 5.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Text(label, color = OnboardingConfig.textFaint, fontSize = 12.sp, modifier = Modifier.weight(0.42f))
+        Spacer(Modifier.width(appGapDp(12.dp)))
+        Text(
+            value,
+            color = OnboardingConfig.textPrimary,
+            fontSize = 13.sp,
+            lineHeight = 18.sp,
+            fontWeight = FontWeight.SemiBold,
+            textAlign = TextAlign.End,
+            modifier = Modifier.weight(0.58f),
+        )
     }
 }
 

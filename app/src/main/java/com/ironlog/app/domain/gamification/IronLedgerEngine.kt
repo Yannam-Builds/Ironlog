@@ -124,6 +124,7 @@ class IronLedgerEngine(
         history: List<HistoryEntry>,
         weeklyGoal: Int,
         calibration: AthleteCalibration,
+        effectiveBaselineXp: Long? = null,
     ): IronLedgerSnapshot {
         val now = Instant.now(clock)
         val sorted = history.sortedBy { parseInstant(it.date)?.toEpochMilli() ?: Long.MAX_VALUE }
@@ -137,16 +138,20 @@ class IronLedgerEngine(
         val qualifyingWeeks = qualified.mapNotNull { weekKey(it.date) }.distinct().size
         val integrity = integrityScore(qualified, qualified)
         val events = buildEvents(qualified, qualified, integrity)
-        val totalXp = events.sumOf { it.xp.toLong() }.coerceAtLeast(0L)
+        val baseline = BaselineCalibrationEngine().calculate(calibration)
+        val verifiedXp = events.sumOf { it.xp.toLong() }.coerceAtLeast(0L)
+        val totalXp = (effectiveBaselineXp ?: baseline.xp).coerceAtLeast(0L) + verifiedXp
         val level = levelFromTotalXp(totalXp)
-        val stats = computeStats(qualified, qualifyingWeeks)
-        val grade = gradeFor(
+        val verifiedStats = computeStats(qualified, qualifyingWeeks)
+        val stats = mergeBaselineAndVerifiedStats(baseline.stats, verifiedStats)
+        val verifiedGrade = gradeFor(
             verifiedSessions = qualified.size,
             qualifyingWeeks = qualifyingWeeks,
             tenureDays = tenureDays,
             integrity = integrity,
-            stats = stats,
+            stats = verifiedStats,
         )
+        val grade = maxOf(verifiedGrade, baseline.grade, compareBy(IronGrade::ordinal))
         val nextGrade = IronGrade.entries.firstOrNull { it.ordinal > grade.ordinal }
         val gates = nextGrade?.let { ng ->
             buildList {
@@ -160,7 +165,11 @@ class IronLedgerEngine(
                     add(IronGradeGate(ng, "Integrity", (integrity * 100).roundToInt(), required, integrity >= threshold))
                 }
                 if (ng.ordinal >= IronGrade.IRIDIUM.ordinal) {
-                    val balance = listOf(stats.strength, stats.hypertrophy, stats.discipline).average().roundToInt()
+                    val balance = listOf(
+                        verifiedStats.strength,
+                        verifiedStats.hypertrophy,
+                        verifiedStats.discipline,
+                    ).average().roundToInt()
                     add(IronGradeGate(ng, "Balanced signals", balance, 300, balance >= 300))
                 }
             }

@@ -77,7 +77,7 @@ import androidx.navigation.compose.rememberNavController
 import com.ironlog.app.data.objectbox.AthleteCalibrationEntity
 import com.ironlog.app.data.objectbox.AthleteCalibrationEntity_
 import com.ironlog.app.data.repository.BodyMeasurementRepository
-import com.ironlog.app.data.repository.persistOnboardingAthleteBodyweight
+import com.ironlog.app.data.repository.persistOnboardingBaselineAtomically
 import com.ironlog.app.data.repository.SettingsRepository
 import com.ironlog.app.ui.context.useTheme
 import com.ironlog.app.ui.screens.workout.ActiveWorkoutScreen
@@ -666,6 +666,8 @@ private suspend fun settingsRepoSaveOnboardingDataFull(context: Context, draft: 
     val json = mergeOnboardingSettingsJson(raw, draft)
     repo.setString("ironlog_settings", json.toString(), "json")
     onboardingBaselineSettingsFromDraft(draft).forEach { (key, value) ->
+        // The immutable baseline weight is committed with calibration, Ledger event, and profile.
+        if (key == "baseline_bodyweight_kg") return@forEach
         if (value == "true" || value == "false") {
             repo.setBoolean(key, value.toBoolean())
         } else {
@@ -676,11 +678,11 @@ private suspend fun settingsRepoSaveOnboardingDataFull(context: Context, draft: 
     val existing = calibrationBox.query(AthleteCalibrationEntity_.offlineUserId.equal("local"))
         .build().use { it.findFirst() }
     val calibrationUpdatedAt = System.currentTimeMillis()
-    persistOnboardingAthleteBodyweight(
+    persistOnboardingBaselineAtomically(
         store = ObjectBox.store,
         calibration = buildCalibrationEntityFromOnboardingDraft(draft, existing, calibrationUpdatedAt),
         bodyweightKg = draft.bodyweightKg.takeIf { it > 0 }?.toDouble(),
-        measuredAt = calibrationUpdatedAt,
+        occurredAtMs = calibrationUpdatedAt,
     )
     if (draft.cloudAiApiKey.isNotBlank()) {
         val provider = draft.cloudAiProviderPreset.ifBlank { "custom" }

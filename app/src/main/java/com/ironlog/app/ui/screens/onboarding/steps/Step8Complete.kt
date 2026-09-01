@@ -7,14 +7,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import com.ironlog.app.ui.theme.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -24,11 +24,12 @@ import androidx.compose.ui.unit.sp
 import com.ironlog.app.R
 import com.ironlog.app.ui.screens.onboarding.GlowButton
 import com.ironlog.app.ui.screens.onboarding.OnboardingConfig
+import com.ironlog.app.ui.screens.onboarding.OnboardingScrollablePage
+import com.ironlog.app.ui.screens.onboarding.OnboardingTrainingProfilePreview
 import com.ironlog.app.ui.screens.onboarding.ParticleField
 import com.ironlog.app.ui.screens.onboarding.SetupReward
-import com.ironlog.app.ui.components.IronGradeBadge
-import com.ironlog.app.ui.components.ironGradeColor
-import kotlinx.coroutines.delay
+import com.ironlog.app.ui.screens.onboarding.supportingMascotSizeDp
+import kotlin.math.roundToInt
 
 @Composable
 fun Step8Complete(
@@ -40,49 +41,37 @@ fun Step8Complete(
     intelligenceMode: String,
     healthConnectGranted: Boolean,
     notificationsGranted: Boolean,
-    qualifiedBadge: String,
+    profilePreview: OnboardingTrainingProfilePreview,
     onStartTraining: () -> Unit,
 ) {
-    var revealDone by remember { mutableStateOf(false) }
-    var slotBadge by remember { mutableStateOf(qualifiedBadge) }
-    LaunchedEffect(qualifiedBadge) {
-        slotBadge = qualifiedBadge
-        delay(650L)
-        revealDone = true
-    }
-
-    Box(
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
             .background(OnboardingConfig.bgDark),
     ) {
+        val mascotSize = supportingMascotSizeDp(
+            availableHeightDp = maxHeight.value.roundToInt(),
+            fontScale = LocalDensity.current.fontScale,
+        )
         ParticleField()
 
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .appPadding(start = 32.dp, top = 28.dp, end = 32.dp, bottom = 64.dp)
-                    .verticalScroll(rememberScrollState()),
+            OnboardingScrollablePage(
+                backgroundColor = Color.Transparent,
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
             ) {
                 Image(
-                    painter = painterResource(R.drawable.forgefox_25_trophy_medal),
-                    contentDescription = "Forge Fox holding a trophy",
-                    modifier = Modifier.size(104.dp),
+                    painter = painterResource(R.drawable.forgefox_20_clipboard),
+                    contentDescription = "Forge Fox holding a training profile",
+                    modifier = Modifier.size(mascotSize.dp),
                 )
                 Spacer(Modifier.height(appGapDp(8.dp)))
-                IronGradeBadge(
-                    rank = slotBadge,
-                    accent = ironGradeColor(slotBadge),
-                    modifier = Modifier.size(92.dp),
-                )
-
-                Spacer(Modifier.height(appGapDp(10.dp)))
                 Text(
-                    text = if (revealDone) "Provisional grade · $slotBadge" else "Preparing your ledger...",
-                    color = OnboardingConfig.textMuted,
-                    fontSize = 13.sp,
+                    text = "TRAINING PROFILE READY",
+                    color = OnboardingConfig.accentBlue,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    letterSpacing = 1.4.sp,
                     textAlign = TextAlign.Center,
                 )
 
@@ -101,7 +90,7 @@ fun Step8Complete(
                 Spacer(Modifier.height(appGapDp(8.dp)))
 
                 Text(
-                    text          = "Your training system is calibrated",
+                    text          = "Your provisional profile is ready",
                     color         = OnboardingConfig.textPrimary,
                     fontSize      = 20.sp,
                     fontWeight    = FontWeight.ExtraBold,
@@ -112,7 +101,7 @@ fun Step8Complete(
                 Spacer(Modifier.height(appGapDp(24.dp)))
 
                 Text(
-                    text      = "Your first workouts will verify this baseline, tune recovery, and begin earning durable ledger XP.",
+                    text      = "IronLog will use your self-reported onboarding baseline to seed a reduced-trust starting profile. Verified training will refine it.",
                     color     = OnboardingConfig.textMuted,
                     fontSize  = 13.sp,
                     lineHeight = 19.sp,
@@ -120,6 +109,82 @@ fun Step8Complete(
                 )
 
                 Spacer(Modifier.height(appGapDp(22.dp)))
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(OnboardingConfig.surfaceDark, RoundedCornerShape(20.dp))
+                        .border(1.dp, OnboardingConfig.cardBorder, RoundedCornerShape(20.dp))
+                        .appPadding(18.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text("Baseline ready to save", color = OnboardingConfig.textPrimary, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold)
+                    Spacer(Modifier.height(appGapDp(6.dp)))
+                    Text(
+                        "${profilePreview.provisionalRankLabel} · Level ${profilePreview.seededLevel} · ${profilePreview.seededXp} XP",
+                        color = OnboardingConfig.accentGold,
+                        fontSize = 14.sp,
+                        lineHeight = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
+                    )
+                    Spacer(Modifier.height(appGapDp(6.dp)))
+                    Text(
+                        "Estimated from ${profilePreview.estimatedLifetimeSessions} lifetime sessions",
+                        color = OnboardingConfig.textMuted,
+                        fontSize = 12.sp,
+                        lineHeight = 17.sp,
+                        textAlign = TextAlign.Center,
+                    )
+                    Spacer(Modifier.height(appGapDp(14.dp)))
+                    profilePreview.estimatedStats.entries.chunked(2).forEach { row ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = appSpacedBy(10.dp),
+                        ) {
+                            row.forEach { (label, value) ->
+                                Column(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .background(OnboardingConfig.bgDark.copy(alpha = 0.58f), RoundedCornerShape(14.dp))
+                                        .appPadding(10.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                ) {
+                                    Text(label, color = OnboardingConfig.textFaint, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    Text(value.toString(), color = OnboardingConfig.textPrimary, fontSize = 18.sp, fontWeight = FontWeight.Black)
+                                }
+                            }
+                            if (row.size == 1) Spacer(Modifier.weight(1f))
+                        }
+                        Spacer(Modifier.height(appGapDp(10.dp)))
+                    }
+                    Text(
+                        "Supported starting badges",
+                        color = OnboardingConfig.textFaint,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Spacer(Modifier.height(appGapDp(4.dp)))
+                    Text(
+                        profilePreview.supportedBadgeLabels.takeIf { it.isNotEmpty() }?.joinToString(" · ")
+                            ?: "No exposure milestone badges yet",
+                        color = OnboardingConfig.textMuted,
+                        fontSize = 12.sp,
+                        lineHeight = 17.sp,
+                        textAlign = TextAlign.Center,
+                    )
+                    Spacer(Modifier.height(appGapDp(10.dp)))
+                    Text(
+                        "Verified workouts add proof XP, preserve this one-time baseline, and refine and build on rank and stats without double counting.",
+                        color = OnboardingConfig.accentBlue,
+                        fontSize = 12.sp,
+                        lineHeight = 17.sp,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
+                    )
+                }
+
+                Spacer(Modifier.height(appGapDp(18.dp)))
 
                 Column(
                     modifier = Modifier

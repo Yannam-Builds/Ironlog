@@ -79,6 +79,27 @@ export interface Workout {
   revision: number;
   imported?: boolean;
 }
+export interface TrainingSignals {
+  strength: number;
+  power: number;
+  hypertrophy: number;
+  endurance: number;
+  agility: number;
+  discipline: number;
+  recovery: number;
+}
+export interface OnboardingLedgerBaseline {
+  version: 1;
+  provenance: "onboarding_self_report";
+  formula: "trainingAgeMonths*4.345*historicalTrainingDaysPerWeek";
+  trustScore: 0.5;
+  estimatedLifetimeSessions: number;
+  xp: number;
+  grade: string;
+  stats: TrainingSignals;
+  supportedBadgeIds: string[];
+  seededAt: number;
+}
 export interface Profile {
   name: string;
   age: number;
@@ -86,6 +107,8 @@ export interface Profile {
   weightKg: number;
   experience: string;
   goal: string;
+  trainingAgeMonths: number;
+  historicalTrainingDaysPerWeek: number;
   weeklyGoal: number;
   sessionMinutes: number;
   coaching: string;
@@ -100,6 +123,7 @@ export interface Profile {
   platesKg: number[];
   keepAwake: boolean;
   badgeUnlocks: Record<string, number>;
+  ledgerBaseline?: OnboardingLedgerBaseline;
   recoveryWeeks: string[];
   lastBackupAt?: number;
 }
@@ -153,6 +177,8 @@ export const defaultProfile: Profile = {
   weightKg: 70,
   experience: "beginner",
   goal: "General Fitness",
+  trainingAgeMonths: 0,
+  historicalTrainingDaysPerWeek: 3,
   weeklyGoal: 3,
   sessionMinutes: 60,
   coaching: "balanced",

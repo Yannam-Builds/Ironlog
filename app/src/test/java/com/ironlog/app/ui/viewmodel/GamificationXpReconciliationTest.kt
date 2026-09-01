@@ -26,6 +26,14 @@ class GamificationXpReconciliationTest {
     }
 
     @Test
+    fun `legacy migration compares old profile against proof only xp`() {
+        assertEquals(
+            500L,
+            proofOnlyLedgerXp(snapshotTotalXp = 1_300L, effectiveBaselineXp = 800L),
+        )
+    }
+
+    @Test
     fun `recovery proof can only be recorded once per ISO week`() {
         assertEquals(true, canRecordRecoveryCircuit(emptyMap(), "2026-W31", hasDurableEvent = false))
         assertEquals(false, canRecordRecoveryCircuit(mapOf("2026-W31" to 1), "2026-W31", hasDurableEvent = false))

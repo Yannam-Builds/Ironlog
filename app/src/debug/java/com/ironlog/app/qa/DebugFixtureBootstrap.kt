@@ -24,7 +24,13 @@ object DebugFixtureBootstrap {
         if (!pristine) return
 
         val payload = context.assets.open(ASSET).bufferedReader(Charsets.UTF_8).use { it.readText() }
-        val result = ImportExportRepository().runConfirmedImport(payload, mode = "replace")
+        val repository = ImportExportRepository()
+        val impact = repository.previewRestore(payload, mode = "replace")
+        val result = repository.runConfirmedImport(
+            text = payload,
+            mode = "replace",
+            expectedDatabaseFingerprint = impact.databaseFingerprint,
+        )
         check(result.valid) { result.reason ?: "QA fixture import failed" }
         prefs.edit().putBoolean(COMPLETE, true).commit()
     }

@@ -1,6 +1,7 @@
 package com.ironlog.app.data.repository
 
 import com.ironlog.app.data.objectbox.*
+import com.ironlog.app.ui.viewmodel.proofOnlyLedgerXp
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -52,6 +53,24 @@ class LegacyBonusMigrationTest {
             val settings = SettingsRepository(store.boxFor(AppSettingEntity::class.java))
             assertEquals("true", settings.getStringBlocking("workout_import_provenance_v1"))
             assertEquals("true", settings.getStringBlocking("gamification_bonus_events_v2_migrated"))
+        }
+    }
+
+    @Test fun `new provisional baseline does not swallow legacy bonus xp`() {
+        MyObjectBox.builder().directory(temporary.newFolder()).build().use { store ->
+            val proofOnly = proofOnlyLedgerXp(
+                snapshotTotalXp = 1_300L,
+                effectiveBaselineXp = 800L,
+            )
+
+            migrateLegacyBonusXpBlocking(
+                store = store,
+                profileXp = 1_000L,
+                ledgerXp = proofOnly,
+                nowEpochMs = 123L,
+            )
+
+            assertEquals(500, store.boxFor(IronLedgerEventEntity::class.java).all.single().xpDelta)
         }
     }
 }

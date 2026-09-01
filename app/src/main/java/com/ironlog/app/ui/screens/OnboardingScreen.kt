@@ -3,19 +3,13 @@ package com.ironlog.app.ui.screens
 import com.ironlog.app.ui.theme.appPadding
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.AlertDialog
@@ -29,19 +23,20 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ironlog.app.data.repository.PlanRepository
 import com.ironlog.app.data.seed.toPlanObject
-import com.ironlog.app.ui.screens.onboarding.buildOnboardingLedgerSnapshot
-import com.ironlog.app.ui.screens.onboarding.onboardingPreviewStats
+import com.ironlog.app.domain.gamification.BaselineCalibrationEngine
 import com.ironlog.app.ui.screens.onboarding.OnboardingConfig
 import com.ironlog.app.ui.screens.onboarding.OnboardingDraft
+import com.ironlog.app.ui.screens.onboarding.buildOnboardingTrainingProfilePreview
+import com.ironlog.app.ui.screens.onboarding.onboardingCalibrationFromDraft
 import com.ironlog.app.ui.screens.onboarding.OnboardingViewModel
+import com.ironlog.app.ui.screens.onboarding.unclaimedBaselineDraft
 import com.ironlog.app.ui.screens.onboarding.steps.*
 import kotlinx.coroutines.launch
 
@@ -57,7 +52,18 @@ fun OnboardingScreen(
     planRepo: PlanRepository = PlanRepository(),
 ) {
     val draft by vm.draft.collectAsStateWithLifecycle()
-    val seededSnapshot = remember(draft) { buildOnboardingLedgerSnapshot(draft) }
+    val baselineResult = remember(draft) {
+        BaselineCalibrationEngine().calculate(onboardingCalibrationFromDraft(draft))
+    }
+    val profilePreview = remember(draft, baselineResult) {
+        buildOnboardingTrainingProfilePreview(
+            trainingAgeMonths = draft.trainingAgeMonths,
+            historicalTrainingDaysPerWeek = draft.historicalTrainingDaysPerWeek,
+            hasPastTraining = draft.hasPastTraining,
+            hasGymAccess = draft.hasGymAccess,
+            baselineResult = baselineResult,
+        )
+    }
     val pagerState = rememberPagerState(pageCount = { 10 })
     val scope = rememberCoroutineScope()
     var completionError by remember { mutableStateOf<String?>(null) }
@@ -71,28 +77,65 @@ fun OnboardingScreen(
         listOf("Welcome", "Profile", "Baseline", "Training level", "Schedule", "Goal", "Coaching", "Permissions", "Calibration", "Starter plan")
     }
 
-    Box(
+    Column(
         modifier = Modifier
             .fillMaxSize()
             .background(OnboardingConfig.bgDark)
-            .statusBarsPadding(),
+            .statusBarsPadding()
+            .navigationBarsPadding(),
     ) {
+        if (pagerState.currentPage > 0) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .appPadding(horizontal = 14.dp, vertical = 4.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    IconButton(onClick = ::goBack) {
+                        Icon(
+                            Icons.AutoMirrored.Rounded.ArrowBack,
+                            contentDescription = "Previous onboarding step",
+                            tint = OnboardingConfig.textPrimary,
+                        )
+                    }
+                    Text(
+                        stageLabels[pagerState.currentPage],
+                        color = OnboardingConfig.textMuted,
+                        fontSize = 12.sp,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        "${pagerState.currentPage} / ${pagerState.pageCount - 1}",
+                        color = OnboardingConfig.textFaint,
+                        fontSize = 12.sp,
+                        maxLines = 1,
+                    )
+                }
+                LinearProgressIndicator(
+                    progress = { pagerState.currentPage.toFloat() / (pagerState.pageCount - 1).toFloat() },
+                    modifier = Modifier.fillMaxWidth().height(3.dp),
+                    color = OnboardingConfig.accentBlue,
+                    trackColor = OnboardingConfig.cardBorder,
+                )
+            }
+        }
         HorizontalPager(
             state             = pagerState,
             userScrollEnabled = true,
-            modifier          = Modifier
-                .fillMaxSize()
-                .appPadding(
-                    top = if (pagerState.currentPage == 0) 0.dp else 62.dp,
-                    bottom = 8.dp,
-                ),
+            modifier          = Modifier.weight(1f),
         ) { page ->
                 when (page) {
                     0 -> Step1Awakening(
                         onAdvance = { advance() },
                         onSkip = {
                             scope.launch {
-                                runCatching { onComplete(draft) }
+                                runCatching { onComplete(unclaimedBaselineDraft(draft)) }
                                     .onFailure { completionError = it.message ?: "Could not finish setup. Please try again." }
                             }
                         },
@@ -125,8 +168,7 @@ fun OnboardingScreen(
                         onBenchChange = vm::updateBaselineBenchKg,
                         onLatPulldownChange = vm::updateBaselineLatPulldownKg,
                         onMileRunChange = vm::updateBaselineMileRunSeconds,
-                        seededGrade = seededSnapshot.grade.label,
-                        seededStats = onboardingPreviewStats(seededSnapshot.stats),
+                        profilePreview = profilePreview,
                         onNext = { advance() },
                     )
                     3 -> Step3Classification(
@@ -172,7 +214,7 @@ fun OnboardingScreen(
                         intelligenceMode = draft.intelligenceMode,
                         healthConnectGranted = draft.healthConnectGranted,
                         notificationsGranted = draft.notificationsGranted,
-                        qualifiedBadge = seededSnapshot.grade.label,
+                        profilePreview = profilePreview,
                         onStartTraining = { advance() },
                     )
                     9 -> Step9ProgramSetup(
@@ -196,45 +238,6 @@ fun OnboardingScreen(
                     )
                 }
             }
-        if (pagerState.currentPage > 0) {
-            Column(
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .fillMaxWidth()
-                    .appPadding(horizontal = 14.dp, vertical = 4.dp),
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    IconButton(onClick = ::goBack) {
-                        Icon(
-                            Icons.AutoMirrored.Rounded.ArrowBack,
-                            contentDescription = "Previous onboarding step",
-                            tint = OnboardingConfig.textPrimary,
-                        )
-                    }
-                    Text(
-                        stageLabels[pagerState.currentPage],
-                        color = OnboardingConfig.textMuted,
-                        fontSize = 12.sp,
-                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
-                        modifier = Modifier.weight(1f),
-                    )
-                    Text(
-                        "${pagerState.currentPage} / ${pagerState.pageCount - 1}",
-                        color = OnboardingConfig.textFaint,
-                        fontSize = 12.sp,
-                    )
-                }
-                LinearProgressIndicator(
-                    progress = { pagerState.currentPage.toFloat() / (pagerState.pageCount - 1).toFloat() },
-                    modifier = Modifier.fillMaxWidth().height(3.dp),
-                    color = OnboardingConfig.accentBlue,
-                    trackColor = OnboardingConfig.cardBorder,
-                )
-            }
-        }
     }
 
     completionError?.let { message ->

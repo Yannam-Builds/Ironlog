@@ -101,4 +101,16 @@ class GamificationBadgeUnlockTest {
 
         assertEquals(listOf("Graphite", "first_workout"), badges)
     }
+
+    @Test
+    fun `calibration only refresh reconstructs baseline supported badges`() {
+        assertEquals(
+            setOf("first_workout", "workouts_10", "first_plan"),
+            combinedBaselineAndEvidenceBadgeIds(
+                baselineSupported = setOf("first_workout", "workouts_10"),
+                evaluated = setOf("first_plan"),
+                historical = emptySet(),
+            ),
+        )
+    }
 }

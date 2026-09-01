@@ -12,11 +12,13 @@ import {
 } from "../ui/components";
 import templates from "../generated/templates.json";
 import type { Plan } from "../domain/types";
+import { calculateOnboardingBaseline } from "../domain/onboarding-baseline";
 export function Onboarding() {
   const { data, run, busy } = useApp();
   const [draft, setDraft] = useState(data.profile);
   const [starter, setStarter] = useState("");
   const step = data.profile.onboardingStep;
+  const baselinePreview = calculateOnboardingBaseline(draft, 0);
   const content = useRef<HTMLElement>(null);
   useLayoutEffect(() => {
     // The preceding Continue button may be below the fold, especially inside
@@ -102,7 +104,8 @@ export function Onboarding() {
         <>
           <h1>What are you training for?</h1>
           <p>
-            These choices guide recommendations. They don’t award XP or a grade.
+            Your training history seeds a self-reported, provisional Ledger
+            estimate. Verified workouts add proof over time.
           </p>
           <Field label="Goal">
             <select
@@ -126,8 +129,26 @@ export function Onboarding() {
               <option value="advanced">Experienced lifter</option>
             </select>
           </Field>
+          <div className="two-col">
+            <NumberWheel
+              label="Training age (months)"
+              value={draft.trainingAgeMonths}
+              min={0}
+              max={600}
+              onChange={(trainingAgeMonths) => change({ trainingAgeMonths })}
+            />
+            <NumberWheel
+              label="Usual training days per week"
+              value={draft.historicalTrainingDaysPerWeek}
+              min={1}
+              max={7}
+              onChange={(historicalTrainingDaysPerWeek) =>
+                change({ historicalTrainingDaysPerWeek })
+              }
+            />
+          </div>
           <NumberWheel
-            label="Sessions per week"
+            label="Current weekly goal"
             value={draft.weeklyGoal}
             min={1}
             max={7}
@@ -177,12 +198,24 @@ export function Onboarding() {
             </select>
           </Field>
           <div className="notice">
-            <h3>Training-profile preview</h3>
+            <h3>Self-reported estimate</h3>
             <p>
               {draft.weeklyGoal} sessions · {draft.goal} ·{" "}
               {draft.sessionMinutes} minutes
             </p>
-            <p>Level 1 · 0 XP · Uncalibrated</p>
+            <p>
+              {baselinePreview.grade} provisional profile rank ·{" "}
+              {baselinePreview.xp.toLocaleString()} XP
+            </p>
+            <p>
+              {baselinePreview.estimatedLifetimeSessions.toLocaleString()}{" "}
+              estimated lifetime sessions at 50% self-report trust.
+            </p>
+            <p className="muted">
+              Browser onboarding does not ask for lift or run performance
+              checks, so those signals stay neutral until verified logs add
+              proof.
+            </p>
           </div>
           <p className="muted">
             Recovery scores are estimates, not medical advice. Pain takes

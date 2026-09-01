@@ -7,6 +7,7 @@ import {
   type ButtonHTMLAttributes,
 } from "react";
 import { createPortal } from "react-dom";
+import { badgeDefinition } from "../domain/badges";
 import { themeNames, themes } from "./theme";
 import { useOptionalApp } from "./context";
 export const asset = (name: string) =>
@@ -364,6 +365,24 @@ export function Grade({
       height={size}
       className="grade-art"
       alt={`${grade} grade`}
+    />
+  );
+}
+export function AchievementBadge({
+  id,
+  size = 48,
+}: {
+  id: string;
+  size?: number;
+}) {
+  const definition = badgeDefinition(id);
+  return (
+    <img
+      src={asset(`badges/${definition.icon}`)}
+      width={size}
+      height={size}
+      className="achievement-badge"
+      alt=""
     />
   );
 }

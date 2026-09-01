@@ -4,12 +4,45 @@ package com.ironlog.app.domain.intelligence
 import com.ironlog.app.ui.model.HistoryEntry
 import com.ironlog.app.ui.model.HistoryExercise
 import com.ironlog.app.ui.model.HistoryExerciseSet
+import com.ironlog.app.ui.screens.body.buildDisplayReadiness
 import java.time.Instant
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class RecoveryReadinessEngineTest {
+
+    @Test fun `public abdominal contribution reaches the body map`() {
+        val workoutAt = Instant.parse("2026-09-01T10:00:00Z")
+        val history = listOf(
+            HistoryEntry(
+                id = "public-library-workout",
+                date = workoutAt.toString(),
+                exercises = listOf(
+                    HistoryExercise(
+                        exerciseId = "overhead_press",
+                        name = "Overhead Press",
+                        primaryMuscle = "Shoulders",
+                        muscleContributions = mapOf(
+                            "Shoulders" to 0.6,
+                            "Triceps" to 0.2,
+                            "Abdominals" to 0.2,
+                        ),
+                        sets = listOf(HistoryExerciseSet(weight = 40.0, reps = 8.0, rir = 2.0)),
+                    ),
+                ),
+            ),
+        )
+
+        val readiness = RecoveryReadinessEngine.readinessByRegion(
+            history,
+            nowEpochMs = workoutAt.plusSeconds(60).toEpochMilli(),
+        )
+        val displayReadiness = buildDisplayReadiness(readiness)
+
+        assertTrue("Public Abdominals metadata should make Core readiness known", "Core" in readiness)
+        assertTrue("Core readiness should make the abdominal pieces known", "core" in displayReadiness)
+    }
 
     private fun pushWorkout(
         at: Instant,

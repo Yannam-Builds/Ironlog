@@ -5,13 +5,14 @@ import com.ironlog.app.ui.theme.appPadding
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -20,7 +21,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import com.ironlog.app.ui.theme.Text
@@ -31,21 +34,57 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
+import kotlin.math.roundToInt
+
+@Composable
+fun OnboardingScrollablePage(
+    modifier: Modifier = Modifier,
+    backgroundColor: Color = OnboardingConfig.bgDark,
+    horizontalAlignment: Alignment.Horizontal = Alignment.Start,
+    verticalArrangement: Arrangement.Vertical = Arrangement.Top,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    BoxWithConstraints(
+        modifier = modifier
+            .fillMaxSize()
+            .background(backgroundColor),
+    ) {
+        val layout = onboardingContentLayoutSpec(
+            widthDp = maxWidth.value.roundToInt(),
+            fontScale = LocalDensity.current.fontScale,
+        )
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .appPadding(
+                    start = layout.horizontalPaddingDp.dp,
+                    top = layout.topPaddingDp.dp,
+                    end = layout.horizontalPaddingDp.dp,
+                    bottom = layout.bottomPaddingDp.dp,
+                ),
+            horizontalAlignment = horizontalAlignment,
+            verticalArrangement = verticalArrangement,
+            content = content,
+        )
+    }
+}
 
 @Composable
 fun ParticleField(
     modifier: Modifier = Modifier,
     @Suppress("UNUSED_PARAMETER") count: Int = OnboardingConfig.PARTICLE_COUNT_DRIFT,
 ) {
-    Canvas(
+    Box(
         modifier = modifier
             .fillMaxSize()
             .background(
@@ -57,18 +96,7 @@ fun ParticleField(
                     ),
                 ),
             ),
-    ) {
-        drawCircle(
-            color = OnboardingConfig.accentBlue.copy(alpha = 0.10f),
-            radius = size.minDimension * 0.55f,
-            center = Offset(size.width * 0.15f, size.height * 0.12f),
-        )
-        drawCircle(
-            color = OnboardingConfig.accentGold.copy(alpha = 0.07f),
-            radius = size.minDimension * 0.48f,
-            center = Offset(size.width * 0.92f, size.height * 0.88f),
-        )
-    }
+    )
 }
 
 @Composable
@@ -259,5 +287,33 @@ fun SetupReward(
         )
         Spacer(Modifier.width(appGapDp(9.dp)))
         Text(text, color = OnboardingConfig.accentGold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable
+fun OnboardingInfoBanner(
+    text: String,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .background(OnboardingConfig.accentBlue.copy(alpha = 0.10f), RoundedCornerShape(14.dp))
+            .border(1.dp, OnboardingConfig.accentBlue.copy(alpha = 0.24f), RoundedCornerShape(14.dp))
+            .appPadding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(8.dp)
+                .background(OnboardingConfig.accentBlue, RoundedCornerShape(999.dp)),
+        )
+        Spacer(Modifier.width(appGapDp(9.dp)))
+        Text(
+            text = text,
+            color = OnboardingConfig.textMuted,
+            fontSize = 12.sp,
+            lineHeight = 17.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
     }
 }

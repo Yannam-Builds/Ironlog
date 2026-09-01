@@ -36,6 +36,18 @@ data class OnboardingDraft(
     val baselineMileRunSeconds: Int = 0,
 )
 
+/** Defaults are picker suggestions, not athlete claims. The fast explore path must stay empty. */
+internal fun unclaimedBaselineDraft(draft: OnboardingDraft): OnboardingDraft = draft.copy(
+    bodyweightKg = 0,
+    trainingAgeMonths = 0,
+    hasPastTraining = false,
+    baselinePushups = 0,
+    baselinePullups = 0,
+    baselineBenchKg = 0,
+    baselineLatPulldownKg = 0,
+    baselineMileRunSeconds = 0,
+)
+
 class OnboardingViewModel : ViewModel() {
 
     private val _draft = MutableStateFlow(OnboardingDraft())

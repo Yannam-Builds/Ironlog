@@ -15,19 +15,20 @@
 </div>
 
 > [!NOTE]
-> IronLog is under active development and remains a pre-alpha product. The current source identifies as `0.1.0-pre-alpha.8` (`versionCode 9`). The older [public Android pre-alpha](https://github.com/Yannam-Builds/Ironlog/releases/tag/v0.1.0-pre-alpha.1) remains available for testing; it is not the current source build.
+> IronLog is under active development and remains a pre-alpha product. The current source identifies as `0.1.0-pre-alpha.8` (`versionCode 9`). There is currently no public APK release; build artifacts are not a substitute for a reviewed Play Store release.
 
 ## IronLog Web preview
 
 The website now has a separate product landing page and a local-first browser app under [`web/`](web/README.md). The production addresses are [the website](https://yannam-builds.github.io/Ironlog/) and [the web app](https://yannam-builds.github.io/Ironlog/app/); GitHub Pages deploys the new output only after the website workflow passes.
 
-The September 2026 repository update includes:
+The 2 September 2026 repository update includes:
 
 - The current transparent monochrome IronLog mark, lighter Lexend landing typography, Forge Fox artwork and twelve native themes shared between the page and app. Native app headings keep their heavier weight.
 - **Make it yours:** Lexend plus 20 locally bundled font families, Original/Light/Regular/Bold styles, and a Settings → Layout spacing slider (85–125%). Font selection is shared by the landing page, phone preview and full-screen web app. Spacing adjusts padding and gaps without zooming text or artwork. Choose **Lexend + Light** for the landing-page feel; defaults remain unchanged until you choose.
 - A real interactive app inside a phone frame on the landing page—not a desktop dashboard or an Android emulator. Onboarding and workouts save in this browser. Open the same app full-screen for Android Chrome or iPhone Safari; no separate account is needed.
 - Home, Plans, Log, Stats and Settings; saved onboarding, editable plans, custom exercises, notes, explicit warmup queues, resumable workouts, set editing/deletion, rest timers and plate calculation.
 - Local history, recovery estimates, Ledger progression, body measurements, photo comparison and validated backup/restore. No account, phone synchronization or browser cloud-AI backend.
+- Fifteen distinct transparent achievement emblems, a provisional onboarding baseline that reflects entered training history without double-crediting older proof, and a zero-reward sensible-default path.
 - Opaque modal sheets with keyboard focus wrapping, Escape dismissal and blocked background taps; mobile safe-area layouts and accessible numeric entry.
 - A six-paper research bibliography with limitations, separate software/font notices, and optional Home Screen installation.
 
@@ -75,7 +76,7 @@ IronLog keeps the main training loop fast and keeps the primary record on your d
   </tr>
 </table>
 
-The September 2026 stabilization pass adds stable set identities and serialized workout mutations; pending warmups that never auto-log; durable exercise notes; transactional imports, restores, completion and notification cleanup; unified recovery, progression and Ledger inputs; compact effort controls; opaque overlays; configurable typography, spacing, card shine and liquid-glass navigation; and expanded regression coverage. QR plan sharing has been removed in favor of JSON because complete plans are too large for reliable QR transport.
+The September 2026 stabilization pass adds stable set identities and serialized workout mutations; pending warmups that never auto-log; durable exercise notes; transactional imports, restores, completion and notification cleanup; unified recovery, progression and Ledger inputs; compact effort controls; opaque overlays; configurable typography, spacing, card shine and liquid-glass navigation; normalized fine-grained muscle contributions for the recovery map; a blob-free responsive onboarding composition; and expanded regression coverage. QR plan sharing has been removed in favor of JSON because complete plans are too large for reliable QR transport.
 
 ## How it is built
 
@@ -119,9 +120,10 @@ signing.keyPassword=your-key-password
 ## Verification status
 
 - `:app:lintDebug` passes with no errors.
-- The current JVM suite reports **708 tests**, zero failures/errors and one intentional skip.
+- The current JVM suite reports **755 tests**, zero failures/errors and one intentional skip.
 - The latest API 36.1 emulator instrumentation pass reports **66 tests**, zero failures/errors and one intentional skip.
-- Signed, minified APK and AAB builds pass with the private local signing configuration.
+- The web unit suite reports **104 tests**, zero failures, and the TypeScript and production/PWA builds pass.
+- Signed, minified APK and AAB builds pass with the private local signing configuration; APK signature and release-content checks pass, and a fresh release install opens onboarding without QA fixture data.
 - Fresh onboarding, active-workout persistence, notes, warmups, recovery, Ledger, notifications, responsive layouts and release-upgrade behavior have dedicated automated or exploratory coverage.
 - A signed release was installed over the existing physical-device build with app data preserved; wider OEM/API coverage is still required before a Play Store production claim.
 

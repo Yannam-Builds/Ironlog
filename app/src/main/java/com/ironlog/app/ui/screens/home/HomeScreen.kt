@@ -9,8 +9,11 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -57,6 +60,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import com.ironlog.app.ui.animatedCardShine
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -550,6 +554,19 @@ fun HomeScreen(
 internal fun showDailyProofAction(status: DailyProofStatus): Boolean =
     status == DailyProofStatus.SETUP || status == DailyProofStatus.RECOVER_SMART
 
+internal data class DailyProofVisualSpec(
+    val slotWidthDp: Int,
+    val slotHeightDp: Int,
+    val imageSizeDp: Int,
+)
+
+internal fun dailyProofVisualSpec(availableWidthDp: Float): DailyProofVisualSpec = when {
+    availableWidthDp < 340f -> DailyProofVisualSpec(slotWidthDp = 76, slotHeightDp = 104, imageSizeDp = 72)
+    availableWidthDp < 420f -> DailyProofVisualSpec(slotWidthDp = 92, slotHeightDp = 112, imageSizeDp = 88)
+    else -> DailyProofVisualSpec(slotWidthDp = 108, slotHeightDp = 124, imageSizeDp = 104)
+}
+
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun DailyProofCard(
     gamState: com.ironlog.app.ui.viewmodel.GamificationUiState,
@@ -562,21 +579,46 @@ private fun DailyProofCard(
             .border(1.dp, c.cardBorder, RoundedCornerShape(IronLogRadius.xl.dp)).appPadding(14.dp),
         verticalArrangement = appSpacedBy(8.dp),
     ) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f), verticalArrangement = appSpacedBy(4.dp)) {
-                Text("DAILY PROOF", color = c.muted, fontSize = 12.sp, letterSpacing = 1.5.sp)
-                Text(gamState.dailyProofHeadline, color = c.text, fontSize = IronLogType.section.fontSize.sp, fontWeight = FontWeight.Bold)
-                Text(gamState.dailyProofDetail, color = c.subtext, fontSize = 12.sp)
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            val visualSpec = dailyProofVisualSpec(maxWidth.value)
+            Row(
+                Modifier.fillMaxWidth().heightIn(min = visualSpec.slotHeightDp.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(
+                    Modifier.weight(1f).padding(end = 8.dp),
+                    verticalArrangement = appSpacedBy(4.dp),
+                ) {
+                    Text("DAILY PROOF", color = c.muted, fontSize = 12.sp, letterSpacing = 1.5.sp)
+                    Text(gamState.dailyProofHeadline, color = c.text, fontSize = IronLogType.section.fontSize.sp, fontWeight = FontWeight.Bold)
+                    Text(gamState.dailyProofDetail, color = c.subtext, fontSize = 12.sp)
+                }
+                Box(
+                    Modifier.width(visualSpec.slotWidthDp.dp).height(visualSpec.slotHeightDp.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Image(
+                        painterResource(ForgeFoxExpression.fromId(gamState.foxExpressionId).drawableRes),
+                        contentDescription = null,
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.size(visualSpec.imageSizeDp.dp),
+                    )
+                }
             }
-            Image(
-                painterResource(ForgeFoxExpression.fromId(gamState.foxExpressionId).drawableRes),
-                contentDescription = null, modifier = Modifier.padding(start = 8.dp).size(56.dp),
-            )
         }
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = appSpacedBy(8.dp)) {
-            Text("${gamState.rank} · Level ${gamState.level}", color = c.subtext, fontSize = 12.sp, modifier = Modifier.weight(1f))
+        FlowRow(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalArrangement = appSpacedBy(2.dp),
+        ) {
+            Text("${gamState.rank} · Level ${gamState.level}", color = c.subtext, fontSize = 12.sp)
             TextButton(onClick = onOpenLedger, modifier = Modifier.heightIn(min = 48.dp)) {
-                Text(if (gamState.dailyStreakDays > 0) "${gamState.dailyStreakDays}d streak · Ledger" else "Open Ledger", fontSize = 12.sp)
+                Text(
+                    if (gamState.dailyStreakDays > 0) "${gamState.dailyStreakDays}d streak · Ledger" else "Open Ledger",
+                    fontSize = 12.sp,
+                    maxLines = 1,
+                    softWrap = false,
+                )
             }
         }
         if (showDailyProofAction(gamState.dailyProofStatus)) {
@@ -1041,6 +1083,7 @@ private fun FullWidthIntelCard(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun TrainingIntelligenceCard(
     activePlanName: String?,
@@ -1101,35 +1144,46 @@ private fun TrainingIntelligenceCard(
             buildAdaptiveTargets(recommendedDay, history, progressionPolicies)
         }
         if (suggestions.isNotEmpty()) {
-            Column(verticalArrangement = appSpacedBy(4.dp)) {
+            Column(verticalArrangement = appSpacedBy(8.dp)) {
                 suggestions.forEach { s ->
-                    val base = when (s.advice?.action) {
-                        ProgressionAction.ADD_LOAD ->
-                            "${s.name} → ${formatWeightFromKg(s.advice.weightKg, weightUnit)} × ${s.advice.reps}"
-                        ProgressionAction.ADD_REPS -> "${s.name} → ${s.advice.reps} reps at the same load"
-                        ProgressionAction.HOLD -> "${s.name} → Hold the current target"
-                        null -> "${s.name} → Build to a working weight"
-                    }
-                    Row(horizontalArrangement = appSpacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    val presentation = adaptiveTargetPresentation(s, weightUnit)
+                    Column(Modifier.fillMaxWidth(), verticalArrangement = appSpacedBy(4.dp)) {
                         Text(
-                            base,
+                            presentation.recommendation,
                             color = c.subtext,
                             fontSize = IronLogType.meta.fontSize.sp,
+                            modifier = Modifier.fillMaxWidth(),
                         )
-                        if (s.plateau) {
+                        FlowRow(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = appSpacedBy(6.dp),
+                            verticalArrangement = appSpacedBy(4.dp),
+                        ) {
                             Text(
-                                "⟳ plateau",
-                                color = c.warning,
-                                fontSize = IronLogType.meta.fontSize.sp,
-                                fontWeight = FontWeight.SemiBold,
+                                presentation.provenance,
+                                color = c.muted,
+                                fontSize = 12.sp,
                             )
+                            presentation.statusLabel?.let { status ->
+                                Box(
+                                    Modifier
+                                        .clip(RoundedCornerShape(IronLogRadius.full.dp))
+                                        .background(c.warning.copy(alpha = 0.12f))
+                                        .border(1.dp, c.warning.copy(alpha = 0.45f), RoundedCornerShape(IronLogRadius.full.dp))
+                                        .padding(horizontal = 8.dp, vertical = 3.dp),
+                                ) {
+                                    Text(
+                                        status,
+                                        color = c.warning,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        maxLines = 1,
+                                        softWrap = false,
+                                    )
+                                }
+                            }
                         }
                     }
-                    Text(
-                        "${s.policy.label} · ${s.policy.source.label}",
-                        color = c.muted,
-                        fontSize = 12.sp,
-                    )
                 }
             }
         }
@@ -1171,6 +1225,30 @@ internal data class AdaptiveTarget(
     val policy: ResolvedProgressionPolicy,
     val plateau: Boolean,
 )
+
+internal data class AdaptiveTargetPresentation(
+    val recommendation: String,
+    val provenance: String,
+    val statusLabel: String?,
+)
+
+internal fun adaptiveTargetPresentation(
+    target: AdaptiveTarget,
+    weightUnit: String,
+): AdaptiveTargetPresentation {
+    val recommendation = when (target.advice?.action) {
+        ProgressionAction.ADD_LOAD ->
+            "${target.name} → ${formatWeightFromKg(target.advice.weightKg, weightUnit)} × ${target.advice.reps}"
+        ProgressionAction.ADD_REPS -> "${target.name} → ${target.advice.reps} reps at the same load"
+        ProgressionAction.HOLD -> "${target.name} → Hold the current target"
+        null -> "${target.name} → Build to a working weight"
+    }
+    return AdaptiveTargetPresentation(
+        recommendation = recommendation,
+        provenance = "${target.policy.label} · ${target.policy.source.label}",
+        statusLabel = if (target.plateau) "⟳ Plateau" else null,
+    )
+}
 
 internal fun buildAdaptiveTargets(
     day: UiPlanDay?,

@@ -16,6 +16,7 @@ import com.ironlog.app.data.objectbox.PlanEntity_
 import com.ironlog.app.data.objectbox.PlanExerciseEntity
 import com.ironlog.app.data.objectbox.PlanExerciseEntity_
 import com.ironlog.app.domain.gamification.AthleteCalibration
+import com.ironlog.app.domain.gamification.BaselineCalibrationEngine
 import com.ironlog.app.domain.gamification.DailyProofStatus
 import com.ironlog.app.domain.gamification.IronLedgerEngine
 import com.ironlog.app.domain.gamification.IronGrade
@@ -26,7 +27,8 @@ import com.ironlog.app.domain.gamification.dailyWorkoutStreakDays
 import com.ironlog.app.domain.gamification.parseHistoryLocalDate
 import com.ironlog.app.domain.intelligence.RecoveryReadinessEngine
 import com.ironlog.app.domain.intelligence.WorkoutSuggestionEngine
-import com.ironlog.app.data.repository.currentAthleteBodyweightKg
+import com.ironlog.app.data.repository.onboardingBaselineBodyweightKg
+import com.ironlog.app.data.repository.onboardingEffectiveBaselineXp
 import com.ironlog.app.ui.model.HistoryEntry
 import io.objectbox.BoxStore
 import java.time.LocalDate
@@ -55,10 +57,12 @@ class WidgetDataRepository(
     ): WidgetState {
         val weeklyGoalSafe = weeklyGoal.coerceAtLeast(1)
         val calibration = readCalibration(weeklyGoalSafe)
+        val baseline = BaselineCalibrationEngine().calculate(calibration)
         val snapshot = ledgerEngine.rebuild(
             history = history,
             weeklyGoal = weeklyGoalSafe,
             calibration = calibration,
+            effectiveBaselineXp = onboardingEffectiveBaselineXp(boxStore, baseline.xp),
         )
 
         // Rebuild total XP from workout proof plus durable, idempotent bonus events.
@@ -192,7 +196,7 @@ class WidgetDataRepository(
             historicalTrainingDaysPerWeek = entity?.historicalTrainingDaysPerWeek?.takeIf { it in 1..7 } ?: 3,
             importedHistory = entity?.importedHistory ?: false,
             weeklyGoalDays = entity?.weeklyGoalDays ?: weeklyGoal,
-            bodyweightKg = currentAthleteBodyweightKg(boxStore),
+            bodyweightKg = onboardingBaselineBodyweightKg(boxStore, entity),
             hasPastTraining = entity?.hasPastTraining ?: false,
             hasGymAccess = entity?.hasGymAccess ?: true,
             baselinePushups = entity?.baselinePushups ?: 0,

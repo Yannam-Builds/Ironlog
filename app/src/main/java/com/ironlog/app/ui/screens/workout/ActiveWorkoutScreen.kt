@@ -290,7 +290,7 @@ class ActiveWorkoutViewModel(application: Application) : AndroidViewModel(applic
     private val _elapsedSeconds = MutableStateFlow(0)
     val elapsedSeconds: StateFlow<Int> = _elapsedSeconds.asStateFlow()
 
-    // Timer only starts when the first set is logged — until then the display shows "--:--".
+    // Timer only starts when the first set is logged; elapsed remains zero until then.
     private val _timerStarted = MutableStateFlow(false)
     val timerStarted: StateFlow<Boolean> = _timerStarted.asStateFlow()
 
@@ -4247,9 +4247,8 @@ private data class AddedExerciseDto(
 @Composable
 private fun ActiveWorkoutRollingTimerText(vm: ActiveWorkoutViewModel, c: IronLogThemeTokens) {
     val elapsedSeconds by vm.elapsedSeconds.collectAsStateWithLifecycle()
-    val timerStarted by vm.timerStarted.collectAsStateWithLifecycle()
     RollingTimerText(
-        value = if (timerStarted) formatDurationShort(elapsedSeconds) else "--:--",
+        value = formatDurationShort(elapsedSeconds),
         color = c.accent,
         fontWeight = FontWeight.Bold,
         fontSizeSp = IronLogType.body.fontSize,

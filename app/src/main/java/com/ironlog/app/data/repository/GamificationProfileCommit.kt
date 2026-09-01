@@ -12,6 +12,7 @@ import kotlinx.serialization.json.Json
 internal fun commitGamificationProfile(
     store: BoxStore, candidate: GamificationProfileEntity, ledgerXp: Long,
     history: List<HistoryEntry>, weeklyGoal: Int, clock: Clock = Clock.systemDefaultZone(),
+    revokedBadges: Set<String> = emptySet(),
 ): GamificationProfileEntity = store.callInTx {
     val profiles = store.boxFor(GamificationProfileEntity::class.java)
     val current = profiles.query(GamificationProfileEntity_.offlineUserId.equal("local")).build().use { it.findFirst() }
@@ -22,9 +23,14 @@ internal fun commitGamificationProfile(
     completions(current?.makeupCompletionsJson).forEach { (key, count) -> circuits[key] = maxOf(circuits[key] ?: 0, count) }
     bonuses.filter { it.eventKind == "recovery_circuit" && it.eventId.startsWith("recovery:") }
         .forEach { circuits[it.eventId.removePrefix("recovery:")] = 1 }
-    val durable = times(candidate.badgeUnlocksJson) + times(current?.badgeUnlocksJson)
+    val requestedBadges = candidate.unlockedBadges.split(',').map(String::trim).filter(String::isNotBlank).toSet()
+    fun canKeep(badge: String): Boolean = badge !in revokedBadges || badge in requestedBadges
+    val candidateTimes = times(candidate.badgeUnlocksJson).filterKeys(::canKeep)
+    val currentTimes = times(current?.badgeUnlocksJson).filterKeys(::canKeep)
+    val durable = candidateTimes + currentTimes
     val badges = (candidate.unlockedBadges.split(',') + current?.unlockedBadges.orEmpty().split(',') + durable.keys)
         .map(String::trim).filter(String::isNotBlank).distinct()
+        .filter(::canKeep)
     candidate.id = current?.id ?: 0L
     candidate.offlineUserId = "local"
     candidate.unlockedBadges = badges.joinToString(",")

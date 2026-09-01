@@ -83,6 +83,36 @@ export const workoutSchema = z.object({
     }),
   ),
 });
+const trainingSignalsSchema = z.object({
+  strength: z.number().int().min(0).max(999),
+  power: z.number().int().min(0).max(999),
+  hypertrophy: z.number().int().min(0).max(999),
+  endurance: z.number().int().min(0).max(999),
+  agility: z.number().int().min(0).max(999),
+  discipline: z.number().int().min(0).max(999),
+  recovery: z.number().int().min(0).max(999),
+});
+const onboardingLedgerBaselineSchema = z.object({
+  version: z.literal(1),
+  provenance: z.literal("onboarding_self_report"),
+  formula: z.literal("trainingAgeMonths*4.345*historicalTrainingDaysPerWeek"),
+  trustScore: z.literal(0.5),
+  estimatedLifetimeSessions: z.number().int().nonnegative(),
+  xp: z.number().int().nonnegative(),
+  grade: z.enum(["Uncalibrated", "Graphite", "Iron", "Steel", "Titanium"]),
+  stats: trainingSignalsSchema,
+  supportedBadgeIds: z.array(
+    z.enum([
+      "first_workout",
+      "workouts_10",
+      "workouts_50",
+      "workouts_100",
+      "consistency_4w",
+      "member_365",
+    ]),
+  ),
+  seededAt: number,
+});
 export const profileSchema = z.object({
   name: z.string(),
   age: number,
@@ -90,6 +120,8 @@ export const profileSchema = z.object({
   weightKg: number,
   experience: z.string(),
   goal: z.string(),
+  trainingAgeMonths: z.number().int().nonnegative().default(0),
+  historicalTrainingDaysPerWeek: z.number().int().min(1).max(7).default(3),
   weeklyGoal: z.number().int().min(1).max(7),
   sessionMinutes: number,
   coaching: z.string(),
@@ -104,6 +136,7 @@ export const profileSchema = z.object({
   platesKg: z.array(z.number().positive()),
   keepAwake: z.boolean(),
   badgeUnlocks: z.record(z.string(), number),
+  ledgerBaseline: onboardingLedgerBaselineSchema.optional(),
   recoveryWeeks: z.array(z.string()),
   lastBackupAt: number.optional(),
 });

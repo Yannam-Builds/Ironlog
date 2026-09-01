@@ -6,7 +6,10 @@ import com.ironlog.app.domain.intelligence.INTELLIGENCE_MODE_CLOUD_AI
 import com.ironlog.app.domain.intelligence.INTELLIGENCE_MODE_GEMINI_NANO
 import com.ironlog.app.domain.intelligence.TrainingDayPreferences
 import com.ironlog.app.domain.intelligence.canonicalIntelligenceMode
+import com.ironlog.app.domain.gamification.BaselineCalibrationEngine
 import com.ironlog.app.ui.screens.onboarding.OnboardingDraft
+import com.ironlog.app.ui.screens.onboarding.onboardingCalibrationFromDraft
+import com.ironlog.app.ui.screens.onboarding.unclaimedBaselineDraft
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -105,5 +108,22 @@ class OnboardingPersistenceTest {
 
         assertEquals("true", granted["notifications_enabled"])
         assertEquals("false", skipped["notifications_enabled"])
+    }
+
+    @Test
+    fun `explore defaults completes with an explicitly unclaimed baseline`() {
+        val explored = unclaimedBaselineDraft(OnboardingDraft())
+        val baseline = BaselineCalibrationEngine().calculate(onboardingCalibrationFromDraft(explored))
+
+        assertEquals(0, explored.trainingAgeMonths)
+        assertEquals(0, explored.bodyweightKg)
+        assertEquals(false, explored.hasPastTraining)
+        assertEquals(0, explored.baselinePushups)
+        assertEquals(0, explored.baselinePullups)
+        assertEquals(0, explored.baselineBenchKg)
+        assertEquals(0, explored.baselineLatPulldownKg)
+        assertEquals(0, explored.baselineMileRunSeconds)
+        assertEquals(0L, baseline.xp)
+        assertTrue(baseline.supportedBadgeIds.isEmpty())
     }
 }

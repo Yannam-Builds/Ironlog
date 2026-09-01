@@ -41,6 +41,20 @@ class ImportExportRepositoryCalibrationBackfillTest {
     }
 
     @Test
+    fun `legacy restore reads weekly goal from ironlog settings before standalone key`() {
+        val calibration = deriveFallbackAthleteCalibration(
+            settings = linkedMapOf(
+                "ironlog_settings" to ("""{"weeklyGoalDays":6}""" to "json"),
+                "weeklyGoalDays" to ("2" to "string"),
+            ),
+            hasImportedWorkouts = false,
+            nowMs = 1L,
+        )
+
+        assertEquals(6, calibration.weeklyGoalDays)
+    }
+
+    @Test
     fun `legacy date-only strings preserve their original calendar date`() {
         val parsed = parseImportEpochMillis("2026-05-27", fallback = 99L, zoneId = ZoneOffset.UTC)
 
