@@ -18,6 +18,16 @@ data class UiPlanExercise(
     val supersetGroup: String = "",
     val isWarmup: Boolean = false,
     val notes: String = "",
+    val isCustom: Boolean = false,
+    val primaryMuscle: String = "",
+    val equipment: String = "",
+    val category: String = "strength",
+    val trackingType: String = "weight_reps",
+    val isBodyweight: Boolean = false,
+    val movementPattern: String? = null,
+    val difficulty: String? = null,
+    val exerciseNotes: String = "",
+    val secondaryMuscles: List<String> = emptyList(),
 )
 
 @Immutable
@@ -50,6 +60,11 @@ data class HistoryExerciseSet(
     val rir: Double? = null,
     val note: String? = null,
     val restSeconds: Int = 0,
+    val isWarmup: Boolean = false,
+    val isDropset: Boolean = false,
+    val isAmrap: Boolean = false,
+    val toFailure: Boolean = false,
+    val completedAt: Long? = null,
 )
 
 @Immutable
@@ -64,6 +79,11 @@ data class HistoryExercise(
     val category: String? = null,
     val supersetGroup: String? = null,
     val note: String? = null,
+    val trackingType: String? = null,
+    val isBodyweight: Boolean = false,
+    val requiresExternalLoad: Boolean = false,
+    val secondaryMuscles: List<String> = emptyList(),
+    val muscleContributions: Map<String, Double> = emptyMap(),
 )
 
 @Immutable
@@ -80,7 +100,9 @@ data class HistoryEntry(
     val exercises: List<HistoryExercise> = emptyList(),
 ) {
     val sets: Int get() = exercises.sumOf { it.sets.size }
-    val volume: Double get() = exercises.sumOf { ex -> ex.sets.filter { it.type != "warmup" }.sumOf { it.weight * it.reps } }
+    val volume: Double get() = exercises.sumOf { ex ->
+        ex.sets.sumOf { com.ironlog.app.domain.training.TrainingSetPolicy.externalLoadVolume(ex, it) }
+    }
 }
 
 @Immutable
@@ -94,6 +116,8 @@ data class PersonalBest(
     // FIXED: 26 — date + previousOrm for enriched PB display
     val date: String? = null,       // ISO date string (yyyy-MM-dd) when PR was set
     val previousOrm: Double? = null, // second-best est 1RM for trend delta
+    val exerciseId: String? = null,
+    val setId: String? = null,
 )
 
 @Immutable
@@ -107,6 +131,8 @@ data class StatsUiState(
     val avgDurationMin: Int = 0,
     val chartData: List<ChartPoint> = emptyList(),
     val weightUnit: String = "kg",
+    /** Records at or before this instant remain in History but cannot contribute current PRs. */
+    val prResetAtEpochMs: Long? = null,
 )
 
 @Immutable
@@ -119,6 +145,8 @@ data class IronLogSettings(
     val defaultRestHeavySeconds: Int = 180,
     val barWeightKg: Double = 20.0,
     val weeklyGoalDays: Int = 4,
+    /** Monday=0 through Sunday=6. Kept alongside the count so exact onboarding choices survive. */
+    val trainingDayIndices: Set<Int> = setOf(0, 2, 4, 6),
     val goalMode: String = "hypertrophy",
     val progressionStyle: String = "balanced",
     val userName: String = "",
@@ -142,6 +170,7 @@ data class AppDataState(
     val plans: List<UiPlan> = emptyList(),
     val history: List<HistoryEntry> = emptyList(),
     val pb: Map<String, Double> = emptyMap(),
+    val prResetAtEpochMs: Long? = null,
     val exerciseNotes: Map<String, String> = emptyMap(),
     val settings: IronLogSettings = IronLogSettings(),
     val onboardingComplete: Boolean = false,

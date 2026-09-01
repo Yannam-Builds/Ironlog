@@ -1,5 +1,7 @@
 ﻿package com.ironlog.app.ui.screens.settings
 
+import com.ironlog.app.ui.theme.appPadding
+import com.ironlog.app.ui.theme.appSpacedBy
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
@@ -15,7 +17,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
+import com.ironlog.app.ui.theme.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -67,7 +69,10 @@ fun RestoreDataScreen(
     var restoreStatus by remember { mutableStateOf("") }
     var replaceConfirm by remember { mutableStateOf("") }
     var isDecrypting by remember { mutableStateOf(false) }
+    var showRestore by remember { mutableStateOf(false) }
+    var legacyHintAvailable by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
+        legacyHintAvailable = !settingsRepository.getString("backup_passphrase_hint").isNullOrBlank()
         backupHealth = settingsRepository.getString("last_backup_health").orEmpty().ifBlank { "unknown" }
         val root = context.filesDir
         encryptedBackups = withContext(Dispatchers.IO) {
@@ -79,12 +84,12 @@ fun RestoreDataScreen(
     LazyColumn(
         modifier = Modifier.fillMaxSize().background(c.bg).statusBarsPadding().padding(horizontal = 16.dp),
         contentPadding = PaddingValues(top = 16.dp, bottom = 80.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = com.ironlog.app.ui.theme.appCardSpacedBy(12.dp),
     ) {
         item { ScreenHeader(title = "RESTORE DATA", onBack = onBack) }
         item {
             Card(colors = CardDefaults.cardColors(containerColor = c.card), border = androidx.compose.foundation.BorderStroke(1.dp, c.cardBorder)) {
-                Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(Modifier.fillMaxWidth().appPadding(12.dp), verticalArrangement = appSpacedBy(8.dp)) {
                     Text("Encrypted Restore Wizard", color = c.text, fontSize = IronLogType.section.fontSize.sp)
                     Text("Step $step / 4", color = c.accent, fontSize = IronLogType.meta.fontSize.sp)
                     when (step) {
@@ -107,25 +112,32 @@ fun RestoreDataScreen(
                                 value = passphrase,
                                 onValueChange = { passphrase = it },
                                 label = { Text("Passphrase") },
+                                visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                                enabled = !isDecrypting,
+                                singleLine = true,
+                                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Password),
                                 modifier = Modifier.fillMaxWidth(),
                             )
                             Button(
-                                enabled = !isDecrypting,
+                                enabled = !isDecrypting && passphrase.length >= 8,
                                 onClick = {
                                     val file = selectedEncrypted
                                     if (file != null && passphrase.length >= 8 && !isDecrypting) {
+                                        val enteredPhrase = passphrase
                                         isDecrypting = true
-                                        scope.launch(Dispatchers.IO) {
+                                        scope.launch {
                                             runCatching {
-                                                val raw = file.readText()
-                                                val payload = decryptSnapshot(raw, passphrase)
+                                                val raw = withContext(Dispatchers.IO) { file.readText() }
+                                                val payload = withContext(Dispatchers.Default) { com.ironlog.app.data.repository.EncryptedBackupCodec.decrypt(raw, enteredPhrase) }
                                                 val preview = importExportRepository.previewImportPayload(payload)
+                                                require(preview.valid) { preview.reason ?: "Invalid backup" }
                                                 Triple(payload, "Preview: workouts=${preview.workouts}, plans=${preview.plans}, sets=${preview.sets}, body=${preview.bodyMeasurements}, warnings=${preview.warnings.size}", null as String?)
                                             }.fold(
                                                 onSuccess = { (payload, preview, _) ->
                                                     decryptedPayload = payload
                                                     previewText = preview
                                                     restoreStatus = ""
+                                                    passphrase = ""
                                                     step = 3
                                                 },
                                                 onFailure = {
@@ -137,32 +149,26 @@ fun RestoreDataScreen(
                                     }
                                 },
                             ) { Text(if (isDecrypting) "Decrypting…" else "Decrypt & Preview") }
+                            if (legacyHintAvailable && restoreStatus.startsWith("Decrypt failed")) {
+                                Text("Older versions could encrypt with the saved masked hint by mistake. For an old local snapshot only, you can explicitly load that legacy value and try again. Re-export under a new passphrase after recovery.", color = c.subtext)
+                                androidx.compose.material3.TextButton(enabled = !isDecrypting, onClick = {
+                                    scope.launch { passphrase = settingsRepository.getString("backup_passphrase_hint").orEmpty() }
+                                }) { Text("Use saved legacy hint for recovery") }
+                            }
                         }
                         3 -> {
                             Text(previewText, color = c.subtext)
-                            OutlinedTextField(
-                                value = replaceConfirm,
-                                onValueChange = { replaceConfirm = it },
-                                label = { Text("Type REPLACE to confirm") },
-                                modifier = Modifier.fillMaxWidth(),
-                            )
                             Button(
-                                onClick = { if (replaceConfirm.trim().uppercase() == "REPLACE") step = 4 },
-                                enabled = replaceConfirm.trim().uppercase() == "REPLACE",
-                            ) { Text("Next: Confirm Restore") }
+                                onClick = { showRestore = true },
+                                enabled = decryptedPayload != null,
+                            ) { Text("Review Merge / Replace") }
                         }
                         else -> {
                             Button(onClick = {
                                 val payload = decryptedPayload
                                 if (payload != null) {
                                     scope.launch(Dispatchers.IO) {
-                                        runCatching {
-                                            importExportRepository.runConfirmedImport(payload, mode = "replace")
-                                        }.onSuccess {
-                                            restoreStatus = "Encrypted restore completed."
-                                        }.onFailure {
-                                            restoreStatus = "Restore failed: ${it.message}"
-                                        }
+                                        showRestore = true
                                     }
                                 }
                             }) { Text("Run Restore Now") }
@@ -183,7 +189,7 @@ fun RestoreDataScreen(
         }
         item {
             Card(colors = CardDefaults.cardColors(containerColor = c.card), border = androidx.compose.foundation.BorderStroke(1.dp, c.cardBorder)) {
-                Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = appSpacedBy(8.dp)) {
                     Text("Restore from local backup or import normalized files.", color = c.subtext)
                     Text("Backup health: $backupHealth", color = c.accent, fontSize = IronLogType.meta.fontSize.sp)
                     Button(onClick = onOpenBackupCenter) { Text("Restore from Backup Center") }
@@ -193,7 +199,7 @@ fun RestoreDataScreen(
         }
         item {
             Card(colors = CardDefaults.cardColors(containerColor = c.card), border = androidx.compose.foundation.BorderStroke(1.dp, c.cardBorder)) {
-                Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = appSpacedBy(8.dp)) {
                     Text("Direct Source Import", color = c.text, fontSize = IronLogType.section.fontSize.sp)
                     AssistChip(onClick = { selectedSource = "strong_csv" }, label = { Text("Strong CSV", color = if (selectedSource == "strong_csv") c.accent else c.text) })
                     AssistChip(onClick = { selectedSource = "hevy_csv" }, label = { Text("Hevy CSV", color = if (selectedSource == "hevy_csv") c.accent else c.text) })
@@ -205,20 +211,13 @@ fun RestoreDataScreen(
             }
         }
     }
+    if (showRestore && decryptedPayload != null) {
+        BackupRestoreDialog(decryptedPayload!!, importExportRepository, onDismiss = { showRestore = false }) { result ->
+            showRestore = false
+            decryptedPayload = null
+            passphrase = ""
+            step = 1
+            restoreStatus = "Restored ${result.workouts} workouts." + if (result.recoverySnapshot != null) " Recovery snapshot saved in Backup Center." else ""
+        }
+    }
 }
-
-private fun decryptSnapshot(raw: String, passphrase: String): String {
-    val obj = JSONObject(raw)
-    require(obj.optString("schema") == "IRONLOG_ENCRYPTED_EXPORT_V1") { "Unsupported encrypted schema" }
-    val salt = android.util.Base64.decode(obj.getString("saltB64"), android.util.Base64.DEFAULT)
-    val iv = android.util.Base64.decode(obj.getString("ivB64"), android.util.Base64.DEFAULT)
-    val cipherBytes = android.util.Base64.decode(obj.getString("ciphertextB64"), android.util.Base64.DEFAULT)
-    val iterations = obj.optInt("iterations", 120000)
-    val keyFactory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
-    val spec = PBEKeySpec(passphrase.toCharArray(), salt, iterations, 256)
-    val secret = SecretKeySpec(keyFactory.generateSecret(spec).encoded, "AES")
-    val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-    cipher.init(Cipher.DECRYPT_MODE, secret, GCMParameterSpec(128, iv))
-    return String(cipher.doFinal(cipherBytes), StandardCharsets.UTF_8)
-}
-

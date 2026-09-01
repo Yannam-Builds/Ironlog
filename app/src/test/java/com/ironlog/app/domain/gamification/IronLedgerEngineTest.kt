@@ -105,8 +105,8 @@ class IronLedgerEngineTest {
     }
 
     @Test
-    fun `imported history does not count as verified grade proof`() {
-        val imported = (1..800).map {
+    fun `imported workouts receive the same ledger credit as native workouts`() {
+        val imported = (1..12).map {
             workout(
                 id = "w$it",
                 date = "2026-05-${((it - 1) % 28 + 1).toString().padStart(2, '0')}T10:00:00Z",
@@ -114,14 +114,17 @@ class IronLedgerEngineTest {
             )
         }
 
-        val snapshot = engine.rebuild(
+        val importedSnapshot = engine.rebuild(
             history = imported,
             weeklyGoal = 4,
             calibration = AthleteCalibration(importedHistory = true),
         )
 
-        assertTrue(snapshot.grade.ordinal < IronGrade.APEX.ordinal)
-        assertEquals(0, snapshot.verifiedSessions)
+        val nativeSnapshot = engine.rebuild(imported.map { it.copy(imported = false) }, 4, AthleteCalibration())
+        assertEquals(nativeSnapshot.totalXp, importedSnapshot.totalXp)
+        assertEquals(nativeSnapshot.grade, importedSnapshot.grade)
+        assertEquals(nativeSnapshot.stats, importedSnapshot.stats)
+        assertEquals(nativeSnapshot.verifiedSessions, importedSnapshot.verifiedSessions)
     }
 
     @Test
@@ -144,9 +147,9 @@ class IronLedgerEngineTest {
 
         val importedTrust = snapshot.events.first { it.sourceId == "imported" }.trust
         val nativeTrust = snapshot.events.first { it.sourceId == "native" }.trust
-        assertEquals(0.55, importedTrust, 0.0001)
+        assertEquals(1.0, importedTrust, 0.0001)
         assertEquals(1.0, nativeTrust, 0.0001)
-        assertEquals(1, snapshot.verifiedSessions)
+        assertEquals(2, snapshot.verifiedSessions)
     }
 
     @Test
@@ -215,7 +218,7 @@ class IronLedgerEngineTest {
             .filter { it.kind == "pr" }
             .map { it.sourceId }
 
-        assertTrue(prSourceIds.size >= 2)
+        assertTrue(prSourceIds.size <= 1)
         assertEquals(prSourceIds.size, prSourceIds.distinct().size)
     }
 

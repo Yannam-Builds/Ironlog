@@ -1,5 +1,7 @@
 package com.ironlog.app.ui.screens
 
+import com.ironlog.app.ui.theme.appPadding
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
@@ -20,7 +22,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.Text
+import com.ironlog.app.ui.theme.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
@@ -32,6 +34,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ironlog.app.data.repository.PlanRepository
 import com.ironlog.app.data.seed.toPlanObject
 import com.ironlog.app.ui.screens.onboarding.buildOnboardingLedgerSnapshot
@@ -53,7 +56,7 @@ fun OnboardingScreen(
     vm: OnboardingViewModel = viewModel(),
     planRepo: PlanRepository = PlanRepository(),
 ) {
-    val draft by vm.draft.collectAsState()
+    val draft by vm.draft.collectAsStateWithLifecycle()
     val seededSnapshot = remember(draft) { buildOnboardingLedgerSnapshot(draft) }
     val pagerState = rememberPagerState(pageCount = { 10 })
     val scope = rememberCoroutineScope()
@@ -79,7 +82,7 @@ fun OnboardingScreen(
             userScrollEnabled = true,
             modifier          = Modifier
                 .fillMaxSize()
-                .padding(
+                .appPadding(
                     top = if (pagerState.currentPage == 0) 0.dp else 62.dp,
                     bottom = 8.dp,
                 ),
@@ -154,10 +157,8 @@ fun OnboardingScreen(
                         onSkip           = { advance() },
                     )
                     7 -> Step7Permissions(
-                        cameraGranted          = draft.cameraGranted,
                         healthConnectGranted   = draft.healthConnectGranted,
                         notificationsGranted   = draft.notificationsGranted,
-                        onCameraGranted        = vm::setCameraGranted,
                         onHealthConnectGranted = vm::setHealthConnectGranted,
                         onNotificationsGranted = vm::setNotificationsGranted,
                         onNext                 = { advance() },
@@ -175,6 +176,7 @@ fun OnboardingScreen(
                         onStartTraining = { advance() },
                     )
                     9 -> Step9ProgramSetup(
+                        draft = draft,
                         onSkip = {
                             scope.launch {
                                 runCatching { onComplete(draft) }
@@ -199,7 +201,7 @@ fun OnboardingScreen(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .fillMaxWidth()
-                    .padding(horizontal = 14.dp, vertical = 4.dp),
+                    .appPadding(horizontal = 14.dp, vertical = 4.dp),
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),

@@ -1,8 +1,6 @@
 ﻿package com.ironlog.app.navigation
 
 import android.net.Uri
-import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 import androidx.compose.animation.AnimatedVisibility
@@ -46,10 +44,10 @@ import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
+import com.ironlog.app.ui.theme.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
@@ -69,16 +67,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
+import androidx.navigation.navArgument
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
-import androidx.navigation.compose.dialog
 import androidx.navigation.compose.rememberNavController
 import com.ironlog.app.data.objectbox.AthleteCalibrationEntity
 import com.ironlog.app.data.objectbox.AthleteCalibrationEntity_
 import com.ironlog.app.data.repository.BodyMeasurementRepository
+import com.ironlog.app.data.repository.persistOnboardingAthleteBodyweight
 import com.ironlog.app.data.repository.SettingsRepository
 import com.ironlog.app.ui.context.useTheme
 import com.ironlog.app.ui.screens.workout.ActiveWorkoutScreen
@@ -117,6 +116,8 @@ import android.content.Context
 import androidx.compose.ui.platform.LocalContext
 import com.ironlog.app.data.objectbox.ObjectBox
 import com.ironlog.app.domain.intelligence.CloudAiKeyStore
+import com.ironlog.app.domain.intelligence.TrainingDayPreferences
+import com.ironlog.app.domain.intelligence.canonicalIntelligenceMode
 import com.ironlog.app.ui.theme.IronLogType
 import com.ironlog.app.ui.viewmodel.GamificationViewModel
 import com.ironlog.app.ui.viewmodel.GamificationViewModelFactory
@@ -127,11 +128,14 @@ import com.ironlog.app.ui.viewmodel.PlansViewModel
 import com.ironlog.app.ui.viewmodel.StatsViewModel
 import com.ironlog.app.widget.WidgetUpdateWorker
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
+import com.ironlog.app.ui.state.commitWorkoutTerminalMutation
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import timber.log.Timber
 
-private val TabScreens = listOf(
+internal val TabScreens = listOf(
     TabSpec("Home",     Icons.Outlined.Home,                        null),
     TabSpec("Plans",    Icons.Outlined.FitnessCenter,               "PLANS"),
     TabSpec("Log",      Icons.AutoMirrored.Outlined.Assignment,     "LOG"),
@@ -177,9 +181,38 @@ fun AppNavigator(
     onboardingComplete: Boolean = true,
 ) {
     val colors = useTheme()
+    // Owned by the NavHost, so navigation work survives disposal of a nested destination.
+    val navigationScope = rememberCoroutineScope()
     val bodyVm: BodyMeasurementsViewModel =
         viewModel(factory = BodyMeasurementsViewModelFactory(BodyMeasurementRepository()))
     val statsVm: StatsViewModel = viewModel()
+    val rootSettingsRepo = remember { SettingsRepository() }
+    val pendingRouteFlow = remember(rootSettingsRepo) {
+        rootSettingsRepo.observeStrings(setOf("pending_nav_route"))
+    }
+    val pendingRouteValues by pendingRouteFlow.collectAsStateWithLifecycle(initialValue = emptyMap())
+    val pendingRoute = pendingRouteValues["pending_nav_route"].orEmpty()
+    var pendingTabRoute by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(pendingRoute, onboardingComplete) {
+        if (pendingRoute.isBlank() || !onboardingComplete) {
+            if (pendingRoute.isBlank()) pendingTabRoute = null
+            return@LaunchedEffect
+        }
+        if (pendingTabIndex(pendingRoute) != null) {
+            val tabsVisible = navController.currentDestination?.route == "Tabs" ||
+                navController.popBackStack("Tabs", inclusive = false)
+            if (tabsVisible) pendingTabRoute = pendingRoute
+            return@LaunchedEffect
+        }
+        if (!isAllowedPendingStackRoute(pendingRoute)) {
+            // Exported activities must not pass arbitrary route strings into Navigation Compose.
+            rootSettingsRepo.consumeString("pending_nav_route", pendingRoute)
+            return@LaunchedEffect
+        }
+        navController.navigate(pendingRoute) { launchSingleTop = true }
+        rootSettingsRepo.consumeString("pending_nav_route", pendingRoute)
+    }
     NavHost(
         navController    = navController,
         startDestination = if (onboardingComplete) "Tabs" else "Onboarding",
@@ -196,45 +229,88 @@ fun AppNavigator(
                 }
             )
         }
-        composable("Tabs") { Tabs(navController) }
+        composable("Tabs") {
+            Tabs(
+                navController = navController,
+                pendingTabRoute = pendingTabRoute,
+                onPendingTabHandled = { handled ->
+                    navigationScope.launch {
+                        rootSettingsRepo.consumeString("pending_nav_route", handled)
+                    }
+                },
+            )
+        }
         // Active workout with optional dayId arg
-        dialog(
-            route            = "ActiveWorkout/{dayId}",
-            dialogProperties = DialogProperties(
-                usePlatformDefaultWidth = false,
-                dismissOnClickOutside   = false,
-                dismissOnBackPress      = false,
-            ),
-        ) { backStack ->
+        composable("ActiveWorkout/{dayId}") { backStack ->
+            val app = LocalContext.current.applicationContext as Application
+            val finishScope = rememberCoroutineScope()
             val tabsEntry = remember(navController) {
                 runCatching { navController.getBackStackEntry("Tabs") }.getOrNull()
             }
             val tabsAppVm: AppDataViewModel? = tabsEntry?.let { viewModel(it) }
+            val tabsStatsVm: StatsViewModel? = tabsEntry?.let { viewModel(it) }
+            val tabsGamificationVm: GamificationViewModel? = tabsEntry?.let {
+                viewModel(viewModelStoreOwner = it, factory = GamificationViewModelFactory(app, ObjectBox.store))
+            }
             ActiveWorkoutScreen(
                 dayId     = Uri.decode(backStack.arguments?.getString("dayId").orEmpty()),
-                onFinish  = { tabsAppVm?.refresh(); navController.popBackStack() },
+                onFinish  = {
+                    finishScope.launch {
+                        tabsAppVm?.refresh()?.join()
+                        tabsStatsVm?.refresh()?.join()
+                        if (tabsAppVm != null && tabsStatsVm != null && tabsGamificationVm != null) {
+                            tabsGamificationVm.refreshFromHistory(
+                                tabsStatsVm.state.value.history,
+                                tabsAppVm.state.value.settings.weeklyGoalDays,
+                            )
+                            WidgetUpdateWorker.enqueueOneTime(app)
+                        }
+                        navController.popBackStack()
+                    }
+                },
                 onMinimize = { navController.popBackStack() },
             )
         }
-        dialog(
-            route            = "ActiveWorkout",
-            dialogProperties = DialogProperties(
-                usePlatformDefaultWidth = false,
-                dismissOnClickOutside   = false,
-                dismissOnBackPress      = false,
+        composable(
+            route = "ActiveWorkout?startEmpty={startEmpty}",
+            arguments = listOf(
+                navArgument("startEmpty") {
+                    type = NavType.BoolType
+                    defaultValue = false
+                },
             ),
-        ) {
+        ) { backStack ->
             // Pass empty dayId — the ViewModel reads active_workout_day_id from SettingsRepository
             // during initWorkout and resumes the persisted workout. The old LaunchedEffect approach
             // caused a render-before-read race where initWorkout(dayId="") was called first,
             // which the VM handles correctly via persistedActiveId lookup.
+            val app = LocalContext.current.applicationContext as Application
+            val finishScope = rememberCoroutineScope()
             val tabsEntry = remember(navController) {
                 runCatching { navController.getBackStackEntry("Tabs") }.getOrNull()
             }
             val tabsAppVm: AppDataViewModel? = tabsEntry?.let { viewModel(it) }
+            val tabsStatsVm: StatsViewModel? = tabsEntry?.let { viewModel(it) }
+            val tabsGamificationVm: GamificationViewModel? = tabsEntry?.let {
+                viewModel(viewModelStoreOwner = it, factory = GamificationViewModelFactory(app, ObjectBox.store))
+            }
             ActiveWorkoutScreen(
                 dayId     = "",
-                onFinish  = { tabsAppVm?.refresh(); navController.popBackStack() },
+                startEmpty = backStack.arguments?.getBoolean("startEmpty") == true,
+                onFinish  = {
+                    finishScope.launch {
+                        tabsAppVm?.refresh()?.join()
+                        tabsStatsVm?.refresh()?.join()
+                        if (tabsAppVm != null && tabsStatsVm != null && tabsGamificationVm != null) {
+                            tabsGamificationVm.refreshFromHistory(
+                                tabsStatsVm.state.value.history,
+                                tabsAppVm.state.value.settings.weeklyGoalDays,
+                            )
+                            WidgetUpdateWorker.enqueueOneTime(app)
+                        }
+                        navController.popBackStack()
+                    }
+                },
                 onMinimize = { navController.popBackStack() },
             )
         }
@@ -257,7 +333,7 @@ fun AppNavigator(
             )
         }
         composable("ExerciseLibrary") {
-            val statsState by statsVm.state.collectAsState()
+val statsState by statsVm.state.collectAsStateWithLifecycle()
             ExerciseLibraryScreen(
                 history                = statsState.history,
                 onBack                 = { navController.popBackStack() },
@@ -287,8 +363,9 @@ fun AppNavigator(
             )
         }
         composable("BodyWeight") {
-            val bodyState  by bodyVm.state.collectAsState()
-            val statsState by statsVm.state.collectAsState()
+            val bodyMutationContext = LocalContext.current.applicationContext
+            val bodyState  by bodyVm.state.collectAsStateWithLifecycle()
+            val statsState by statsVm.state.collectAsStateWithLifecycle()
             val bwSettingsRepo = remember { SettingsRepository() }
             var goalWeight by remember { mutableStateOf<Double?>(null) }
             LaunchedEffect(Unit) {
@@ -299,8 +376,16 @@ fun AppNavigator(
                 weightUnit             = statsState.weightUnit,
                 goalWeight             = goalWeight,
                 onBack                 = { navController.popBackStack() },
-                onLogBodyWeight        = { bodyVm.add(it) },
-                onDeleteBodyWeightEntry = { bodyVm.remove(it) },
+                onLogBodyWeight        = {
+                    bodyVm.addAndAwait(it)
+                    com.ironlog.app.services.WorkoutNotificationBridge
+                        .cancelReminderAfterDataMutation(bodyMutationContext)
+                },
+                onDeleteBodyWeightEntry = {
+                    bodyVm.removeAndAwait(it)
+                    com.ironlog.app.services.WorkoutNotificationBridge
+                        .cancelReminderAfterDataMutation(bodyMutationContext)
+                },
                 onSetGoalWeight        = { g ->
                     goalWeight = g
                     if (g != null) bwSettingsRepo.setSetting("bodyweight_goal", g, "number")
@@ -309,39 +394,43 @@ fun AppNavigator(
             )
         }
         composable("WorkoutCalendar") {
-            val statsState by statsVm.state.collectAsState()
-            val calScope = rememberCoroutineScope()
-            val calWorkoutRepo = remember { com.ironlog.app.data.repository.WorkoutRepository() }
-            val calSettingsRepo = remember { SettingsRepository() }
-            val calApp = LocalContext.current.applicationContext
+            val statsState by statsVm.state.collectAsStateWithLifecycle()
             WorkoutCalendarScreen(
                 history         = statsState.history,
                 weightUnit      = statsState.weightUnit,
                 onBack          = { navController.popBackStack() },
-                onLogWorkout    = { input ->
-                    calScope.launch {
-                        runCatching { calWorkoutRepo.createCompletedWorkout(input) }
-                            .onSuccess { WidgetUpdateWorker.enqueueOneTime(calApp) }
-                    }
-                },
-                onStartWorkout  = { dateKey ->
-                    calScope.launch(Dispatchers.IO) {
-                        calSettingsRepo.setString("active_workout_intended_date", dateKey)
-                        withContext(Dispatchers.Main) { navController.navigate("ActiveWorkout") }
-                    }
-                },
+                onLogHistorical = { dateKey -> navController.navigate("HistoricalWorkout/$dateKey") },
+            )
+        }
+        composable("HistoricalWorkout/{date}") { entry ->
+            val statsState by statsVm.state.collectAsStateWithLifecycle()
+            com.ironlog.app.ui.screens.history.HistoricalWorkoutEntryHost(
+                initialDate = entry.arguments?.getString("date").orEmpty(),
+                weightUnit = statsState.weightUnit,
+                onDismiss = { navController.popBackStack() },
             )
         }
         composable("BodyMeasurements") {
-            val bodyState  by bodyVm.state.collectAsState()
-            val statsState by statsVm.state.collectAsState()
+            val bodyMutationContext = LocalContext.current.applicationContext
+            val bodyState  by bodyVm.state.collectAsStateWithLifecycle()
+            val statsState by statsVm.state.collectAsStateWithLifecycle()
             BodyMeasurementsScreen(
                 measurements    = bodyState.measurements,
                 bodyWeight      = bodyState.bodyWeight,
                 weightUnit      = statsState.weightUnit,
                 onBack          = { navController.popBackStack() },
-                onLogBodyWeight = { bodyVm.add(it) },
-                onAddMeasurement = { bodyVm.add(it) },
+                onLogBodyWeight = {
+                    bodyVm.addAndAwait(it)
+                    com.ironlog.app.services.WorkoutNotificationBridge
+                        .cancelReminderAfterDataMutation(bodyMutationContext)
+                },
+                onAddMeasurement = { input ->
+                    bodyVm.addAndAwait(input)
+                    if (input.bodyweight != null) {
+                        com.ironlog.app.services.WorkoutNotificationBridge
+                            .cancelReminderAfterDataMutation(bodyMutationContext)
+                    }
+                },
             )
         }
         composable("VolumeAnalytics") {
@@ -369,14 +458,18 @@ fun AppNavigator(
         }
         composable("ProgramPicker")  { ProgramPickerScreen(onBack = { navController.popBackStack() }) }
         composable("ProgramInsights") {
-            val piScope = rememberCoroutineScope()
             ProgramInsightsScreen(
                 onBack      = { navController.popBackStack() },
                 // Set pending_nav_route then pop back — the Tabs polling loop scrolls to Plans.
                 // Avoids the phantom "Plans" composable which created duplicate Tabs back-stack entries.
                 onOpenPlans = {
-                    piScope.launch { settingsRepoSetPendingNavRoute("Plans") }
-                    navController.popBackStack()
+                    navigationScope.launch {
+                        persistPendingRouteAndRevealTabs(
+                            route = "Plans",
+                            persist = ::settingsRepoSetPendingNavRoute,
+                            revealTabs = { navController.popBackStack("Tabs", inclusive = false) },
+                        )
+                    }
                 },
             )
         }
@@ -419,16 +512,18 @@ fun AppNavigator(
         composable("ImportCenter") {
             val app = LocalContext.current.applicationContext as Application
             val icScope = rememberCoroutineScope()
-            val appVm: AppDataViewModel = viewModel()
-            val statsVm: StatsViewModel = viewModel()
-            val gamificationVm: GamificationViewModel = viewModel(
-                factory = GamificationViewModelFactory(app, ObjectBox.store)
-            )
+            val tabsEntry = remember(navController) { runCatching { navController.getBackStackEntry("Tabs") }.getOrNull() }
+            val appVm: AppDataViewModel = tabsEntry?.let { viewModel(it) } ?: viewModel()
+            val statsVm: StatsViewModel = tabsEntry?.let { viewModel(it) } ?: viewModel()
+            val gamificationVm: GamificationViewModel = tabsEntry?.let {
+                viewModel(viewModelStoreOwner = it, factory = GamificationViewModelFactory(app, ObjectBox.store))
+            } ?: viewModel(factory = GamificationViewModelFactory(app, ObjectBox.store))
             ImportCenterScreen(
                 onBack               = { navController.popBackStack() },
                 onOpenDataPortability = { source -> navController.navigate("DataPortability/${Uri.encode(source)}") },
                 onRestoreComplete = {
                     icScope.launch {
+                        reconcileNotificationsAfterRestore(app)
                         appVm.refresh().join()
                         statsVm.refresh().join()
                         gamificationVm.refreshFromHistory(
@@ -444,15 +539,17 @@ fun AppNavigator(
         composable("DataPortability") {
             val app = LocalContext.current.applicationContext as Application
             val dpScope = rememberCoroutineScope()
-            val appVm: AppDataViewModel = viewModel()
-            val statsVm: StatsViewModel = viewModel()
-            val gamificationVm: GamificationViewModel = viewModel(
-                factory = GamificationViewModelFactory(app, ObjectBox.store)
-            )
+            val tabsEntry = remember(navController) { runCatching { navController.getBackStackEntry("Tabs") }.getOrNull() }
+            val appVm: AppDataViewModel = tabsEntry?.let { viewModel(it) } ?: viewModel()
+            val statsVm: StatsViewModel = tabsEntry?.let { viewModel(it) } ?: viewModel()
+            val gamificationVm: GamificationViewModel = tabsEntry?.let {
+                viewModel(viewModelStoreOwner = it, factory = GamificationViewModelFactory(app, ObjectBox.store))
+            } ?: viewModel(factory = GamificationViewModelFactory(app, ObjectBox.store))
             DataPortabilityScreen(
                 onBack = { navController.popBackStack() },
                 onRestoreComplete = {
                     dpScope.launch {
+                        reconcileNotificationsAfterRestore(app)
                         appVm.refresh().join()
                         statsVm.refresh().join()
                         gamificationVm.refreshFromHistory(
@@ -467,16 +564,18 @@ fun AppNavigator(
         composable("DataPortability/{source}") { backStack ->
             val app = LocalContext.current.applicationContext as Application
             val dpScope = rememberCoroutineScope()
-            val appVm: AppDataViewModel = viewModel()
-            val statsVm: StatsViewModel = viewModel()
-            val gamificationVm: GamificationViewModel = viewModel(
-                factory = GamificationViewModelFactory(app, ObjectBox.store)
-            )
+            val tabsEntry = remember(navController) { runCatching { navController.getBackStackEntry("Tabs") }.getOrNull() }
+            val appVm: AppDataViewModel = tabsEntry?.let { viewModel(it) } ?: viewModel()
+            val statsVm: StatsViewModel = tabsEntry?.let { viewModel(it) } ?: viewModel()
+            val gamificationVm: GamificationViewModel = tabsEntry?.let {
+                viewModel(viewModelStoreOwner = it, factory = GamificationViewModelFactory(app, ObjectBox.store))
+            } ?: viewModel(factory = GamificationViewModelFactory(app, ObjectBox.store))
             DataPortabilityScreen(
                 sourceHint = Uri.decode(backStack.arguments?.getString("source").orEmpty()),
                 onBack     = { navController.popBackStack() },
                 onRestoreComplete = {
                     dpScope.launch {
+                        reconcileNotificationsAfterRestore(app)
                         appVm.refresh().join()
                         statsVm.refresh().join()
                         gamificationVm.refreshFromHistory(
@@ -494,38 +593,58 @@ fun AppNavigator(
                 runCatching { navController.getBackStackEntry("Tabs") }.getOrNull()
             }
             val appVm: AppDataViewModel = tabsEntry?.let { viewModel(it) } ?: viewModel()
-            val appState by appVm.state.collectAsState()
-            val gamificationVm: GamificationViewModel = viewModel(
-                factory = GamificationViewModelFactory(app, ObjectBox.store)
-            )
-            val gamState by gamificationVm.uiState.collectAsState()
+            val appState by appVm.state.collectAsStateWithLifecycle()
+            val gamificationVm: GamificationViewModel = tabsEntry?.let {
+                viewModel(viewModelStoreOwner = it, factory = GamificationViewModelFactory(app, ObjectBox.store))
+            } ?: viewModel(factory = GamificationViewModelFactory(app, ObjectBox.store))
+            val gamState by gamificationVm.uiState.collectAsStateWithLifecycle()
             var showMakeupSheet by remember { mutableStateOf(false) }
-            LaunchedEffect(appState.history, appState.settings.weeklyGoalDays) {
+            val ledgerNow by com.ironlog.app.ui.state.rememberPresentationTime()
+            LaunchedEffect(appState.history, appState.settings.weeklyGoalDays, ledgerNow) {
                 gamificationVm.refreshFromHistory(appState.history, appState.settings.weeklyGoalDays)
             }
 
             StatusWindowScreen(
                 state = gamState,
+                onRetryRefresh = { gamificationVm.loadProfile() },
                 onBack = { navController.popBackStack() },
                 onRecoveryCircuitTap = { showMakeupSheet = true },
+                onDailyProofAction = {
+                    when (gamState.dailyProofPrimaryRoute) {
+                        "ActiveWorkout" -> navController.navigate("ActiveWorkout")
+                        "RecoveryMap" -> navController.navigate("RecoveryMap")
+                        "ProgramPicker" -> navController.navigate("ProgramPicker")
+                        else -> navController.popBackStack()
+                    }
+                },
             )
 
             if (showMakeupSheet) {
                 RecoveryCircuitSheet(
                     onDismiss = { showMakeupSheet = false },
                     onComplete = { circuitId ->
-                        showMakeupSheet = false
                         val weekKey = java.time.LocalDate.now().let {
                             val week = it.get(java.time.temporal.WeekFields.ISO.weekOfWeekBasedYear())
                             val year = it.get(java.time.temporal.WeekFields.ISO.weekBasedYear())
                             "$year-W${week.toString().padStart(2, '0')}"
                         }
-                        gamificationVm.completeRecoveryCircuit(
+                        val result = gamificationVm.completeRecoveryCircuit(
                             isoWeekKey = weekKey,
                             circuitId = circuitId,
-                            history = appState.history,
-                            weeklyGoal = appState.settings.weeklyGoalDays,
                         )
+                        if (result == com.ironlog.app.data.repository.RecoveryCircuitResult.RECORDED) {
+                            try {
+                                // The circuit repository has committed the proof at this point.
+                                // Dismiss any recommendation derived from the pre-circuit snapshot.
+                                com.ironlog.app.services.WorkoutNotificationBridge
+                                    .cancelReminderAfterDataMutation(app)
+                            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                                throw cancelled
+                            } catch (error: Exception) {
+                                Timber.w(error, "Could not dismiss stale reminder after recovery circuit")
+                            }
+                        }
+                        result
                     },
                 )
             }
@@ -533,25 +652,18 @@ fun AppNavigator(
     }
 }
 
+internal suspend fun reconcileNotificationsAfterRestore(app: Application) {
+    withContext(Dispatchers.IO + NonCancellable) {
+        com.ironlog.app.services.WorkoutNotificationBridge.cancelReminderAfterDataMutation(app)
+        com.ironlog.app.services.WorkoutForegroundService.clearOrphanedNotification(app)
+        com.ironlog.app.services.NotificationCoordinator.reconcile(app, forceReschedule = true)
+    }
+}
+
 private suspend fun settingsRepoSaveOnboardingDataFull(context: Context, draft: com.ironlog.app.ui.screens.onboarding.OnboardingDraft) {
     val repo = SettingsRepository()
     val raw  = repo.getString("ironlog_settings") ?: "{}"
-    val json = runCatching { org.json.JSONObject(raw) }.getOrDefault(org.json.JSONObject())
-    json.put("weeklyGoalDays",       draft.weeklyGoalDays.coerceIn(1, 7))
-    json.put("weightUnit",           if (draft.weightUnit == "lbs") "lbs" else "kg")
-    json.put("progressionStyle",     canonicalProgressionStyle(draft.progressionStyle))
-    json.put("goalMode",             canonicalGoalMode(draft.goalMode))
-    json.put("intelligenceMode",     draft.intelligenceMode)
-    json.put("cloudAiModelName",     draft.cloudAiModelName)
-    json.put("cloudAiProviderPreset",draft.cloudAiProviderPreset)
-    // Resolve base URL, API format and display name from the provider enum so they
-    // are available in Settings immediately after onboarding — without this the
-    // cloud AI section shows a blank URL and cloudConfigured stays false.
-    val onboardingProvider = com.ironlog.app.ui.screens.onboarding.OnboardingConfig.providerFor(draft.cloudAiProviderPreset)
-    json.put("cloudAiBaseUrl",       onboardingProvider.baseUrl)
-    json.put("cloudAiApiFormat",     onboardingProvider.apiFormat)
-    json.put("cloudAiDisplayName",   onboardingProvider.displayName)
-    if (draft.userName.isNotBlank()) json.put("userName", draft.userName)
+    val json = mergeOnboardingSettingsJson(raw, draft)
     repo.setString("ironlog_settings", json.toString(), "json")
     onboardingBaselineSettingsFromDraft(draft).forEach { (key, value) ->
         if (value == "true" || value == "false") {
@@ -563,7 +675,13 @@ private suspend fun settingsRepoSaveOnboardingDataFull(context: Context, draft: 
     val calibrationBox = ObjectBox.store.boxFor(AthleteCalibrationEntity::class.java)
     val existing = calibrationBox.query(AthleteCalibrationEntity_.offlineUserId.equal("local"))
         .build().use { it.findFirst() }
-    calibrationBox.put(buildCalibrationEntityFromOnboardingDraft(draft, existing))
+    val calibrationUpdatedAt = System.currentTimeMillis()
+    persistOnboardingAthleteBodyweight(
+        store = ObjectBox.store,
+        calibration = buildCalibrationEntityFromOnboardingDraft(draft, existing, calibrationUpdatedAt),
+        bodyweightKg = draft.bodyweightKg.takeIf { it > 0 }?.toDouble(),
+        measuredAt = calibrationUpdatedAt,
+    )
     if (draft.cloudAiApiKey.isNotBlank()) {
         val provider = draft.cloudAiProviderPreset.ifBlank { "custom" }
         CloudAiKeyStore.save(context, provider, draft.cloudAiApiKey)
@@ -572,6 +690,31 @@ private suspend fun settingsRepoSaveOnboardingDataFull(context: Context, draft: 
     // athlete to onboarding instead of launching a partially initialized ledger.
     repo.setBoolean("onboarding_state_migrated_v1", true)
     repo.setBoolean("onboarding_complete", true)
+    runCatching { com.ironlog.app.services.NotificationCoordinator.reconcile(context) }
+}
+
+internal fun mergeOnboardingSettingsJson(
+    existingRaw: String,
+    draft: com.ironlog.app.ui.screens.onboarding.OnboardingDraft,
+): org.json.JSONObject {
+    val json = runCatching { org.json.JSONObject(existingRaw) }.getOrDefault(org.json.JSONObject())
+    json.put("weeklyGoalDays",       draft.weeklyGoalDays.coerceIn(1, 7))
+    json.put("weightUnit",           if (draft.weightUnit == "lbs") "lbs" else "kg")
+    json.put("progressionStyle",     canonicalProgressionStyle(draft.progressionStyle))
+    json.put("goalMode",             canonicalGoalMode(draft.goalMode))
+    json.put("intelligenceMode",     canonicalIntelligenceMode(draft.intelligenceMode))
+    TrainingDayPreferences.writeToSettings(json, draft.selectedDayIndices)
+    json.put("cloudAiModelName",     draft.cloudAiModelName)
+    json.put("cloudAiProviderPreset",draft.cloudAiProviderPreset)
+    // Resolve base URL, API format and display name from the provider enum so they
+    // are available in Settings immediately after onboarding — without this the
+    // cloud AI section shows a blank URL and cloudConfigured stays false.
+    val onboardingProvider = com.ironlog.app.ui.screens.onboarding.OnboardingConfig.providerFor(draft.cloudAiProviderPreset)
+    json.put("cloudAiBaseUrl",       onboardingProvider.baseUrl)
+    json.put("cloudAiApiFormat",     onboardingProvider.apiFormat)
+    json.put("cloudAiDisplayName",   onboardingProvider.displayName)
+    if (draft.userName.isNotBlank()) json.put("userName", draft.userName)
+    return json
 }
 
 internal fun buildCalibrationEntityFromOnboardingDraft(
@@ -611,6 +754,7 @@ internal fun onboardingBaselineSettingsFromDraft(
     "baseline_mile_run_seconds" to draft.baselineMileRunSeconds.coerceAtLeast(0).toString(),
     "baseline_has_past_training" to draft.hasPastTraining.toString(),
     "baseline_has_gym_access" to draft.hasGymAccess.toString(),
+    "notifications_enabled" to draft.notificationsGranted.toString(),
 )
 
 internal fun canonicalGoalMode(value: String): String = when (value.trim().lowercase()) {
@@ -629,14 +773,54 @@ private suspend fun settingsRepoSetPendingNavRoute(route: String) {
     SettingsRepository().setString("pending_nav_route", route)
 }
 
+internal suspend fun persistPendingRouteAndRevealTabs(
+    route: String,
+    persist: suspend (String) -> Unit,
+    revealTabs: () -> Unit,
+) {
+    persist(route)
+    revealTabs()
+}
+
+/** Notification route `Tabs` is the existing Home tab, never a second NavHost entry. */
+internal fun pendingTabIndex(route: String): Int? = when (route) {
+    "Tabs", "Home" -> 0
+    "Plans" -> 1
+    "Log" -> 2
+    "Stats" -> 3
+    "Settings" -> 4
+    else -> null
+}
+
+private val AllowedPendingStackRoutes = setOf(
+    "ActiveWorkout", "BodyWeight", "BodyMeasurements", "ProgressPhotos",
+    "WorkoutCalendar", "VolumeAnalytics", "RecoveryMap", "TrainingIntelligence",
+    "ProgramInsights", "ProgramPicker", "ExerciseLibrary", "CreateExercise",
+    "GymProfiles", "GymProfileEditor", "BackupCenter", "Privacy", "RestoreData",
+    "ImportCenter", "DataPortability", "AIPlan", "statusWindow",
+)
+
+internal fun isAllowedPendingStackRoute(route: String): Boolean =
+    route in AllowedPendingStackRoutes ||
+        (route.startsWith("ActiveWorkout/") && route.length in 15..512 &&
+            route.removePrefix("ActiveWorkout/").matches(Regex("[A-Za-z0-9._~%+\\-]+")))
+
+internal fun isAllowedPendingRoute(route: String): Boolean =
+    pendingTabIndex(route) != null || isAllowedPendingStackRoute(route)
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Tab host
 // ─────────────────────────────────────────────────────────────────────────────
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun Tabs(navController: NavHostController) {
+private fun Tabs(
+    navController: NavHostController,
+    pendingTabRoute: String?,
+    onPendingTabHandled: (String) -> Unit,
+) {
     val colors      = useTheme()
+    val context = LocalContext.current
     val settingsRepo = remember { SettingsRepository() }
     val workoutRepo  = remember { com.ironlog.app.data.repository.WorkoutRepository() }
     val scope       = rememberCoroutineScope()
@@ -651,56 +835,71 @@ private fun Tabs(navController: NavHostController) {
     var activeWorkoutDayId   by remember { mutableStateOf<String?>(null) }
     var activeWorkoutDayName by remember { mutableStateOf<String?>(null) }
     var activeWorkoutStartMs by remember { mutableLongStateOf(0L) }
+    var discardRequestedId by remember { mutableStateOf<String?>(null) }
+    var discardError by remember { mutableStateOf<String?>(null) }
+    var discarding by remember { mutableStateOf(false) }
 
     // Sync indicator when user swipes the pager
     LaunchedEffect(pagerState.currentPage) {
         selectedTabIndex = pagerState.currentPage
     }
 
-    // Polling loop — active workout + pending deep-links (1.5 s cadence)
-    LaunchedEffect(Unit) {
-        while (true) {
-            data class TabsPollResult(
-                val workoutId: String?,
-                val dayId: String?,
-                val dayName: String?,
-                val startMsStr: String?,
-                val pendingRoute: String,
-            )
-            val result = withContext(Dispatchers.IO) {
-                TabsPollResult(
-                    workoutId    = settingsRepo.getActiveWorkoutId(),
-                    dayId        = settingsRepo.getString("active_workout_day_id"),
-                    dayName      = settingsRepo.getString("active_workout_day_name"),
-                    startMsStr   = settingsRepo.getString("active_workout_start_ms"),
-                    pendingRoute = settingsRepo.getString("pending_nav_route").orEmpty(),
-                )
-            }
-            activeWorkoutId      = result.workoutId
-            activeWorkoutDayId   = result.dayId
-            activeWorkoutDayName = result.dayName
-            if (!result.startMsStr.isNullOrBlank()) {
-                val parsed = result.startMsStr.toLongOrNull() ?: 0L
-                if (parsed != activeWorkoutStartMs) activeWorkoutStartMs = parsed
-            } else {
-                activeWorkoutStartMs = 0L
-            }
-            if (result.pendingRoute.isNotBlank()) {
-                // Programmatic deep-link navigation — instant, no slide animation
-                when (result.pendingRoute) {
-                    "Home"     -> { selectedTabIndex = 0; pagerState.scrollToPage(0) }
-                    "Plans"    -> { selectedTabIndex = 1; pagerState.scrollToPage(1) }
-                    "Log"      -> { selectedTabIndex = 2; pagerState.scrollToPage(2) }
-                    "Stats"    -> { selectedTabIndex = 3; pagerState.scrollToPage(3) }
-                    "Settings" -> { selectedTabIndex = 4; pagerState.scrollToPage(4) }
-                    else       -> navController.navigate(result.pendingRoute)
-                }
-                withContext(Dispatchers.IO) { settingsRepo.removeSetting("pending_nav_route") }
-            }
-            delay(1500)
-        }
+    val tabSettingsFlow = remember(settingsRepo) {
+        settingsRepo.observeStrings(setOf("active_workout_id", "active_workout_day_id",
+            "active_workout_day_name", "active_workout_start_ms"))
+    }
+    val tabSettings by tabSettingsFlow.collectAsStateWithLifecycle(initialValue = emptyMap())
+    LaunchedEffect(tabSettings) {
+            activeWorkoutId = tabSettings["active_workout_id"]
+            activeWorkoutDayId = tabSettings["active_workout_day_id"]
+            activeWorkoutDayName = tabSettings["active_workout_day_name"]
+            activeWorkoutStartMs = tabSettings["active_workout_start_ms"]?.toLongOrNull() ?: 0L
+    }
+    LaunchedEffect(pendingTabRoute) {
+        val route = pendingTabRoute ?: return@LaunchedEffect
+        val tabIndex = pendingTabIndex(route) ?: return@LaunchedEffect
+        selectedTabIndex = tabIndex
+        pagerState.scrollToPage(tabIndex)
+        onPendingTabHandled(route)
     }
 
+    discardRequestedId?.let { requestedId ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { if (!discarding) discardRequestedId = null },
+            title = { Text("Discard this workout?") },
+            text = { Text(discardError ?: "This unfinished session will not be added to History. Your completed workouts and plan are kept.") },
+            confirmButton = {
+                androidx.compose.material3.TextButton(enabled = !discarding, onClick = {
+                    discarding = true
+                    discardError = null
+                    scope.launch {
+                        try {
+                            commitWorkoutTerminalMutation {
+                                workoutRepo.abandonWorkout(requestedId)
+                                // Cleanup is part of the non-cancellable terminal boundary. Every
+                                // operation is session-scoped so an older dialog cannot touch a new workout.
+                                runCatching { com.ironlog.app.services.WorkoutForegroundService.stop(context, requestedId) }
+                                runCatching { com.ironlog.app.services.WorkoutNotificationActionInbox.clearSession(requestedId) }
+                                runCatching { com.ironlog.app.services.WorkoutNotificationBridge.clearWorkout(context) }
+                                runCatching {
+                                    com.ironlog.app.services.WorkoutNotificationBridge
+                                        .cancelReminderAfterDataMutation(context)
+                                }
+                            }
+                            discardRequestedId = null
+                        } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled
+                        } catch (error: Exception) {
+                            discardError = "Could not discard. Your session is still saved; please retry."
+                        } finally { discarding = false }
+                    }
+                }) { Text(if (discarding) "Discarding…" else "Discard workout") }
+            },
+            dismissButton = { androidx.compose.material3.TextButton(enabled = !discarding,
+                onClick = { discardRequestedId = null }) { Text("Keep workout") } },
+        )
+    }
+
+    val liquidGlassEnabled = com.ironlog.app.ui.theme.LocalLiquidGlassEnabled.current
     val hazeState = rememberHazeState()
 
     Box(Modifier.fillMaxSize().background(colors.bg)) {
@@ -711,7 +910,7 @@ private fun Tabs(navController: NavHostController) {
         Box(
             Modifier
                 .fillMaxSize()
-                .hazeSource(hazeState),
+                .then(if (liquidGlassEnabled) Modifier.hazeSource(hazeState) else Modifier),
         ) {
             HorizontalPager(
                 state                 = pagerState,
@@ -722,6 +921,9 @@ private fun Tabs(navController: NavHostController) {
                     "Home" -> HomeScreen(
                         onStartWorkout = { _, dayId ->
                             navController.navigate(if (dayId.isNotBlank()) "ActiveWorkout/${Uri.encode(dayId)}" else "ActiveWorkout")
+                        },
+                        onStartEmptyWorkout = {
+                            navController.navigate("ActiveWorkout?startEmpty=true")
                         },
                         onOpenBodyWeight           = { navController.navigate("BodyWeight") },
                         onOpenRecovery             = { navController.navigate("RecoveryMap") },
@@ -736,22 +938,8 @@ private fun Tabs(navController: NavHostController) {
                         },
                         onOpenStatusWindow = { navController.navigate("statusWindow") },
                         onDiscardWorkout = {
-                            val idToAbandon = activeWorkoutId
-                            scope.launch(Dispatchers.IO) {
-                                if (!idToAbandon.isNullOrBlank()) {
-                                    runCatching { workoutRepo.abandonWorkout(idToAbandon) }
-                                }
-                                settingsRepo.removeSetting("active_workout_id")
-                                settingsRepo.removeSetting("active_workout_day_id")
-                                settingsRepo.removeSetting("active_workout_day_name")
-                                settingsRepo.removeSetting("active_workout_start_ms")
-                                withContext(Dispatchers.Main) {
-                                    activeWorkoutId      = null
-                                    activeWorkoutDayId   = null
-                                    activeWorkoutDayName = null
-                                    activeWorkoutStartMs = 0L
-                                }
-                            }
+                            discardError = null
+                            discardRequestedId = activeWorkoutId
                         },
                     )
                     "Plans" -> PlansScreen(
@@ -829,126 +1017,6 @@ private fun Tabs(navController: NavHostController) {
                 .navigationBarsPadding()
                 .padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
         )
-    }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// IronLogTabBar
-//
-// Full-width frosted-glass tab bar with a spring-animated sliding pill
-// indicator. The pill glides between tabs with an underdamped spring so it
-// feels liquid. Each icon/label crossfades between muted and accent tint as
-// the pill passes through.
-//
-// Layout (64 dp total height):
-//   ┌──────────────────────────────────────────────────────────┐
-//   │  [Home]   [Plans]   [Log]   [Stats]   [Settings]        │  64 dp
-//   │   pill ────────────────>                                 │
-//   └──────────────────────────────────────────────────────────┘
-//
-// The pill is positioned with absoluteOffset so it sits behind the Row of
-// tab columns without needing a SubcomposeLayout.
-// ─────────────────────────────────────────────────────────────────────────────
-@Composable
-private fun IronLogTabBar(
-    selectedIndex: Int,
-    onTabSelected: (Int) -> Unit,
-    hazeState: HazeState,
-    modifier: Modifier = Modifier,
-) {
-    val colors   = useTheme()
-    val tabCount = TabScreens.size
-    val barHeight = 64.dp
-    val pillPadH  = 5.dp
-    val pillPadV  = 5.dp
-
-    // Animated slide: 0f = first tab, (tabCount-1).toFloat() = last tab.
-    // Spring is slightly underdamped so it overshoots and bounces back — the
-    // liquid-glass feel the user asked for.
-    val pillOffset by animateFloatAsState(
-        targetValue  = selectedIndex.toFloat(),
-        animationSpec = spring(stiffness = 400f, dampingRatio = 0.82f), // subtle glide, no bounce
-        label        = "pill_slide",
-    )
-
-    BoxWithConstraints(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(barHeight)
-            .clip(RoundedCornerShape(999.dp))
-            .hazeEffect(hazeState) { noiseFactor = 0f }
-            .background(colors.tabBg.copy(alpha = 0.55f)),
-    ) {
-        val tabWidth = maxWidth / tabCount
-
-        // ── Sliding frosted glass pill
-        Box(
-            Modifier
-                .absoluteOffset(
-                    x = tabWidth * pillOffset + pillPadH,
-                    y = pillPadV,
-                )
-                .size(
-                    width  = tabWidth - pillPadH * 2,
-                    height = barHeight - pillPadV * 2,
-                )
-                .clip(RoundedCornerShape(999.dp))
-                // Body: top-lit vertical gradient — bright at top, dim at bottom
-                .background(
-                    Brush.verticalGradient(
-                        listOf(
-                            Color.White.copy(alpha = 0.30f),
-                            Color.White.copy(alpha = 0.10f),
-                        )
-                    )
-                )
-        )
-
-        // ── Tab columns (drawn on top of pill)
-        Row(Modifier.fillMaxSize()) {
-            TabScreens.forEachIndexed { index, tab ->
-                val selected = index == selectedIndex
-
-                // Independent tint spring — settles a touch later than the pill
-                // so the colour shift trails the glass, mimicking a light-leak.
-                val tintFraction by animateFloatAsState(
-                    targetValue  = if (selected) 1f else 0f,
-                    animationSpec = spring(stiffness = 360f, dampingRatio = 0.80f),
-                    label        = "tint_$index",
-                )
-                val tint = lerp(colors.muted, colors.accent, tintFraction)
-
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight()
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication        = null,
-                        ) { onTabSelected(index) },
-                    horizontalAlignment  = Alignment.CenterHorizontally,
-                    // spacedBy(0) keeps icon and label tightly together as one unit,
-                    // then Arrangement.Center places that unit in the middle of the 64dp bar
-                    verticalArrangement  = Arrangement.spacedBy(1.dp, Alignment.CenterVertically),
-                ) {
-                    Icon(
-                        imageVector        = tab.icon,
-                        contentDescription = tab.name,
-                        tint               = tint,
-                        modifier           = Modifier.size(21.dp),
-                    )
-                    Text(
-                        text          = tab.name,
-                        color         = tint,
-                        fontSize      = 9.sp,
-                        lineHeight    = 9.sp,   // collapse implicit leading so text sits flush under icon
-                        fontWeight    = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                        maxLines      = 1,
-                        letterSpacing = 0.1.sp,
-                    )
-                }
-            }
-        }
     }
 }
 

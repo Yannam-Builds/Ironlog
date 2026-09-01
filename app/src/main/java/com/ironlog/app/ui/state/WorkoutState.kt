@@ -24,24 +24,39 @@ data class LoggedSet(
 )
 
 @Immutable
-data class GhostSet(val weight: Double = 0.0, val reps: Double = 0.0, val type: String = "normal", val rpe: Double? = null)
+data class GhostSet(val weight: Double = 0.0, val reps: Double = 0.0, val type: String = "normal", val rpe: Double? = null, val rir: Double? = null)
 
 @Immutable
-data class GhostData(val sets: List<GhostSet> = emptyList(), val date: String? = null)
+data class GhostData(
+    val sets: List<GhostSet> = emptyList(),
+    val date: String? = null,
+    val previousNote: String = "",
+)
 
 @Immutable
 data class RestTimerState(
     val active: Boolean = false,
     val endTime: Long? = null,
+    val endElapsedTime: Long? = null,
+    val bootCount: Int = -1,
     val total: Int = 0,
     val paused: Boolean = false,
     val pausedAt: Long? = null,
+    val pausedRemainingMs: Long? = null,
     val triggerExIndex: Int? = null,
 )
 
 /** Session-only override of the plan target (sets × reps) for a single exercise. */
 @Immutable
 data class TargetOverride(val sets: Int, val reps: Int)
+
+/** A generated warmup target that is not a completed set until the athlete logs it. */
+@Immutable
+data class PendingWarmup(
+    val id: String = genId(),
+    val weightKg: Double,
+    val reps: Int,
+)
 
 @Immutable
 data class WorkoutState(
@@ -56,6 +71,7 @@ data class WorkoutState(
     val pbNotif: String? = null,
     val copiedPrevious: Boolean = false,
     val targetOverrides: Map<Int, TargetOverride> = emptyMap(),   // GAP-23
+    val pendingWarmups: Map<Int, List<PendingWarmup>> = emptyMap(),
     val removedBaseExerciseIndices: Set<Int> = emptySet(),
 )
 
@@ -80,16 +96,44 @@ sealed interface WorkoutAction {
     data class DeleteSet(val exIndex: Int, val setIndex: Int) : WorkoutAction
     data class LoadGhost(val ghostData: Map<Int, GhostData>) : WorkoutAction
     data class SetExerciseNote(val exIndex: Int, val note: String) : WorkoutAction
+    data object ClearExerciseNotes : WorkoutAction
     data class AssignSuperset(val exIndex: Int, val group: String?) : WorkoutAction
-    data class StartRest(val endTime: Long, val total: Int, val triggerExIndex: Int?) : WorkoutAction
-    data class PauseRest(val pausedAt: Long) : WorkoutAction
-    data class ResumeRest(val newEndTime: Long) : WorkoutAction
+    data class StartRest(
+        val endTime: Long,
+        val endElapsedTime: Long? = null,
+        val bootCount: Int = -1,
+        val total: Int,
+        val triggerExIndex: Int?,
+    ) : WorkoutAction
+    data class PauseRest(val pausedAt: Long, val remainingMs: Long? = null) : WorkoutAction
+    data class ResumeRest(
+        val newEndTime: Long,
+        val newEndElapsedTime: Long? = null,
+        val bootCount: Int = -1,
+    ) : WorkoutAction
     data object SkipRest : WorkoutAction
+    /** Natural expiry: update UI/draft only; the foreground service owns the alert and deadline clear. */
+    data object RestExpired : WorkoutAction
     data object Add30s : WorkoutAction
+    /** Mirrors an already-committed service/receiver deadline into Compose without reapplying it. */
+    data class SyncRestDeadline(
+        val endTime: Long?,
+        val endElapsedTime: Long? = null,
+        val bootCount: Int = -1,
+        val addedSeconds: Int = 0,
+    ) : WorkoutAction
+    /** Mirrors a transactionally persisted paused rest after recreation or external control. */
+    data class SyncPausedRest(
+        val remainingMs: Long,
+        val addedSeconds: Int = 0,
+    ) : WorkoutAction
     data class QuickAddSet(val exIndex: Int) : WorkoutAction
     data class SwapExercise(val exIndex: Int, val exercise: Any) : WorkoutAction
     data class SetPbNotif(val message: String?) : WorkoutAction
-    data class InsertWarmups(val exIndex: Int, val warmupSets: List<LoggedSet>) : WorkoutAction
+    data class QueueWarmups(val exIndex: Int, val warmups: List<PendingWarmup>) : WorkoutAction
+    data class LogPendingWarmup(val exIndex: Int, val pendingId: String) : WorkoutAction
+    data class SkipPendingWarmup(val exIndex: Int, val pendingId: String) : WorkoutAction
+    data class DismissPendingWarmups(val exIndex: Int) : WorkoutAction
     data class UpdateGhost(val exIndex: Int, val ghost: GhostData) : WorkoutAction
     data class CopyPrevious(val weightUnit: String = "kg") : WorkoutAction
     data class AddExercise(val entry: AddedExerciseEntry) : WorkoutAction
@@ -110,8 +154,8 @@ fun workoutReducer(state: WorkoutState, action: WorkoutAction, nowMs: Long = Sys
 
     is WorkoutAction.LogSet -> {
         val isTimeBased = action.set.trackingType.startsWith("duration")
-        val orm = if (!isTimeBased && action.set.weight > 0 && action.set.reps > 0) epley(action.set.weight, action.set.reps) else 0.0
-        val newSet = action.set.copy(id = genId(), orm = orm, type = action.set.type.ifBlank { "normal" }, rpe = action.set.rpe, rir = action.set.rir, note = action.set.note)
+        val orm = loggedSetEstimatedOneRm(action.set)
+        val newSet = action.set.copy(orm = orm, type = action.set.type.ifBlank { "normal" }, rpe = action.set.rpe, rir = action.set.rir, note = action.set.note)
         val existing = state.setLog[action.exIndex].orEmpty()
         state.copy(setLog = state.setLog + (action.exIndex to (existing + newSet)))
     }
@@ -125,7 +169,7 @@ fun workoutReducer(state: WorkoutState, action: WorkoutAction, nowMs: Long = Sys
         val isTimeBased = current.trackingType.startsWith("duration")
         val nextWeight = action.weight?.takeIf { it.isFinite() } ?: current.weight
         val nextReps = action.reps?.takeIf { it.isFinite() } ?: current.reps
-        val orm = if (!isTimeBased && nextWeight > 0 && nextReps > 0) epley(nextWeight, nextReps) else 0.0
+        val orm = loggedSetEstimatedOneRm(current.copy(weight = nextWeight, reps = nextReps))
         current.copy(weight = nextWeight, reps = nextReps, orm = orm, durationSec = if (isTimeBased) nextReps else current.durationSec)
     }
 
@@ -139,16 +183,81 @@ fun workoutReducer(state: WorkoutState, action: WorkoutAction, nowMs: Long = Sys
 
     is WorkoutAction.LoadGhost -> state.copy(ghostData = action.ghostData)
     is WorkoutAction.SetExerciseNote -> state.copy(exerciseNotes = state.exerciseNotes + (action.exIndex to action.note))
+    WorkoutAction.ClearExerciseNotes -> state.copy(exerciseNotes = emptyMap())
     is WorkoutAction.AssignSuperset -> state.copy(supersetGroups = state.supersetGroups + (action.exIndex to action.group))
-    is WorkoutAction.StartRest -> state.copy(restTimer = RestTimerState(active = true, endTime = action.endTime, total = action.total, paused = false, pausedAt = null, triggerExIndex = action.triggerExIndex))
-    is WorkoutAction.PauseRest -> if (!state.restTimer.active || state.restTimer.paused) state else state.copy(restTimer = state.restTimer.copy(paused = true, pausedAt = action.pausedAt))
-    is WorkoutAction.ResumeRest -> if (!state.restTimer.paused) state else state.copy(restTimer = state.restTimer.copy(paused = false, pausedAt = null, endTime = action.newEndTime))
+    is WorkoutAction.StartRest -> state.copy(restTimer = RestTimerState(
+        active = true,
+        endTime = action.endTime,
+        endElapsedTime = action.endElapsedTime,
+        bootCount = action.bootCount,
+        total = action.total,
+        paused = false,
+        pausedAt = null,
+        pausedRemainingMs = null,
+        triggerExIndex = action.triggerExIndex,
+    ))
+    is WorkoutAction.PauseRest -> if (!state.restTimer.active || state.restTimer.paused) state else state.copy(
+        restTimer = state.restTimer.copy(
+            paused = true,
+            pausedAt = action.pausedAt,
+            pausedRemainingMs = action.remainingMs,
+        ),
+    )
+    is WorkoutAction.ResumeRest -> if (!state.restTimer.paused) state else state.copy(
+        restTimer = state.restTimer.copy(
+            paused = false,
+            pausedAt = null,
+            pausedRemainingMs = null,
+            endTime = action.newEndTime,
+            endElapsedTime = action.newEndElapsedTime,
+            bootCount = action.bootCount,
+        ),
+    )
     WorkoutAction.SkipRest -> state.copy(restTimer = RestTimerState())
+    WorkoutAction.RestExpired -> state.copy(restTimer = RestTimerState())
     WorkoutAction.Add30s -> {
         if (!state.restTimer.active) state else state.copy(
             restTimer = state.restTimer.copy(
                 endTime = (state.restTimer.endTime ?: nowMs) + 30_000L,
+                endElapsedTime = state.restTimer.endElapsedTime?.plus(30_000L),
                 total = state.restTimer.total + 30,
+                pausedRemainingMs = if (state.restTimer.paused) {
+                    (state.restTimer.pausedRemainingMs ?: 0L) + 30_000L
+                } else {
+                    state.restTimer.pausedRemainingMs
+                },
+            ),
+        )
+    }
+    is WorkoutAction.SyncRestDeadline -> if (action.endTime == null || action.endTime <= 0L) {
+        state.copy(restTimer = RestTimerState())
+    } else {
+        state.copy(
+            restTimer = state.restTimer.copy(
+                active = true,
+                endTime = action.endTime,
+                endElapsedTime = action.endElapsedTime,
+                bootCount = action.bootCount,
+                paused = false,
+                pausedAt = null,
+                pausedRemainingMs = null,
+                total = (state.restTimer.total + action.addedSeconds).coerceAtLeast(0),
+            ),
+        )
+    }
+    is WorkoutAction.SyncPausedRest -> if (action.remainingMs <= 0L) {
+        state.copy(restTimer = RestTimerState())
+    } else {
+        state.copy(
+            restTimer = state.restTimer.copy(
+                active = true,
+                endTime = null,
+                endElapsedTime = null,
+                bootCount = -1,
+                paused = true,
+                pausedAt = nowMs,
+                pausedRemainingMs = action.remainingMs,
+                total = (state.restTimer.total + action.addedSeconds).coerceAtLeast(0),
             ),
         )
     }
@@ -158,10 +267,40 @@ fun workoutReducer(state: WorkoutState, action: WorkoutAction, nowMs: Long = Sys
     }
     is WorkoutAction.SwapExercise -> state.copy(swappedExercises = state.swappedExercises + (action.exIndex to action.exercise))
     is WorkoutAction.SetPbNotif -> state.copy(pbNotif = action.message)
-    is WorkoutAction.InsertWarmups -> {
-        val workingSets = state.setLog[action.exIndex].orEmpty().filter { (it.type.ifBlank { "normal" }) != "warmup" }
-        state.copy(setLog = state.setLog + (action.exIndex to (action.warmupSets + workingSets)))
+    is WorkoutAction.QueueWarmups -> {
+        if (action.warmups.isEmpty()) state else state.copy(
+            pendingWarmups = state.pendingWarmups + (action.exIndex to action.warmups),
+        )
     }
+    is WorkoutAction.LogPendingWarmup -> {
+        val pending = state.pendingWarmups[action.exIndex]
+            .orEmpty()
+            .firstOrNull { it.id == action.pendingId }
+            ?: return state
+        val completed = LoggedSet(
+            id = pending.id,
+            weight = pending.weightKg,
+            reps = pending.reps.toDouble(),
+            type = "warmup",
+        )
+        val current = state.setLog[action.exIndex].orEmpty()
+        val insertAt = current.indexOfFirst { it.type != "warmup" }.let { if (it < 0) current.size else it }
+        val nextSets = current.toMutableList().apply { add(insertAt, completed.copy(orm = 0.0)) }
+        val remaining = state.pendingWarmups[action.exIndex].orEmpty().filterNot { it.id == action.pendingId }
+        state.copy(
+            setLog = state.setLog + (action.exIndex to nextSets),
+            pendingWarmups = if (remaining.isEmpty()) state.pendingWarmups - action.exIndex
+            else state.pendingWarmups + (action.exIndex to remaining),
+        )
+    }
+    is WorkoutAction.SkipPendingWarmup -> {
+        val remaining = state.pendingWarmups[action.exIndex].orEmpty().filterNot { it.id == action.pendingId }
+        state.copy(
+            pendingWarmups = if (remaining.isEmpty()) state.pendingWarmups - action.exIndex
+            else state.pendingWarmups + (action.exIndex to remaining),
+        )
+    }
+    is WorkoutAction.DismissPendingWarmups -> state.copy(pendingWarmups = state.pendingWarmups - action.exIndex)
     is WorkoutAction.UpdateGhost -> state.copy(ghostData = state.ghostData + (action.exIndex to action.ghost))
     is WorkoutAction.CopyPrevious -> {
         val newInputs = state.inputs.toMutableMap()
@@ -202,18 +341,25 @@ fun workoutReducer(state: WorkoutState, action: WorkoutAction, nowMs: Long = Sys
             supersetGroups = reIndex(state.supersetGroups),
             swappedExercises = reIndex(state.swappedExercises),
             targetOverrides = reIndex(state.targetOverrides),
+            pendingWarmups = reIndex(state.pendingWarmups),
             removedBaseExerciseIndices = newRemovedBaseIndices,
         )
     }
-    is WorkoutAction.HydrateState -> (action.payload ?: WorkoutState()).copy(ghostData = state.ghostData, pbNotif = null, targetOverrides = state.targetOverrides)
+    is WorkoutAction.HydrateState -> (action.payload ?: WorkoutState()).copy(ghostData = state.ghostData, pbNotif = null)
     is WorkoutAction.OverrideTarget -> state.copy(targetOverrides = state.targetOverrides + (action.exIndex to TargetOverride(action.sets, action.reps)))
 }
 
 private fun updateLoggedSet(state: WorkoutState, exIndex: Int, setIndex: Int, transform: (LoggedSet) -> LoggedSet): WorkoutState {
     val sets = state.setLog[exIndex].orEmpty().toMutableList()
     if (setIndex !in sets.indices) return state
-    sets[setIndex] = transform(sets[setIndex])
+    sets[setIndex] = transform(sets[setIndex]).let { it.copy(orm = loggedSetEstimatedOneRm(it)) }
     return state.copy(setLog = state.setLog + (exIndex to sets))
 }
 
 private fun Double.toCleanString(): String = if (this % 1.0 == 0.0) this.roundToInt().toString() else this.toString()
+
+internal fun loggedSetEstimatedOneRm(set: LoggedSet): Double =
+    com.ironlog.app.domain.training.TrainingSetPolicy.estimatedOneRm(
+        com.ironlog.app.ui.model.HistoryExercise(trackingType = set.trackingType),
+        com.ironlog.app.ui.model.HistoryExerciseSet(weight = set.weight, reps = set.reps, type = set.type),
+    ) ?: 0.0

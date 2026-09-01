@@ -1,15 +1,24 @@
 package com.ironlog.app.domain.intelligence
 
 import com.ironlog.app.domain.gamification.parseHistoryInstant
+import com.ironlog.app.domain.training.TrainingSetPolicy
+import com.ironlog.app.domain.training.PersonalBestPolicy
 import com.ironlog.app.ui.model.HistoryEntry
 import java.time.LocalDate
+import java.time.Clock
 import java.time.ZoneId
+import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.time.temporal.WeekFields
 import kotlin.math.max
 import kotlin.math.roundToInt
 
 data class VolumeLandmark(val sets: Int, val status: String, val min: Int, val max: Int, val optimal: Int)
+
+data class TrainingIntelligenceProfile(
+    val goalMode: String = "hypertrophy",
+    val weeklyGoalDays: Int = 3,
+)
 
 data class NeuralFatigueResult(
     val isFlagged: Boolean,
@@ -53,7 +62,8 @@ object TrainingIntelligenceEngine {
 
     /** Warmup builder for working sets; rounds to nearest 2.5kg and keeps at least bar weight. */
     fun generateWarmupSets(workingWeightKg: Double, barWeightKg: Double = 20.0): List<Pair<Double, Int>> {
-        val base = workingWeightKg.coerceAtLeast(barWeightKg)
+        if (workingWeightKg <= 0.0 || workingWeightKg <= barWeightKg) return emptyList()
+        val base = workingWeightKg
         val steps = listOf(
             0.40 to 8,
             0.55 to 5,
@@ -64,33 +74,46 @@ object TrainingIntelligenceEngine {
             val w = ((base * pct) / 2.5).roundToInt() * 2.5
             val clamped = w.coerceAtLeast(barWeightKg.coerceAtMost(base))
             clamped to reps
-        }.distinctBy { it.first to it.second }
+        }
+            .filter { (weight, _) -> weight < base }
+            .distinctBy { it.first }
     }
 
     fun build(
         history: List<HistoryEntry>,
         @Suppress("UNUSED_PARAMETER") prCount: Int = 0,
         activeDraftContribution: Map<String, Int> = emptyMap(),
+        profile: TrainingIntelligenceProfile = TrainingIntelligenceProfile(),
+        clock: Clock = Clock.systemDefaultZone(),
+        prResetAt: Instant? = null,
     ): TrainingIntelligenceSnapshot {
-        val last30 = history.filter { ageDays(it.date) <= 30 }
-        val byGroup = setsByGroup(history, activeDraftContribution)
-        val (prLast30, prPrev30, prTrend) = computePrVelocity(history)
+        // One time/zone snapshot for the entire evaluation, including local date-only imports.
+        val evaluationClock = Clock.fixed(clock.instant(), clock.zone)
+        val validHistory = history.filter { entry ->
+            val at = parseHistoryInstant(entry.date, evaluationClock.zone)
+            at != null && !at.isAfter(evaluationClock.instant()) && entry.exercises.any { ex ->
+                ex.sets.any { !it.type.equals("warmup", true) && it.weight.isFinite() && it.weight >= 0 && it.reps.isFinite() && it.reps > 0 }
+            }
+        }
+        val last30 = validHistory.filter { ageDays(it.date, evaluationClock) in 0..30 }
+        val byGroup = setsByGroup(validHistory, activeDraftContribution, evaluationClock)
+        val (prLast30, prPrev30, prTrend) = computePrVelocity(validHistory, evaluationClock, prResetAt)
         val velocity = if (last30.isEmpty()) 0f
             else (prLast30.toFloat() / last30.size.toFloat()).coerceIn(0f, 1f)
-        val (years, label, tip) = computeTrainingAge(history)
+        val (years, label, tip) = computeTrainingAge(validHistory, evaluationClock)
         return TrainingIntelligenceSnapshot(
             setsByMuscle    = byGroup,
-            volumeLandmarks = computeVolumeLandmarks(byGroup),
+            volumeLandmarks = computeVolumeLandmarks(byGroup, profile),
             movementBalance = movementBalance(byGroup),
             prLast30        = prLast30,
             prPrev30        = prPrev30,
             prTrend         = prTrend,
             prVelocity30d   = velocity,
-            bestWindow      = bestPerformanceWindow(last30),
+            bestWindow      = bestPerformanceWindow(last30, evaluationClock),
             trainingAgeYears = years,
             trainingAgeLabel = label,
             trainingAgeTip   = tip,
-            neuralFatigue    = computeNeuralFatigue(history),
+            neuralFatigue    = computeNeuralFatigue(validHistory, evaluationClock),
         )
     }
 
@@ -100,10 +123,22 @@ object TrainingIntelligenceEngine {
 
     // ── Volume landmarks ──────────────────────────────────────────────────────
 
-    private fun computeVolumeLandmarks(byGroup: Map<String, Int>): Map<String, VolumeLandmark> {
+    private fun computeVolumeLandmarks(
+        byGroup: Map<String, Int>,
+        profile: TrainingIntelligenceProfile = TrainingIntelligenceProfile(),
+    ): Map<String, VolumeLandmark> {
         val result = linkedMapOf<String, VolumeLandmark>()
         VOLUME_LANDMARKS_MAP.forEach { (group, triple) ->
-            val (min, max, optimal) = triple
+            val goalScale = when (profile.goalMode.trim().lowercase()) {
+                "strength" -> 0.78
+                "general_fitness", "general fitness", "performance", "endurance" -> 0.68
+                else -> 1.0
+            }
+            val scheduleScale = if (profile.weeklyGoalDays.coerceIn(1, 7) <= 2) 0.82 else 1.0
+            val scale = goalScale * scheduleScale
+            val min = (triple.first * scale).roundToInt().coerceAtLeast(4)
+            val max = (triple.second * scale).roundToInt().coerceAtLeast(min + 4)
+            val optimal = (triple.third * scale).roundToInt().coerceIn(min, max)
             val sets = byGroup[group] ?: 0
             val status = when {
                 sets < min -> "low"
@@ -121,12 +156,12 @@ object TrainingIntelligenceEngine {
      * Accumulates working sets per 6 anatomical group using [FINE_MUSCLE_TO_RADAR].
      * Uses the current ISO week (Mon–now) to match RN's weekly volume card behaviour.
      */
-    private fun setsByGroup(history: List<HistoryEntry>, activeDraftContribution: Map<String, Int>): Map<String, Int> {
-        val thisWeekStart = LocalDate.now().with(WeekFields.ISO.dayOfWeek(), 1L)
+    private fun setsByGroup(history: List<HistoryEntry>, activeDraftContribution: Map<String, Int>, clock: Clock): Map<String, Int> {
+        val thisWeekStart = LocalDate.now(clock).with(WeekFields.ISO.dayOfWeek(), 1L)
         val weekHistory = history.filter { entry ->
-            val d = parseHistoryInstant(entry.date)?.atZone(ZoneId.systemDefault())?.toLocalDate()
+            val d = parseHistoryInstant(entry.date, clock.zone)?.atZone(clock.zone)?.toLocalDate()
                 ?: return@filter false
-            !d.isBefore(thisWeekStart)
+            !d.isBefore(thisWeekStart) && !d.isAfter(LocalDate.now(clock))
         }
         val accumulator = linkedMapOf(
             "Chest" to 0.0, "Back" to 0.0, "Legs" to 0.0,
@@ -134,7 +169,7 @@ object TrainingIntelligenceEngine {
         )
         weekHistory.forEach { w ->
             w.exercises.forEach { ex ->
-                val n = ex.sets.count { it.type != "warmup" }
+                val n = ex.sets.count { TrainingSetPolicy.isValidWorkingSet(ex, it) }
                 if (n > 0) {
                     val contrib = resolveContribution(ex)
                     if (contrib.isNotEmpty()) {
@@ -142,8 +177,9 @@ object TrainingIntelligenceEngine {
                             accumulator[bucket] = (accumulator[bucket] ?: 0.0) + n * frac
                         }
                     } else {
-                        val bucket = dominantRadarBucket(ex)
-                        accumulator[bucket] = (accumulator[bucket] ?: 0.0) + n
+                        dominantRadarBucket(ex)?.let { bucket ->
+                            accumulator[bucket] = (accumulator[bucket] ?: 0.0) + n
+                        }
                     }
                 }
             }
@@ -162,7 +198,7 @@ object TrainingIntelligenceEngine {
         return base
     }
 
-    private fun dominantRadarBucket(ex: com.ironlog.app.ui.model.HistoryExercise): String {
+    private fun dominantRadarBucket(ex: com.ironlog.app.ui.model.HistoryExercise): String? {
         val t = (listOfNotNull(ex.primaryMuscle) + ex.primaryMuscles +
                 listOf(ex.name, ex.category.orEmpty())).joinToString(" ").lowercase()
         return when {
@@ -173,7 +209,8 @@ object TrainingIntelligenceEngine {
             t.contains("quad") || t.contains("hamstring") || t.contains("glute") ||
             t.contains("calf") || t.contains("leg") || t.contains("squat") ||
             t.contains("deadlift") -> "Legs"
-            else -> "Core"
+            t.contains("core") || t.contains("abs") || t.contains("plank") || t.contains("crunch") -> "Core"
+            else -> null
         }
     }
 
@@ -198,33 +235,36 @@ object TrainingIntelligenceEngine {
      * Counts PR sessions in the last 30 and previous 30-60 days by tracking
      * running e1rm (Epley formula) per exercise across chronologically sorted history.
      */
-    private fun computePrVelocity(history: List<HistoryEntry>): Triple<Int, Int, String> {
-        val sorted = history.sortedBy { it.date } // oldest first
+    private fun computePrVelocity(
+        history: List<HistoryEntry>,
+        clock: Clock,
+        prResetAt: Instant?,
+    ): Triple<Int, Int, String> {
+        val sorted = history
+            .mapNotNull { session -> parseHistoryInstant(session.date, clock.zone)?.let { it to session } }
+            .sortedBy { it.first }
+            .map { it.second }
         val runningBest = mutableMapOf<String, Double>() // exercise key → best e1rm
         var prLast30 = 0
         var prPrev30 = 0
         sorted.forEach { session ->
-            val age = ageDays(session.date)
+            val age = ageDays(session.date, clock)
             var sessionIsPr = false
             session.exercises.forEach { ex ->
                 val key = ex.exerciseId.ifBlank { ex.name }
                 val maxE1rm = ex.sets
-                    .filter { it.type != "warmup" }
-                    .maxOfOrNull { s ->
-                        val w = s.weight; val r = s.reps
-                        if (w > 0 && r > 0) w * (1.0 + r / 30.0) else 0.0
-                    } ?: 0.0
-                if (maxE1rm > 0.0) {
-                    val prev = runningBest[key] ?: 0.0
-                    if (maxE1rm > prev) {
-                        runningBest[key] = maxE1rm
-                        sessionIsPr = true
-                    }
+                    .filter { PersonalBestPolicy.isAfterReset(it, session.date, prResetAt, clock.zone) }
+                    .mapNotNull { TrainingSetPolicy.estimatedOneRm(ex, it) }
+                    .maxOrNull()
+                if (maxE1rm != null) {
+                    val previous = runningBest[key]
+                    if (previous != null && maxE1rm > previous) sessionIsPr = true
+                    runningBest[key] = maxOf(previous ?: 0.0, maxE1rm)
                 }
             }
-            if (sessionIsPr) when {
-                age <= 30L -> prLast30++
-                age <= 60L -> prPrev30++
+            if (sessionIsPr) when (age) {
+                in 0L..30L -> prLast30++
+                in 31L..60L -> prPrev30++
             }
         }
         val trend = when {
@@ -241,30 +281,41 @@ object TrainingIntelligenceEngine {
      * Checks for consecutive calendar days with heavy compound work in the last 14 days.
      * Flagged when consecutive_days >= 3.
      */
-    private fun computeNeuralFatigue(history: List<HistoryEntry>): NeuralFatigueResult {
-        val heavyDays = history
-            .filter { ageDays(it.date) <= 14 }
-            .filter { session ->
-                session.exercises.any { ex ->
+    private fun computeNeuralFatigue(history: List<HistoryEntry>, clock: Clock): NeuralFatigueResult {
+        val heavyByDay = history
+            .mapNotNull { session ->
+                val day = parseHistoryInstant(session.date, clock.zone)?.atZone(clock.zone)?.toLocalDate()
+                    ?: return@mapNotNull null
+                val age = ChronoUnit.DAYS.between(day, LocalDate.now(clock))
+                if (age !in 0..14) return@mapNotNull null
+                val names = session.exercises.filter { ex ->
                     val lower = ex.name.lowercase()
-                    HEAVY_COMPOUNDS.any { lower.contains(it) } &&
-                        ex.sets.any { it.type != "warmup" && it.weight > 0 }
-                }
+                    HEAVY_COMPOUNDS.any { lower.contains(it) } && ex.sets.any { set ->
+                        TrainingSetPolicy.estimatedOneRm(ex, set) != null &&
+                            ((set.rpe ?: 0.0) >= 8.0 || (set.rir ?: 99.0) <= 2.0 || set.reps in 1.0..6.0)
+                    }
+                }.map { it.name }
+                if (names.isEmpty()) null else day to names
             }
-            .sortedByDescending { it.date } // most recent first
+            .groupBy({ it.first }, { it.second })
+            .mapValues { (_, names) -> names.flatten().distinct() }
+            .toList()
+            .sortedByDescending { it.first }
 
         var consecutive = 0
         var prev: LocalDate? = null
         val lastHeavyEx = mutableListOf<String>()
 
-        for (session in heavyDays) {
-            val day = parseHistoryInstant(session.date)?.atZone(ZoneId.systemDefault())?.toLocalDate() ?: break
+        val newestDay = heavyByDay.firstOrNull()?.first
+        if (newestDay == null || ChronoUnit.DAYS.between(newestDay, LocalDate.now(clock)) > 2) {
+            return NeuralFatigueResult(false, 0)
+        }
+
+        for ((day, exerciseNames) in heavyByDay) {
             val gap = if (prev == null) 0L else ChronoUnit.DAYS.between(day, prev)
             if (prev == null || gap == 1L) {
                 consecutive++
-                session.exercises
-                    .filter { ex -> HEAVY_COMPOUNDS.any { ex.name.lowercase().contains(it) } }
-                    .forEach { if (lastHeavyEx.size < 3 && it.name !in lastHeavyEx) lastHeavyEx += it.name }
+                exerciseNames.forEach { if (lastHeavyEx.size < 3 && it !in lastHeavyEx) lastHeavyEx += it }
                 prev = day
             } else {
                 break
@@ -279,7 +330,7 @@ object TrainingIntelligenceEngine {
 
     // ── Best performance window ───────────────────────────────────────────────
 
-    private fun bestPerformanceWindow(history: List<HistoryEntry>): String {
+    private fun bestPerformanceWindow(history: List<HistoryEntry>, clock: Clock): String {
         val buckets = linkedMapOf(
             "Morning" to mutableListOf<Double>(),
             "Afternoon" to mutableListOf<Double>(),
@@ -287,71 +338,55 @@ object TrainingIntelligenceEngine {
             "Night" to mutableListOf<Double>(),
         )
         history.forEach { w ->
-            val hour = parseHistoryInstant(w.date)?.atZone(ZoneId.systemDefault())?.hour ?: return@forEach
+            // A date-only import has no known training time and must not become a midnight session.
+            if (!w.date.contains('T') && !w.date.contains(' ')) return@forEach
+            val hour = parseHistoryInstant(w.date, clock.zone)?.atZone(clock.zone)?.hour ?: return@forEach
             val b = when (hour) {
                 in 5..11 -> "Morning"; in 12..16 -> "Afternoon"
                 in 17..20 -> "Evening"; else -> "Night"
             }
-            buckets[b]?.add(w.volume)
+            val volume = w.exercises.sumOf { ex -> ex.sets.sumOf { TrainingSetPolicy.externalLoadVolume(ex, it) } }
+            if (volume.isFinite() && volume > 0) buckets[b]?.add(volume)
         }
-        val best = buckets.maxByOrNull { (_, v) -> if (v.isEmpty()) 0.0 else v.average() }?.key ?: "Morning"
-        return "$best has the highest average session volume."
+        val eligible = buckets.filterValues { it.size >= 3 }
+        if (eligible.isEmpty()) return "Log at least 3 sessions in one time window to compare performance."
+        val best = eligible.maxByOrNull { (_, values) -> values.average() }
+            ?: return "Not enough comparable sessions yet."
+        return "${best.key} leads your logged session volume (${best.value.size} sessions)."
     }
 
     // ── Training age ──────────────────────────────────────────────────────────
 
-    private fun computeTrainingAge(history: List<HistoryEntry>): Triple<Double, String, String> {
+    private fun computeTrainingAge(history: List<HistoryEntry>, clock: Clock): Triple<Double, String, String> {
         if (history.isEmpty()) return Triple(
-            0.0, "Beginner", "Track your first workout to start measuring progress."
+            0.0, "Building baseline", "Track your first workout to start measuring progress."
         )
-        val oldest = history.minByOrNull { it.date }
-            ?: return Triple(0.0, "Beginner", "")
-        val oldestDate = parseHistoryInstant(oldest.date)?.atZone(ZoneId.systemDefault())?.toLocalDate()
-            ?: return Triple(0.0, "Beginner", "")
-        val months = ChronoUnit.MONTHS.between(oldestDate, LocalDate.now()).coerceAtLeast(1)
-        val years = months / 12.0
-
-        // Estimate monthly e1rm progression from compound sets
-        val compoundKeywords = setOf("bench", "squat", "deadlift", "press", "row")
-        fun sessionAvgE1rm(s: HistoryEntry) = s.exercises
-            .filter { ex -> compoundKeywords.any { ex.name.lowercase().contains(it) } }
-            .flatMap { ex ->
-                ex.sets.filter { it.type != "warmup" }.mapNotNull { set ->
-                    val w = set.weight; val r = set.reps
-                    if (w > 0 && r > 0) w * (1.0 + r / 30.0) else null
-                }
-            }.average().takeIf { it.isFinite() }
-
-        val compoundSessions = history
-            .sortedBy { it.date }
-            .filter { sessionAvgE1rm(it) != null }
-
-        val monthlyProgression: Double = if (compoundSessions.size >= 8) {
-            val avgFirst = compoundSessions.take(4).mapNotNull { sessionAvgE1rm(it) }.average()
-            val avgLast  = compoundSessions.takeLast(4).mapNotNull { sessionAvgE1rm(it) }.average()
-            ((avgLast - avgFirst) / months).takeIf { it.isFinite() } ?: 0.0
-        } else {
-            if (months < 6) 5.0 else 1.0
+        val datedHistory = history.mapNotNull { entry ->
+            parseHistoryInstant(entry.date, clock.zone)?.atZone(clock.zone)?.toLocalDate()?.let { it to entry }
         }
-
+        val oldestDate = datedHistory.minOfOrNull { it.first }
+            ?: return Triple(0.0, "Building baseline", "Keep logging sessions to establish a reliable training history.")
+        val months = ChronoUnit.MONTHS.between(oldestDate, LocalDate.now(clock)).coerceAtLeast(0)
+        val years = months / 12.0
+        val sessions = datedHistory.size
         val (label, tip) = when {
-            monthlyProgression > 3.0 || months < 6 ->
-                "Beginner" to "Linear progression works best — add weight to each session."
-            monthlyProgression < 0.5 && months > 18 ->
-                "Advanced" to "Periodization matters — vary intensity and volume week to week."
-            months > 36 ->
-                "Elite" to "Consistency and injury prevention are your highest priorities."
+            sessions < 12 || months < 3 ->
+                "Building baseline" to "Repeat key movements and progress only when technique and target reps are stable."
+            sessions < 50 || months < 12 ->
+                "Developing" to "Use small, repeatable load or rep increases while keeping recovery sustainable."
+            sessions < 150 || months < 36 ->
+                "Established" to "Review volume and performance trends before changing the program."
             else ->
-                "Intermediate" to "Block periodization: focus one quality per cycle (strength, volume, peak)."
+                "Highly experienced" to "Use your own response history to adjust volume, intensity and exercise selection."
         }
         return Triple(years, label, tip)
     }
 
     // ── Shared helpers ────────────────────────────────────────────────────────
 
-    private fun ageDays(iso: String): Long {
-        val d = parseHistoryInstant(iso)?.atZone(ZoneId.systemDefault())?.toLocalDate()
+    private fun ageDays(iso: String, clock: Clock): Long {
+        val d = parseHistoryInstant(iso, clock.zone)?.atZone(clock.zone)?.toLocalDate()
             ?: return Long.MAX_VALUE
-        return ChronoUnit.DAYS.between(d, LocalDate.now())
+        return ChronoUnit.DAYS.between(d, LocalDate.now(clock))
     }
 }

@@ -1,5 +1,8 @@
 package com.ironlog.app.ui.screens.onboarding.steps
 
+import com.ironlog.app.ui.theme.appGapDp
+import com.ironlog.app.ui.theme.appPadding
+import com.ironlog.app.ui.theme.appSpacedBy
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.Image
@@ -8,7 +11,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Text
+import com.ironlog.app.ui.theme.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -22,8 +25,9 @@ import com.ironlog.app.R
 import com.ironlog.app.ui.screens.onboarding.GlowButton
 import com.ironlog.app.ui.screens.onboarding.OnboardingConfig
 import com.ironlog.app.ui.screens.onboarding.ParticleField
-import com.ironlog.app.ui.screens.onboarding.SetupBadge
 import com.ironlog.app.ui.screens.onboarding.SetupReward
+import com.ironlog.app.ui.components.IronGradeBadge
+import com.ironlog.app.ui.components.ironGradeColor
 import kotlinx.coroutines.delay
 
 @Composable
@@ -57,7 +61,7 @@ fun Step8Complete(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(start = 32.dp, top = 28.dp, end = 32.dp, bottom = 64.dp)
+                    .appPadding(start = 32.dp, top = 28.dp, end = 32.dp, bottom = 64.dp)
                     .verticalScroll(rememberScrollState()),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
@@ -67,13 +71,14 @@ fun Step8Complete(
                     contentDescription = "Forge Fox holding a trophy",
                     modifier = Modifier.size(104.dp),
                 )
-                Spacer(Modifier.height(8.dp))
-                SetupBadge(
-                    code = slotBadge.take(2).uppercase(),
-                    accent = OnboardingConfig.accentBlue,
+                Spacer(Modifier.height(appGapDp(8.dp)))
+                IronGradeBadge(
+                    rank = slotBadge,
+                    accent = ironGradeColor(slotBadge),
+                    modifier = Modifier.size(92.dp),
                 )
 
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(appGapDp(10.dp)))
                 Text(
                     text = if (revealDone) "Provisional grade · $slotBadge" else "Preparing your ledger...",
                     color = OnboardingConfig.textMuted,
@@ -81,7 +86,7 @@ fun Step8Complete(
                     textAlign = TextAlign.Center,
                 )
 
-                Spacer(Modifier.height(20.dp))
+                Spacer(Modifier.height(appGapDp(20.dp)))
 
                 val displayName = userName.ifBlank { "Athlete" }
                 Text(
@@ -93,7 +98,7 @@ fun Step8Complete(
                     textAlign     = TextAlign.Center,
                 )
 
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(appGapDp(8.dp)))
 
                 Text(
                     text          = "Your training system is calibrated",
@@ -104,7 +109,7 @@ fun Step8Complete(
                     textAlign     = TextAlign.Center,
                 )
 
-                Spacer(Modifier.height(24.dp))
+                Spacer(Modifier.height(appGapDp(24.dp)))
 
                 Text(
                     text      = "Your first workouts will verify this baseline, tune recovery, and begin earning durable ledger XP.",
@@ -114,27 +119,27 @@ fun Step8Complete(
                     textAlign = TextAlign.Center,
                 )
 
-                Spacer(Modifier.height(22.dp))
+                Spacer(Modifier.height(appGapDp(22.dp)))
 
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(OnboardingConfig.surfaceDark, RoundedCornerShape(20.dp))
-                        .padding(18.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                        .appPadding(18.dp),
+                    verticalArrangement = appSpacedBy(12.dp),
                 ) {
                     SummaryLine("Goal", goalMode.toDisplayLabel())
                     SummaryLine("Progression", progressionStyle.toDisplayLabel())
                     SummaryLine("Weekly target", "$weeklyGoalDays days / week")
                     SummaryLine("Weight unit", weightUnit.uppercase())
                     SummaryLine("AI mode", intelligenceMode.toDisplayLabel())
-                    SummaryLine("Recovery data", if (healthConnectGranted) "Connected" else "Not connected")
+                    SummaryLine("Health context", if (healthConnectGranted) "Read-only access" else "Not connected")
                     SummaryLine("Reminders", if (notificationsGranted) "Enabled" else "Not enabled")
                 }
 
-                Spacer(Modifier.height(18.dp))
+                Spacer(Modifier.height(appGapDp(18.dp)))
                 SetupReward("Next: choose a starter plan or enter the app with an empty workspace", Modifier.fillMaxWidth())
-                Spacer(Modifier.height(18.dp))
+                Spacer(Modifier.height(appGapDp(18.dp)))
 
                 GlowButton(
                     text    = stringResource(R.string.onb_arise_cta),
@@ -157,7 +162,7 @@ private fun SummaryLine(label: String, value: String) {
             color = OnboardingConfig.textMuted,
             fontSize = 12.sp,
         )
-        Spacer(Modifier.width(16.dp))
+        Spacer(Modifier.width(appGapDp(16.dp)))
         Text(
             value,
             modifier = Modifier.weight(1f),

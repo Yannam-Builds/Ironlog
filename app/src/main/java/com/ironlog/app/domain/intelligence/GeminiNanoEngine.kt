@@ -1,10 +1,7 @@
 package com.ironlog.app.domain.intelligence
 
 import android.content.Context
-import com.google.ai.edge.aicore.DownloadConfig
-import com.google.ai.edge.aicore.GenerativeAIException
-import com.google.ai.edge.aicore.GenerativeModel
-import com.google.ai.edge.aicore.generationConfig
+import android.os.Build
 import com.ironlog.app.ui.model.HistoryEntry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -26,12 +23,41 @@ enum class NanoAvailability {
     UNSUPPORTED,
 }
 
+/**
+ * API-neutral contract implemented by the Android 12+ AICore adapter.
+ *
+ * This interface and the public facade deliberately contain no AICore types. The experimental
+ * AICore AAR declares minSdk 31, so loading one of its classes on API 26-30 is unsafe even though
+ * IronLog itself supports those releases.
+ */
+internal interface NanoRuntime {
+    val lastAvailabilityError: String
+
+    suspend fun checkAvailability(): NanoAvailability
+    suspend fun downloadModel()
+    suspend fun generate(prompt: String): String?
+}
+
+/** Pure gate kept separate so legacy-API behavior is regression-testable on the JVM. */
+internal object NanoRuntimeApiGate {
+    @JvmStatic
+    fun supports(apiLevel: Int): Boolean = apiLevel >= Build.VERSION_CODES.S
+
+    @JvmStatic
+    fun <T> loadIfSupported(apiLevel: Int, loader: () -> T): T? =
+        if (supports(apiLevel)) loader() else null
+}
+
 // ── Engine singleton ──────────────────────────────────────────────────────────
 
 object GeminiNanoEngine {
+    private const val AICORE_RUNTIME_CLASS =
+        "com.ironlog.app.domain.intelligence.AicoreNanoRuntime"
+    private const val LEGACY_API_MESSAGE = "Gemini Nano requires Android 12 (API 31) or newer."
 
-    // Lazy-init so we don't pay model-init cost unless the user enables APEX ENGINE.
-    @Volatile private var _model: GenerativeModel? = null
+    // The concrete adapter is reflectively loaded only after the API gate. Keeping its class name
+    // out of a type reference prevents ART from verifying the minSdk-31 AICore graph on API 26-30.
+    @Volatile private var _runtime: NanoRuntime? = null
 
     // Cached availability result — avoids repeated IPC probes from Settings + HomeScreen.
     @Volatile private var _cachedAvailability: NanoAvailability? = null
@@ -40,20 +66,25 @@ object GeminiNanoEngine {
     @Volatile var lastAvailabilityError: String = ""
         private set
 
-    private fun model(context: Context): GenerativeModel =
-        _model ?: synchronized(this) {
-            // Double-checked locking — avoids race where two coroutines both see null.
-            _model ?: run {
-                val config = generationConfig {
-                    this.context = context.applicationContext
-                    temperature = 0.7f
-                    topK = 40
-                    maxOutputTokens = 512
-                }
-                GenerativeModel(generationConfig = config, downloadConfig = DownloadConfig())
-                    .also { _model = it }
+    private fun runtime(context: Context): NanoRuntime? =
+        NanoRuntimeApiGate.loadIfSupported(Build.VERSION.SDK_INT) {
+            _runtime ?: synchronized(this) {
+                _runtime ?: createRuntime(context.applicationContext)?.also { _runtime = it }
             }
         }
+
+    private fun createRuntime(context: Context): NanoRuntime? = runCatching {
+        val runtimeClass = Class.forName(AICORE_RUNTIME_CLASS)
+        runtimeClass.getDeclaredConstructor(Context::class.java)
+            .newInstance(context) as NanoRuntime
+    }.onFailure { error ->
+        lastAvailabilityError = describeFailure(error)
+    }.getOrNull()
+
+    private fun describeFailure(error: Throwable): String {
+        val root = generateSequence(error) { it.cause }.last()
+        return "${root::class.simpleName}: ${root.message.orEmpty()}".trimEnd()
+    }
 
     // ── Availability ──────────────────────────────────────────────────────────
 
@@ -70,39 +101,51 @@ object GeminiNanoEngine {
      * (e.g. after enabling AICore in device settings or after a system update).
      */
     suspend fun checkAvailability(context: Context): NanoAvailability {
+        if (!NanoRuntimeApiGate.supports(Build.VERSION.SDK_INT)) {
+            lastAvailabilityError = LEGACY_API_MESSAGE
+            return NanoAvailability.UNSUPPORTED
+        }
         _cachedAvailability?.let { return it }
         return withContext(Dispatchers.IO) {
+            val runtime = runtime(context) ?: return@withContext NanoAvailability.UNSUPPORTED
             try {
-                model(context).prepareInferenceEngine()
-                lastAvailabilityError = ""
-                NanoAvailability.SUPPORTED.also { _cachedAvailability = it }
-            } catch (e: GenerativeAIException) {
-                lastAvailabilityError = "${e::class.simpleName}(code=${e.errorCode}): ${e.message}"
-                val msg = e.message.orEmpty()
-                when {
-                    // AICore service can't be bound → device doesn't ship AICore at all
-                    e.errorCode in listOf(601, 602, 603, 604, 605) -> NanoAvailability.UNSUPPORTED
-                    // "Required LLM feature not found" → AICore present but Google hasn't
-                    // pushed the Gemini Nano feature package to this device yet.
-                    // User needs a Google Play system update, not an in-app download.
-                    msg.contains("LLM feature not found", ignoreCase = true) ||
-                    msg.contains("NOT_AVAILABLE", ignoreCase = true) -> NanoAvailability.NEEDS_SYSTEM_UPDATE
-                    // Feature registered but not yet downloaded
-                    msg.contains("downloading", ignoreCase = true) -> NanoAvailability.NEEDS_DOWNLOAD
-                    else -> NanoAvailability.NEEDS_SYSTEM_UPDATE
+                runtime.checkAvailability().also { availability ->
+                    lastAvailabilityError = runtime.lastAvailabilityError
+                    if (availability == NanoAvailability.SUPPORTED) {
+                        _cachedAvailability = availability
+                    }
                 }
-            } catch (e: Exception) {
-                lastAvailabilityError = "${e::class.simpleName}: ${e.message}"
-                NanoAvailability.NEEDS_SYSTEM_UPDATE
+            } catch (error: Throwable) {
+                lastAvailabilityError = describeFailure(error)
+                NanoAvailability.UNSUPPORTED
             }
         }
     }
 
     suspend fun downloadModel(context: Context): Result<Unit> = withContext(Dispatchers.IO) {
-        runCatching {
-            model(context).prepareInferenceEngine()
-            _cachedAvailability = NanoAvailability.SUPPORTED
+        if (!NanoRuntimeApiGate.supports(Build.VERSION.SDK_INT)) {
+            return@withContext Result.failure(UnsupportedOperationException(LEGACY_API_MESSAGE))
         }
+        val runtime = runtime(context)
+            ?: return@withContext Result.failure(IllegalStateException(lastAvailabilityError))
+        runCatching {
+            runtime.downloadModel()
+            _cachedAvailability = NanoAvailability.SUPPORTED
+            lastAvailabilityError = ""
+        }.onFailure { error -> lastAvailabilityError = describeFailure(error) }
+    }
+
+    private suspend fun generateOrFallback(
+        context: Context,
+        prompt: String,
+        fallback: String,
+    ): String {
+        val runtime = runtime(context) ?: return fallback
+        return runCatching { runtime.generate(prompt) }
+            .onFailure { error -> lastAvailabilityError = describeFailure(error) }
+            .getOrNull()
+            ?.takeIf { it.isNotBlank() }
+            ?: fallback
     }
 
     // ── Query functions ───────────────────────────────────────────────────────
@@ -120,8 +163,11 @@ Based on these muscle group recovery scores, give ONE actionable recommendation 
 Recovery: $readinessText
 Rules: under 60 words, plain text only, no markdown, no bullet points."""
 
-        runCatching { model(context).generateContent(prompt).text?.trim() }
-            .getOrNull() ?: "Train the most recovered groups today and keep volume moderate."
+        generateOrFallback(
+            context = context,
+            prompt = prompt,
+            fallback = "Train the most recovered groups today and keep volume moderate.",
+        )
     }
 
     suspend fun askSplitSuggestion(
@@ -148,8 +194,11 @@ Suggest a $weeklyGoalDays-day weekly split optimised for $goal in 3–4 sentence
 The athlete has recently trained: $recentMuscles.
 Be specific (Push/Pull/Legs, Upper/Lower, etc.). Under 80 words. Plain text only, no markdown."""
 
-        runCatching { model(context).generateContent(prompt).text?.trim() }
-            .getOrNull() ?: "A Push/Pull/Legs split repeated across $weeklyGoalDays days suits your goal well."
+        generateOrFallback(
+            context = context,
+            prompt = prompt,
+            fallback = "A Push/Pull/Legs split repeated across $weeklyGoalDays days suits your goal well.",
+        )
     }
 
     suspend fun askDayEvaluation(
@@ -169,8 +218,11 @@ Be specific (Push/Pull/Legs, Upper/Lower, etc.). Under 80 words. Plain text only
 Evaluate this "$dayName" session for $goal: $exList.
 Note any imbalances or missing movement patterns in 2–3 sentences. Under 70 words. Plain text only."""
 
-        runCatching { model(context).generateContent(prompt).text?.trim() }
-            .getOrNull() ?: "The selection looks balanced. Ensure compound movements come first for best results."
+        generateOrFallback(
+            context = context,
+            prompt = prompt,
+            fallback = "The selection looks balanced. Ensure compound movements come first for best results.",
+        )
     }
 
     suspend fun askProgressionExplanation(
@@ -179,12 +231,14 @@ Note any imbalances or missing movement patterns in 2–3 sentences. Under 70 wo
         recentWeightKg: Double,
         recentReps: Int,
         trend: String,
+        policy: ResolvedProgressionPolicy = ResolvedProgressionPolicy.conservativeDefault(),
     ): String = withContext(Dispatchers.IO) {
-        val prompt = """You are a concise personal trainer AI inside the IronLog workout app.
-$exerciseName: working weight ${recentWeightKg}kg × $recentReps reps, progress trend is $trend.
-In 1–2 sentences explain the recommended next progression step. Under 50 words. Plain text only."""
+        val prompt = buildProgressionExplanationPrompt(exerciseName, recentWeightKg, recentReps, trend, policy)
 
-        runCatching { model(context).generateContent(prompt).text?.trim() }
-            .getOrNull() ?: "Aim to add a small amount of weight or an extra rep next session."
+        generateOrFallback(
+            context = context,
+            prompt = prompt,
+            fallback = "Use ${policy.label.lowercase()}: confirm the planned reps and effort target first, then use only the smallest policy-consistent rep or load change.",
+        )
     }
 }

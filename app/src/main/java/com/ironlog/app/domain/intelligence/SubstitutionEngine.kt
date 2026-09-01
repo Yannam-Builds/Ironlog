@@ -19,6 +19,7 @@ object SubstitutionEngine {
         filters: ExerciseFilters,
         limit: Int,
     ): AlternativesResult {
+        if (limit <= 0) return AlternativesResult.EMPTY
         val pool = candidates
             .asSequence()
             .filter { it.id != exercise.id }
@@ -27,17 +28,20 @@ object SubstitutionEngine {
             .filter { filters.category?.let { c -> it.category.equals(c, true) } ?: true }
             .toList()
         val scored = pool.map { candidate ->
-            val muscleScore = if (candidate.primaryMuscle.equals(exercise.primaryMuscle, true)) 3 else 0
-            val equipScore = if (candidate.equipment.equals(exercise.equipment, true)) 2 else 0
-            val patternScore = if (candidate.movementPattern.equals(exercise.movementPattern, true)) 2 else 0
-            val categoryScore = if (candidate.category.equals(exercise.category, true)) 1 else 0
+            val muscleScore = if (knownMatch(candidate.primaryMuscle, exercise.primaryMuscle)) 3 else 0
+            val equipScore = if (knownMatch(candidate.equipment, exercise.equipment)) 2 else 0
+            val patternScore = if (knownMatch(candidate.movementPattern, exercise.movementPattern)) 2 else 0
+            val categoryScore = if (knownMatch(candidate.category, exercise.category)) 1 else 0
             val total = muscleScore + equipScore + patternScore + categoryScore
             candidate to total
         }.sortedByDescending { it.second }
-        val best = scored.filter { it.second >= 5 }.map { it.first }.take(limit)
-        val sameMuscle = scored.filter { it.first.primaryMuscle.equals(exercise.primaryMuscle, true) }.map { it.first }.take(limit)
-        val sameEquipment = scored.filter { it.first.equipment.equals(exercise.equipment, true) }.map { it.first }.take(limit)
+        val best = scored.filter { it.second >= 5 && knownMatch(it.first.trackingType, exercise.trackingType) }.map { it.first }.take(limit)
+        val sameMuscle = scored.filter { knownMatch(it.first.primaryMuscle, exercise.primaryMuscle) }.map { it.first }.take(limit)
+        val sameEquipment = scored.filter { knownMatch(it.first.equipment, exercise.equipment) }.map { it.first }.take(limit)
         val fallback = scored.map { it.first }.take(limit)
         return AlternativesResult(best, sameMuscle, sameEquipment, fallback)
     }
+
+    private fun knownMatch(a: String?, b: String?): Boolean =
+        !a.isNullOrBlank() && !b.isNullOrBlank() && a.trim().equals(b.trim(), ignoreCase = true)
 }

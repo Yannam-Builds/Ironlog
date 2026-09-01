@@ -10,8 +10,6 @@ data class ProgramTemplate(
     val category: String,
     val description: String,
     val days: List<FullPlanDay>,
-    val difficulty: String = "Intermediate",
-    val durationWeeks: Int = 4,
 )
 
 val PROGRAM_TEMPLATES: List<ProgramTemplate> = listOf(

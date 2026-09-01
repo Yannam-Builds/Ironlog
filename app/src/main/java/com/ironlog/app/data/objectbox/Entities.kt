@@ -147,7 +147,8 @@ class WorkoutEntity {
     var completedAt: Long? = null
     var durationSeconds: Int = 0
     var rating: Double? = null
-    var notes: String = ""
+    // Nullable because existing ObjectBox rows predate this additive property.
+    var notes: String? = ""
     @Index var status: String = "active"
     /** True when this workout came from an external/legacy import rather than local logging. */
     var imported: Boolean = false
@@ -172,6 +173,11 @@ class WorkoutExerciseEntity {
     @Index var orderIndex: Int = 0
     var supersetGroup: String = ""
     var notes: String = ""
+    /**
+     * Versioned immutable metadata for completed history. Nullable for the additive ObjectBox
+     * migration and while a workout is still active; completion freezes the current exercise.
+     */
+    var exerciseSnapshotJson: String? = null
     var createdAt: Long = 0L
     var updatedAt: Long = 0L
 
@@ -198,6 +204,9 @@ class WorkoutSetEntity {
     var isDropset: Boolean = false
     var isAmrap: Boolean = false
     var toFailure: Boolean = false
+    // Nullable for additive ObjectBox migrations: rows written before this property existed
+    // hydrate it as null. Startup normalization persists the canonical empty value.
+    var notes: String? = ""
     var completedAt: Long? = null
     var createdAt: Long = 0L
     var updatedAt: Long = 0L

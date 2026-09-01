@@ -1,6 +1,10 @@
 ﻿package com.ironlog.app.ui.screens.stats
 
+import com.ironlog.app.ui.theme.appGapDp
+import com.ironlog.app.ui.theme.appPadding
+import com.ironlog.app.ui.theme.appSpacedBy
 import android.app.Application
+import com.ironlog.app.IronLogApplication
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -38,16 +42,15 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.Text
+import com.ironlog.app.ui.theme.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.material3.AlertDialog
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -74,6 +77,7 @@ import com.ironlog.app.ui.viewmodel.GamificationViewModel
 import com.ironlog.app.ui.viewmodel.GamificationViewModelFactory
 import com.ironlog.app.ui.viewmodel.AppDataViewModel
 import com.ironlog.app.ui.viewmodel.StatsViewModel
+import com.ironlog.app.ui.screens.settings.commitHistoryMutationAcrossSurfaces
 import com.ironlog.app.util.formatWeightFromKg
 import com.valentinilk.shimmer.shimmer
 import java.time.LocalDate
@@ -81,8 +85,11 @@ import java.time.ZoneId
 import java.time.Instant
 import com.ironlog.app.domain.gamification.parseHistoryInstant
 import kotlin.math.round
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import com.ironlog.app.ui.screens.home.getStreak
+import timber.log.Timber
 
 @Composable
 fun StatsScreen(
@@ -97,47 +104,51 @@ fun StatsScreen(
     onOpenStatusWindow: () -> Unit = {},
 ) {
     val c = useTheme()
-    val state by vm.state.collectAsState()
+    val state by vm.state.collectAsStateWithLifecycle()
     val pbEntries = state.personalBests
-    val scope = rememberCoroutineScope()
     var showClearPbsConfirm by remember { mutableStateOf(false) }
+    var clearPbsPending by remember { mutableStateOf(false) }
+    var clearPbsError by remember { mutableStateOf<String?>(null) }
     var pbShowLimit by remember { mutableIntStateOf(25) }
 
     val appVm: AppDataViewModel = viewModel()
-    val appState by appVm.state.collectAsState()
+    val appState by appVm.state.collectAsStateWithLifecycle()
     val cloudSettings = appState.settings
     val context = LocalContext.current
+    val application = remember(context) { context.applicationContext as IronLogApplication }
+    val acceptedMutationCount by application.acceptedMutationCount.collectAsStateWithLifecycle()
+    val historyMutationPending = acceptedMutationCount > 0
     val gamificationVm: GamificationViewModel = viewModel(
         factory = GamificationViewModelFactory(
             context.applicationContext as Application,
             ObjectBox.store,
         )
     )
-    val gamState by gamificationVm.uiState.collectAsState()
+    val gamState by gamificationVm.uiState.collectAsStateWithLifecycle()
     LaunchedEffect(appState.history, appState.settings.weeklyGoalDays) {
         gamificationVm.refreshFromHistory(appState.history, appState.settings.weeklyGoalDays)
     }
-    val cloudApiKey = remember(cloudSettings.cloudAiProviderPreset) {
+    val credentialRevision by CloudAiKeyStore.revision.collectAsStateWithLifecycle()
+    val cloudApiKey = remember(credentialRevision, cloudSettings.cloudAiProviderPreset, cloudSettings.intelligenceMode, cloudSettings.cloudAiBaseUrl, cloudSettings.cloudAiModelName) {
         CloudAiKeyStore.load(context, cloudSettings.cloudAiProviderPreset)
     }
     val cloudConfigured = cloudApiKey.isNotBlank()
         && cloudSettings.cloudAiBaseUrl.isNotBlank()
         && cloudSettings.cloudAiModelName.isNotBlank()
-
-    var statsSummaryText by remember { mutableStateOf<String?>(null) }
-    var statsSummaryLoading by remember { mutableStateOf(cloudConfigured) }
-    var statsSummaryVersion by remember { mutableIntStateOf(0) }
-
-    LaunchedEffect(statsSummaryVersion) {
-        if (!cloudConfigured) return@LaunchedEffect
-        statsSummaryLoading = true
+    val cloudEnabled = cloudSettings.intelligenceMode == "cloud_ai" && cloudConfigured
+    val statsSummary = CloudStatsSummaryHost(
+        enabled = cloudEnabled,
+        requestKey = listOf(cloudSettings.cloudAiProviderPreset, cloudSettings.cloudAiBaseUrl,
+            cloudSettings.cloudAiModelName, cloudSettings.cloudAiApiFormat, cloudApiKey,
+            state.history, state.streak, state.totalSets, state.avgDurationMin, cloudSettings.weightUnit),
+        load = {
         val topExercise = state.history
             .flatMap { it.exercises }
             .groupingBy { it.name }
             .eachCount()
             .maxByOrNull { it.value }
             ?.key ?: "your main lift"
-        statsSummaryText = CloudAiEngine.askStatsSummary(
+        CloudAiEngine.askStatsSummary(
             baseUrl        = cloudSettings.cloudAiBaseUrl,
             apiKey         = cloudApiKey,
             modelName      = cloudSettings.cloudAiModelName,
@@ -149,8 +160,8 @@ fun StatsScreen(
             topExercise    = topExercise,
             weightUnit     = cloudSettings.weightUnit,
         )
-        statsSummaryLoading = false
-    }
+        },
+    )
     var chartRange by remember { mutableStateOf("14D") }
     val rangedChartPoints = remember(state.history, chartRange) {
         val datestamps = state.history.map { it.date.substringBefore('T') }
@@ -190,7 +201,7 @@ fun StatsScreen(
 
     LazyColumn(
         Modifier.fillMaxSize().background(c.bg).statusBarsPadding(),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+        verticalArrangement = com.ironlog.app.ui.theme.appCardSpacedBy(14.dp),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 120.dp),
     ) {
         // FIXED: 6 + 22 — PageHeader for tab screen
@@ -206,7 +217,7 @@ fun StatsScreen(
                 Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 12.dp, vertical = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                horizontalArrangement = appSpacedBy(10.dp),
             ) {
                 QuickNavButton("CALENDAR", Icons.Outlined.CalendarMonth, Modifier.weight(1f), onOpenCalendar)
                 QuickNavButton("VOLUME", Icons.Outlined.Analytics, Modifier.weight(1f), onOpenVolumeAnalytics)
@@ -215,8 +226,8 @@ fun StatsScreen(
         }
         item {
             Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+                horizontalArrangement = appSpacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth().appPadding(horizontal = 12.dp),
             ) {
                 StatCard("Sessions", state.history.size.toString(), Modifier.weight(1f))
                 StatCard("Streak", gamState.dailyStreakDays.toString(), Modifier.weight(1f))
@@ -232,20 +243,20 @@ fun StatsScreen(
             )
         }
         // ── Cloud AI stats summary ────────────────────────────────────────
-        if (cloudConfigured) {
+        if (cloudEnabled) {
             item {
                 AiStatsSummaryCard(
-                    isLoading    = statsSummaryLoading,
-                    text         = statsSummaryText,
+                    isLoading    = statsSummary.loading,
+                    text         = statsSummary.text,
                     displayName  = cloudSettings.cloudAiDisplayName,
-                    onRegenerate = { statsSummaryVersion++ },
+                    onRegenerate = statsSummary.regenerate,
                 )
             }
         }
         item {
-            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
+            Column(Modifier.fillMaxWidth().appPadding(horizontal = 16.dp, vertical = 4.dp)) {
                 Text("PERFORMANCE STATS", color = c.muted, fontSize = IronLogType.eyebrow.fontSize.sp, fontWeight = FontWeight(IronLogType.eyebrow.fontWeight))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().padding(top = 10.dp)) {
+                Row(horizontalArrangement = appSpacedBy(8.dp), modifier = Modifier.fillMaxWidth().appPadding(top = 10.dp)) {
                     MiniAction("RECOVERY", Modifier.weight(1f), onOpenRecoveryMap)
                     CoachMiniAction(Modifier.weight(1f), onOpenTrainingIntelligence)
                     MiniAction("PROGRESS", Modifier.weight(1f), onOpenProgressPhotos)
@@ -257,9 +268,9 @@ fun StatsScreen(
                 shape = RoundedCornerShape(IronLogRadius.xl.dp),
                 colors = CardDefaults.cardColors(containerColor = c.card),
                 border = androidx.compose.foundation.BorderStroke(1.dp, c.cardBorder),
-                modifier = Modifier.padding(horizontal = 16.dp),
+                modifier = Modifier.appPadding(horizontal = 16.dp),
             ) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(Modifier.appPadding(16.dp), verticalArrangement = appSpacedBy(12.dp)) {
                     Text(
                         "14-DAY FREQUENCY",
                         color = c.text,
@@ -280,9 +291,9 @@ fun StatsScreen(
                 shape = RoundedCornerShape(IronLogRadius.xl.dp),
                 colors = CardDefaults.cardColors(containerColor = c.card),
                 border = androidx.compose.foundation.BorderStroke(1.dp, c.cardBorder),
-                modifier = Modifier.padding(horizontal = 16.dp),
+                modifier = Modifier.appPadding(horizontal = 16.dp),
             ) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(Modifier.appPadding(16.dp), verticalArrangement = appSpacedBy(12.dp)) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             when (chartRange) { "14D" -> "LAST 14 DAYS"; "30D" -> "LAST 30 DAYS"; "90D" -> "LAST 90 DAYS"; else -> "ALL TIME" },
@@ -293,7 +304,7 @@ fun StatsScreen(
                         Text("sessions / day", color = c.muted, fontSize = IronLogType.micro.fontSize.sp)
                     }
                     // Time-range filter chips (GAP-02)
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(horizontalArrangement = appSpacedBy(6.dp)) {
                         listOf("14D", "30D", "90D", "All").forEach { range ->
                             val active = chartRange == range
                             Box(
@@ -343,7 +354,7 @@ fun StatsScreen(
                                     )
                                 }
                             }
-                            Spacer(Modifier.width(6.dp))
+                            Spacer(Modifier.width(appGapDp(6.dp)))
                             // The chart itself
                             SessionLineChart(
                                 points = rangedChartPoints,
@@ -356,7 +367,7 @@ fun StatsScreen(
                         }
                         // X-axis date labels (first, middle, last)
                         Row(
-                            Modifier.fillMaxWidth().padding(start = 34.dp),
+                            Modifier.fillMaxWidth().appPadding(start = 34.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                         ) {
                             val firstLabel = rangedChartPoints.firstOrNull()?.label.orEmpty()
@@ -367,7 +378,7 @@ fun StatsScreen(
                                 if (lbl.isNotBlank()) {
                                     Text(lbl, color = c.muted, fontSize = IronLogType.micro.fontSize.sp)
                                 } else {
-                                    Spacer(Modifier.width(1.dp))
+                                    Spacer(Modifier.width(appGapDp(1.dp)))
                                 }
                             }
                         }
@@ -376,24 +387,27 @@ fun StatsScreen(
             }
         }
         item {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+            Row(Modifier.fillMaxWidth().appPadding(horizontal = 16.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(
                     "Personal Bests",
                     color = c.text,
                     fontWeight = FontWeight(IronLogType.title.fontWeight),
                     fontSize = IronLogType.title.fontSize.sp,
                 )
-                TextButton(onClick = { showClearPbsConfirm = true }) { Text("Clear") }
+                TextButton(
+                    enabled = !historyMutationPending,
+                    onClick = { showClearPbsConfirm = true },
+                ) { Text("Clear") }
             }
         }
         if (pbEntries.isEmpty()) {
             item {
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(appGapDp(8.dp)))
                 Text(
                     "No PRs yet. Log your first workout and claim them.",
                     color = c.muted,
                     fontSize = IronLogType.body.fontSize.sp,
-                    modifier = Modifier.padding(horizontal = 16.dp),
+                    modifier = Modifier.appPadding(horizontal = 16.dp),
                 )
             }
         }
@@ -412,7 +426,7 @@ fun StatsScreen(
                     // FIXED: 26 — enriched PB: date + trend delta
                     androidx.compose.foundation.layout.Column(
                         Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                        verticalArrangement = appSpacedBy(2.dp),
                     ) {
                         Text(
                             pb.exerciseName,
@@ -435,7 +449,7 @@ fun StatsScreen(
                         )
                     }
                     // Right: PR weight + trend arrow
-                    androidx.compose.foundation.layout.Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    androidx.compose.foundation.layout.Column(horizontalAlignment = Alignment.End, verticalArrangement = appSpacedBy(2.dp)) {
                         Text(
                             "PR ${formatWeightFromKg(pb.bestWeight, state.weightUnit)}",
                             color = c.accent,
@@ -497,9 +511,9 @@ fun StatsScreen(
                     shape = RoundedCornerShape(IronLogRadius.lg.dp),
                     colors = CardDefaults.cardColors(containerColor = c.card),
                     border = androidx.compose.foundation.BorderStroke(1.dp, c.cardBorder),
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    modifier = Modifier.fillMaxWidth().appPadding(horizontal = 16.dp),
                 ) {
-                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Column(Modifier.appPadding(16.dp), verticalArrangement = appSpacedBy(10.dp)) {
                         Text(
                             "Top Exercises by Volume",
                             color = c.text,
@@ -509,7 +523,7 @@ fun StatsScreen(
                         topExercises.forEachIndexed { index, (name, totalKg) ->
                             Row(
                                 Modifier.fillMaxWidth().clickable { onOpenExerciseProgress(name) },
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                horizontalArrangement = appSpacedBy(12.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Text(
@@ -543,18 +557,51 @@ fun StatsScreen(
 
     if (showClearPbsConfirm) {
         AlertDialog(
-            onDismissRequest = { showClearPbsConfirm = false },
+            onDismissRequest = { if (!clearPbsPending) showClearPbsConfirm = false },
             containerColor = c.card,
             title = { Text("Clear Personal Bests?", color = c.text) },
-            text = { Text("This will permanently remove all PR records. This cannot be undone.", color = c.muted) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("This starts a new PR baseline now. Workout history stays intact, and future completed sets can establish new records.", color = c.muted)
+                    clearPbsError?.let { Text(it, color = c.danger) }
+                }
+            },
             confirmButton = {
-                TextButton(onClick = {
-                    scope.launch { vm.clearPbs() }
-                    showClearPbsConfirm = false
-                }) { Text("CLEAR ALL", color = c.danger, fontWeight = FontWeight.Bold) }
+                TextButton(
+                    enabled = !clearPbsPending && !historyMutationPending,
+                    onClick = {
+                        clearPbsPending = true
+                        clearPbsError = null
+                        application.launchAcceptedMutation {
+                            try {
+                                val outcome = commitHistoryMutationAcrossSurfaces(
+                                    context = context,
+                                    viewModel = appVm,
+                                ) { appVm.clearPbsNow() }
+                                withContext(Dispatchers.Main) {
+                                    if (outcome.mutationSucceeded) {
+                                        showClearPbsConfirm = false
+                                    } else {
+                                        Timber.w(outcome.mutationError, "Could not reset PR baseline from Stats")
+                                        clearPbsError = "The PR baseline could not be reset. Try again."
+                                    }
+                                }
+                            } catch (cancelled: CancellationException) {
+                                throw cancelled
+                            } catch (error: Exception) {
+                                Timber.w(error, "Unexpected failure while resetting PR baseline from Stats")
+                                withContext(Dispatchers.Main) {
+                                    clearPbsError = "The PR baseline could not be reset. Try again."
+                                }
+                            } finally {
+                                withContext(Dispatchers.Main) { clearPbsPending = false }
+                            }
+                        }
+                    },
+                ) { Text("CLEAR ALL", color = c.danger, fontWeight = FontWeight.Bold) }
             },
             dismissButton = {
-                TextButton(onClick = { showClearPbsConfirm = false }) { Text("CANCEL", color = c.muted) }
+                TextButton(enabled = !clearPbsPending, onClick = { showClearPbsConfirm = false }) { Text("CANCEL", color = c.muted) }
             },
         )
     }
@@ -574,16 +621,16 @@ private fun AiStatsSummaryCard(
     Column(
         Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp)
+            .appPadding(horizontal = 16.dp)
             .clip(RoundedCornerShape(IronLogRadius.lg.dp))
             .background(cardBg)
             .border(1.dp, accentBorder, RoundedCornerShape(IronLogRadius.lg.dp))
-            .padding(14.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+            .appPadding(14.dp),
+        verticalArrangement = appSpacedBy(8.dp),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            horizontalArrangement = appSpacedBy(6.dp),
         ) {
             Icon(Icons.Outlined.Cloud, contentDescription = null, tint = c.accent, modifier = Modifier.size(13.dp))
             Text(
@@ -595,7 +642,7 @@ private fun AiStatsSummaryCard(
             )
         }
         if (isLoading) {
-            Column(Modifier.shimmer(), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            Column(Modifier.shimmer(), verticalArrangement = appSpacedBy(5.dp)) {
                 repeat(2) { idx ->
                     Box(
                         Modifier
@@ -617,7 +664,7 @@ private fun AiStatsSummaryCard(
             Row(
                 Modifier.clickable(onClick = onRegenerate).padding(vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                horizontalArrangement = appSpacedBy(4.dp),
             ) {
                 Icon(Icons.Outlined.Refresh, null, tint = c.muted, modifier = Modifier.size(11.dp))
                 Text("Regenerate", color = c.muted, fontSize = IronLogType.micro.fontSize.sp)
@@ -645,7 +692,7 @@ private fun StatusWindowStatsCard(
             .padding(horizontal = 16.dp)
             .clickable(onClick = onOpen),
     ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = appSpacedBy(12.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -720,11 +767,11 @@ private fun FrequencyBars(
     }
     val maxCount = counts.maxOfOrNull { it.second }?.coerceAtLeast(1) ?: 1
 
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = appSpacedBy(4.dp)) {
         counts.forEach { (date, count) ->
             Column(
                 modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = appSpacedBy(6.dp),
                 horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
             ) {
                 Box(
@@ -768,7 +815,7 @@ private fun QuickNavButton(
             .clickable(onClick = onClick)
             .padding(vertical = 12.dp, horizontal = 8.dp),
         horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+        verticalArrangement = appSpacedBy(4.dp),
     ) {
         Icon(icon, contentDescription = null, tint = c.accent)
         Text(label, color = c.text, fontSize = IronLogType.micro.fontSize.sp, fontWeight = FontWeight(IronLogType.button.fontWeight))
@@ -810,7 +857,7 @@ private fun CoachMiniAction(modifier: Modifier, onClick: () -> Unit) {
             .padding(horizontal = 10.dp, vertical = 8.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(horizontalArrangement = appSpacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("✦", color = c.accent, fontSize = IronLogType.micro.fontSize.sp)
             Text("COACH", color = c.accent, fontSize = IronLogType.meta.fontSize.sp, fontWeight = FontWeight(IronLogType.button.fontWeight))
         }
@@ -944,7 +991,7 @@ private fun StatCard(label: String, value: String, modifier: Modifier = Modifier
         colors = CardDefaults.cardColors(containerColor = c.surface),
         border = androidx.compose.foundation.BorderStroke(1.dp, c.cardBorder),
     ) {
-        Column(Modifier.padding(12.dp)) {
+        Column(Modifier.appPadding(12.dp)) {
             Text(
                 label,
                 color = c.muted,

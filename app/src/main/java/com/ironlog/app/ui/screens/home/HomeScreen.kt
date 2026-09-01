@@ -1,5 +1,8 @@
 ﻿package com.ironlog.app.ui.screens.home
 
+import com.ironlog.app.ui.theme.appGapDp
+import com.ironlog.app.ui.theme.appPadding
+import com.ironlog.app.ui.theme.appSpacedBy
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -37,31 +40,35 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.Text
+import com.ironlog.app.ui.theme.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.layout
 import androidx.compose.ui.res.painterResource
-import com.ironlog.app.ui.rememberAnimatedCardBrush
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import com.ironlog.app.ui.animatedCardShine
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ironlog.app.data.repository.BodyMeasurementRepository
 import com.ironlog.app.ui.context.useTheme
 import com.ironlog.app.ui.model.HistoryEntry
 import com.ironlog.app.ui.model.UiPlanDay
 import com.ironlog.app.ui.components.IronGradeBadge
+import com.ironlog.app.ui.components.AchievementBadge
 import com.ironlog.app.ui.components.ironGradeColor
 import com.ironlog.app.ui.theme.IronLogRadius
 import com.ironlog.app.ui.theme.IronLogThemeTokens
@@ -69,6 +76,8 @@ import com.ironlog.app.ui.theme.IronLogType
 import com.ironlog.app.ui.viewmodel.AppDataViewModel
 import com.ironlog.app.domain.intelligence.RecoveryReadinessEngine
 import com.ironlog.app.domain.intelligence.TrainingIntelligenceEngine
+import com.ironlog.app.domain.intelligence.TrainingIntelligenceProfile
+import com.ironlog.app.domain.intelligence.TrainingDayPreferences
 import com.ironlog.app.domain.intelligence.WorkoutSuggestionEngine
 import android.app.Application
 import androidx.compose.animation.animateColorAsState
@@ -97,25 +106,22 @@ import androidx.compose.foundation.lazy.items as lazyItems
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
-import com.ironlog.app.data.health.BiometricSnapshot
-import com.ironlog.app.data.health.HealthConnectRepository
 import com.ironlog.app.data.repository.SettingsRepository
+import com.ironlog.app.data.repository.ProgressionPolicySnapshot
+import com.ironlog.app.data.repository.ProgressionPolicyStore
 import com.ironlog.app.domain.gamification.DailyProofStatus
 import com.ironlog.app.domain.gamification.IronGrade
 import com.ironlog.app.domain.badges.BadgeDefinitions
 import com.ironlog.app.domain.intelligence.ManualRecoveryInput
+import com.ironlog.app.domain.intelligence.ProgressionAction
+import com.ironlog.app.domain.intelligence.ProgressionAdvice
+import com.ironlog.app.domain.intelligence.ProgressionRecommendationEngine
+import com.ironlog.app.domain.intelligence.ResolvedProgressionPolicy
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.Dispatchers
 import kotlinx.serialization.json.Json
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.runtime.mutableLongStateOf
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
-import androidx.health.connect.client.PermissionController
-import com.ironlog.app.ui.screens.settings.HealthConnectPermissionSheet
 import com.ironlog.app.ui.screens.intelligence.ApexEngineCard
 import com.ironlog.app.ui.screens.intelligence.CloudAiCard
 import com.ironlog.app.ui.screens.recovery.RecoveryHeatmapCard
@@ -125,6 +131,7 @@ import com.ironlog.app.ui.screens.workout.parseRepTarget
 fun HomeScreen(
     vm: AppDataViewModel = viewModel(),
     onStartWorkout: (planId: String, dayId: String) -> Unit = { _, _ -> },
+    onStartEmptyWorkout: () -> Unit = {},
     onOpenBodyWeight: () -> Unit = {},
     onOpenRecovery: () -> Unit = {},
     onOpenTrainingIntelligence: () -> Unit = {},
@@ -143,131 +150,104 @@ fun HomeScreen(
             ObjectBox.store,
         )
     )
-    val gamState by gamificationVm.uiState.collectAsState()
-    val state by vm.state.collectAsState()
-    LaunchedEffect(state.history, state.settings.weeklyGoalDays) {
-        gamificationVm.refreshFromHistory(state.history, state.settings.weeklyGoalDays)
-    }
+    val nowEpochMs by com.ironlog.app.ui.state.rememberPresentationTime()
+    val gamState by gamificationVm.uiState.collectAsStateWithLifecycle()
+    val state by vm.state.collectAsStateWithLifecycle()
     var latestBodyweight by remember { mutableStateOf<Double?>(null) }
     // FIXED: 10 — also fetch date and weekly delta for Body Weight card
     var latestBodyweightDate by remember { mutableStateOf<String?>(null) }
     var weeklyWeightDelta by remember { mutableStateOf<Double?>(null) }
     val bodyRepo = remember { BodyMeasurementRepository() }
-    LaunchedEffect(Unit) {
-        latestBodyweight = runCatching { bodyRepo.getLatestBodyweight() }.getOrNull()
+    val bodyMeasurements by remember(bodyRepo) { bodyRepo.getBodyMeasurementsFlow() }.collectAsStateWithLifecycle(initialValue = emptyList())
+    LaunchedEffect(bodyMeasurements, nowEpochMs) {
+            latestBodyweight = runCatching { bodyRepo.getCurrentBodyweightKg() }.getOrNull()
         latestBodyweightDate = runCatching { bodyRepo.getLatestBodyweightDate() }.getOrNull()
         weeklyWeightDelta = runCatching { bodyRepo.getWeeklyBodyweightDelta() }.getOrNull()
     }
 
-    // Active workout live state — polls settings to check if a workout is in progress
     val homeSettingsRepo = remember { SettingsRepository() }
-    var activeWorkoutDayName by remember { mutableStateOf<String?>(null) }
-    var activeWorkoutStartMs by remember { mutableLongStateOf(0L) }
-    var manualRecoveryInput by remember { mutableStateOf<ManualRecoveryInput?>(null) }
-    var painFlags by remember { mutableStateOf(setOf<String>()) }
-    val painRegions = remember { listOf("Push", "Pull", "Legs", "Core", "Arms", "Shoulders") }
-    LaunchedEffect(Unit) {
-        while (true) {
-            val (dayName, startMs) = withContext(Dispatchers.IO) {
-                val dn = homeSettingsRepo.getString("active_workout_day_name")
-                val sm = homeSettingsRepo.getString("active_workout_start_ms")?.toLongOrNull() ?: 0L
-                dn to sm
-            }
-            val nextDayName = if (dayName.isNullOrBlank()) null else dayName
-            if (activeWorkoutDayName != nextDayName) {
-                activeWorkoutDayName = nextDayName
-            }
-            if (activeWorkoutStartMs != startMs) {
-                activeWorkoutStartMs = startMs
-            }
-            delay(1500)
-        }
-    }
-    LaunchedEffect(Unit) {
-        while (true) {
-            val (recovery, pain) = withContext(Dispatchers.IO) {
-                val r = homeSettingsRepo.getString("manual_recovery_input")
-                    ?.let { raw -> runCatching { Json.decodeFromString(ManualRecoveryInput.serializer(), raw) }.getOrNull() }
-                val p = painRegions
-                    .filter { region -> homeSettingsRepo.getString("pain_flag_${region}") == "true" }
-                    .toSet()
-                r to p
-            }
-            manualRecoveryInput = recovery
-            painFlags = pain
-            delay(1200)
-        }
-    }
-
-    // Health Connect — biometric enrichment for recovery readiness
-    val healthRepo = remember { HealthConnectRepository(context) }
-    val coroutineScope = rememberCoroutineScope()
-    var showHealthConnectSheet by remember { mutableStateOf(false) }
-    var biometricSnapshot: BiometricSnapshot by remember { mutableStateOf(BiometricSnapshot()) }
-    LaunchedEffect(Unit) {
-        if (healthRepo.isAvailable()) {
-            if (!healthRepo.hasAllPermissions()) {
-                val prefs = context.getSharedPreferences("hc_prefs", 0)
-                if (!prefs.getBoolean("hc_sheet_shown", false)) {
-                    showHealthConnectSheet = true
-                    prefs.edit().putBoolean("hc_sheet_shown", true).apply()
-                }
-            } else {
-                biometricSnapshot = withContext(Dispatchers.IO) { healthRepo.readBiometricSnapshot() }
-            }
-        }
+    val painRegions = com.ironlog.app.domain.intelligence.RECOVERY_REGIONS
+    val observedSettings by remember(homeSettingsRepo) {
+        homeSettingsRepo.observeStrings(
+            setOf("active_workout_day_name", "active_workout_start_ms", "manual_recovery_input") +
+                painRegions.map { "pain_flag_$it" },
+        )
+    }.collectAsStateWithLifecycle(initialValue = emptyMap())
+    val activeWorkoutDayName = observedSettings["active_workout_day_name"]?.takeIf(String::isNotBlank)
+    val activeWorkoutStartMs = observedSettings["active_workout_start_ms"]?.toLongOrNull() ?: 0L
+    val manualRecoveryInput = com.ironlog.app.domain.intelligence.RecoveryCheckInCodec.decode(observedSettings["manual_recovery_input"], nowEpochMs)
+    val painFlags = painRegions.filter { observedSettings["pain_flag_$it"] == "true" }.toSet()
+    LaunchedEffect(state.history, state.settings, activeWorkoutDayName, manualRecoveryInput, painFlags, nowEpochMs) {
+        gamificationVm.refreshFromHistory(state.history, state.settings.weeklyGoalDays)
     }
 
     val streak = gamState.dailyStreakDays
-    val recentSessions = remember(state.history) {
-        val cutoff = LocalDate.now().minusDays(30).toString()
-        state.history.count { it.date.substringBefore('T') >= cutoff }
+    val recentSessions = remember(state.history, nowEpochMs) {
+        val now = Instant.ofEpochMilli(nowEpochMs)
+        state.history.count { com.ironlog.app.domain.gamification.CreditedProof.qualifies(it, now) &&
+            com.ironlog.app.domain.gamification.parseHistoryInstant(it.date)?.isBefore(now.minusSeconds(30L * 86400)) == false }
     }
     val avgDurationMin = remember(state.history) {
         if (state.history.isEmpty()) 0
         else (state.history.take(10).sumOf { it.duration }.toDouble() / state.history.take(10).size / 60.0).roundToInt().coerceAtLeast(1)
     }
     val weeklyGoalDays = state.settings.weeklyGoalDays.coerceIn(1, 7)
-    val thisWeekSessions = remember(state.history) { countSessionsThisWeek(state.history) }
-    val thisWeekSets = remember(state.history) {
-        val now = LocalDate.now()
-        val fields = WeekFields.ISO
-        val y = now.get(fields.weekBasedYear())
-        val w = now.get(fields.weekOfWeekBasedYear())
-        state.history
-            .filter {
-                runCatching { LocalDate.parse(it.date.substringBefore('T')) }.getOrNull()?.let { d ->
-                    d.get(fields.weekBasedYear()) == y && d.get(fields.weekOfWeekBasedYear()) == w
-                } == true
-            }
-            .sumOf { it.sets }
+    val trainingDayStatus = remember(state.settings.trainingDayIndices, nowEpochMs) {
+        val today = Instant.ofEpochMilli(nowEpochMs).atZone(ZoneId.systemDefault()).toLocalDate()
+        TrainingDayPreferences.status(state.settings.trainingDayIndices, today)
     }
-    val thisWeekVolumeKg = remember(state.history) {
-        val now = LocalDate.now()
-        val fields = WeekFields.ISO
-        val y = now.get(fields.weekBasedYear())
-        val w = now.get(fields.weekOfWeekBasedYear())
-        state.history
-            .filter {
-                runCatching { LocalDate.parse(it.date.substringBefore('T')) }.getOrNull()?.let { d ->
-                    d.get(fields.weekBasedYear()) == y && d.get(fields.weekOfWeekBasedYear()) == w
-                } == true
-            }
-            .sumOf { it.volume }
-            .roundToInt()
+    val weeklyHistory = remember(state.history, nowEpochMs) {
+        val now = Instant.ofEpochMilli(nowEpochMs)
+        val zone = ZoneId.systemDefault()
+        val week = com.ironlog.app.domain.gamification.proofWeekKey(now.atZone(zone).toLocalDate())
+        state.history.filter { com.ironlog.app.domain.gamification.CreditedProof.qualifies(it, now, zone) &&
+            com.ironlog.app.domain.gamification.parseHistoryLocalDate(it.date, zone)?.let { date -> com.ironlog.app.domain.gamification.proofWeekKey(date) } == week }
     }
+    val thisWeekSessions = weeklyHistory.size
+    val thisWeekSets = weeklyHistory.sumOf { com.ironlog.app.domain.gamification.CreditedProof.hardSetCount(it) }
+    val thisWeekVolumeKg = weeklyHistory.sumOf { it.volume }.roundToInt()
     val goalStreak = gamState.streakWeeks
     // Prefer the plan explicitly marked active; fall back to first (most-recently-updated) plan
     val activePlan = state.plans.firstOrNull { it.isActive } ?: state.plans.firstOrNull()
     val planDays = activePlan?.days ?: emptyList()
+    val progressionPlanExerciseIds = remember(activePlan) {
+        activePlan?.days.orEmpty().flatMap { it.exercises }.map { it.id }.filter(String::isNotBlank).toSet()
+    }
+    val conservativeProgressionSnapshot = remember {
+        val fallback = ResolvedProgressionPolicy.conservativeDefault()
+        ProgressionPolicySnapshot(fallback = fallback, byPlanExerciseId = emptyMap())
+    }
+    val progressionPolicyStore = remember(homeSettingsRepo) { ProgressionPolicyStore(homeSettingsRepo) }
+    val progressionPolicySnapshot by produceState(
+        initialValue = conservativeProgressionSnapshot,
+        activePlan?.id,
+        progressionPlanExerciseIds,
+        state.settings.progressionStyle,
+    ) {
+        value = try {
+            progressionPolicyStore.load(activePlan?.id, progressionPlanExerciseIds)
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            conservativeProgressionSnapshot
+        }
+    }
+    val progressionInsightPolicy = remember(progressionPolicySnapshot, activePlan, state.history) {
+        val latestExercise = state.history.firstOrNull()?.exercises?.firstOrNull()
+        val matchingPlanRow = activePlan?.days.orEmpty().asSequence().flatMap { it.exercises.asSequence() }
+            .firstOrNull { planExercise ->
+                latestExercise != null &&
+                    (planExercise.exerciseId == latestExercise.exerciseId || planExercise.name.equals(latestExercise.name, ignoreCase = true))
+            }
+        progressionPolicySnapshot.forPlanExercise(matchingPlanRow?.id)
+    }
     val goalModeLabel = state.settings.goalMode
         .replace("_", " ")
         .split(" ")
         .joinToString(" ") { it.replaceFirstChar { ch -> ch.titlecase() } }
 
-    val filteredHistory30d = remember(state.history) { state.history.filter { homeScreenAgeDays(it.date) <= 30 } }
-    val readiness = remember(filteredHistory30d, painFlags) {
-        RecoveryReadinessEngine.readinessByRegion(filteredHistory30d, painFlags)
+    val readiness = remember(state.history, painFlags, nowEpochMs) {
+        RecoveryReadinessEngine.readinessByRegion(state.history, painFlags, nowEpochMs)
     }
 
     // Fatigue-based workout suggestion — reorder plan days so the freshest is first
@@ -306,40 +286,45 @@ fun HomeScreen(
             }
         }
     }
-    val recoveryBlurb: String? = remember(readiness, orderedPlanDays) {
-        orderedPlanDays.firstOrNull()?.let { day ->
-            if (planDays.size > 1) suggestionEngine.recommendationBlurb(readiness, day.name) else null
+    val recoveryBlurb: String? = remember(readiness, orderedPlanDays, painFlags, trainingDayStatus) {
+        when {
+            painFlags.isNotEmpty() -> "Pain flagged: review Recovery before choosing your session."
+            !trainingDayStatus.isTrainingDay -> {
+                val nextDay = trainingDayStatus.nextTrainingDate.format(DateTimeFormatter.ofPattern("EEEE"))
+                "Today is outside your protected training rhythm. Next protected day: $nextDay. You can still train if recovery supports it."
+            }
+            else -> orderedPlanDays.firstOrNull()?.let { day ->
+                if (planDays.size > 1) {
+                    suggestionEngine.recommendationBlurb(readiness, day.name, day.exercises.map { it.name })
+                } else null
+            }
         }
     }
 
-    val intelligenceSnapshot = remember(state.history) {
-        TrainingIntelligenceEngine.build(state.history)
+    val intelligenceSnapshot = remember(
+        state.history,
+        state.settings.goalMode,
+        state.settings.weeklyGoalDays,
+        state.prResetAtEpochMs,
+        nowEpochMs,
+    ) {
+        TrainingIntelligenceEngine.build(
+            history = state.history,
+            profile = TrainingIntelligenceProfile(
+                goalMode = state.settings.goalMode,
+                weeklyGoalDays = state.settings.weeklyGoalDays,
+            ),
+            clock = java.time.Clock.fixed(Instant.ofEpochMilli(nowEpochMs), ZoneId.systemDefault()),
+            prResetAt = state.prResetAtEpochMs?.let(Instant::ofEpochMilli),
+        )
     }
 
     // Step 7: thisWeekSets/thisWeekVolumeKg/totalSessions/unlockedMilestones removed (cards moved to StatsScreen)
 
-    // Health Connect permission sheet — shown once on first open if HC is available but not yet authorized
-    if (showHealthConnectSheet && healthRepo.isAvailable()) {
-        val permLauncher = rememberLauncherForActivityResult(
-            PermissionController.createRequestPermissionResultContract()
-        ) { grantedPerms ->
-            showHealthConnectSheet = false
-            if (grantedPerms.containsAll(healthRepo.requiredPermissions)) {
-                coroutineScope.launch {
-                    biometricSnapshot = withContext(Dispatchers.IO) { healthRepo.readBiometricSnapshot() }
-                }
-            }
-        }
-        HealthConnectPermissionSheet(
-            onRequestPermissions = { permLauncher.launch(healthRepo.requiredPermissions) },
-            onDismiss = { showHealthConnectSheet = false },
-        )
-    }
-
     LazyColumn(
         Modifier.fillMaxSize().background(c.bg).statusBarsPadding(),
         contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 24.dp, bottom = 120.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        verticalArrangement = com.ironlog.app.ui.theme.appCardSpacedBy(16.dp),
     ) {
         item {
             // FIXED: 8 — date eyebrow + context-aware subtitle
@@ -371,24 +356,8 @@ fun HomeScreen(
                 onOpenLedger = onOpenStatusWindow,
             )
         }
-        item {
-            if (activePlan == null) {
-                // Only show the empty state once the plan repository has confirmed it has no plans.
-                // Until then, render a placeholder skeleton so we never flash "No program selected"
-                // on cold start while plans are still loading from ObjectBox.
-                if (state.plansLoaded) {
-                    NoPlanCard(onOpenPlans = onOpenProgramPicker)
-                } else {
-                    Box(
-                        Modifier
-                            .fillMaxWidth()
-                            .height(180.dp)
-                            .clip(RoundedCornerShape(IronLogRadius.xl.dp))
-                            .background(c.faint)
-                            .border(1.dp, c.cardBorder, RoundedCornerShape(IronLogRadius.xl.dp)),
-                    )
-                }
-            } else {
+        if (activePlan != null) {
+            item {
                 StartWorkoutCard(
                     goalModeLabel = goalModeLabel,
                     activePlanName = activePlan.name,
@@ -400,6 +369,7 @@ fun HomeScreen(
                     pbKeys = state.pb.keys,
                     onClick = { onStartWorkout(activePlan.id, orderedPlanDays.firstOrNull()?.id.orEmpty()) },
                     onStartDay = { dayId -> onStartWorkout(activePlan.id, dayId) },
+                    onStartEmptyWorkout = onStartEmptyWorkout,
                     activeWorkoutDayName = activeWorkoutDayName,
                     activeWorkoutStartMs = activeWorkoutStartMs,
                     onResumeWorkout = onResumeWorkout,
@@ -420,6 +390,7 @@ fun HomeScreen(
                 ThisWeekDayChips(
                     planDays = planDays,
                     history = state.history,
+                    nowEpochMs = nowEpochMs,
                 )
             }
         }
@@ -460,8 +431,9 @@ fun HomeScreen(
                     weeklyGoalDays  = state.settings.weeklyGoalDays,
                     prTrend         = intelligenceSnapshot.prTrend,
                     readiness       = readiness,
+                    progressionPolicy = progressionInsightPolicy,
                     onSwitchToBuiltin = {
-                        vm.updateSettingsAsync(state.settings.copy(intelligenceMode = "builtin"))
+                        vm.mutateSettingsAsync { it.copy(intelligenceMode = "builtin") }
                     },
                     onOpenTrainingIntelligence = onOpenTrainingIntelligence,
                 )
@@ -480,8 +452,9 @@ fun HomeScreen(
                     baseUrl         = state.settings.cloudAiBaseUrl,
                     apiFormat       = state.settings.cloudAiApiFormat,
                     providerPreset  = state.settings.cloudAiProviderPreset,
+                    progressionPolicy = progressionInsightPolicy,
                     onSwitchToBuiltin = {
-                        vm.updateSettingsAsync(state.settings.copy(intelligenceMode = "builtin"))
+                        vm.mutateSettingsAsync { it.copy(intelligenceMode = "builtin") }
                     },
                     onOpenTrainingIntelligence = onOpenTrainingIntelligence,
                 )
@@ -492,6 +465,7 @@ fun HomeScreen(
                     recommendedDay = activePlan?.days?.firstOrNull(),
                     history        = state.history,
                     weightUnit     = state.settings.weightUnit,
+                    progressionPolicies = progressionPolicySnapshot,
                     onOpenInsights = onOpenProgramInsights,
                     onOpenTrainingIntelligence = onOpenTrainingIntelligence,
                 )
@@ -502,6 +476,8 @@ fun HomeScreen(
             RecoveryHeatmapCard(
                 groupReadiness = readiness,
                 manualRecoveryInput = manualRecoveryInput,
+                painFlags = painFlags,
+                nowEpochMs = nowEpochMs,
                 onTapExpand = onOpenRecovery,
                 onOpenVolumeAnalytics = onOpenVolumeAnalytics,
             )
@@ -519,9 +495,9 @@ fun HomeScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = appSpacedBy(10.dp)) {
                     Icon(Icons.Outlined.MonitorWeight, null, tint = c.accent, modifier = Modifier.size(20.dp))
-                    Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                    Column(verticalArrangement = appSpacedBy(1.dp)) {
                         Text(
                             "BODY WEIGHT",
                             color = c.muted,
@@ -571,6 +547,9 @@ fun HomeScreen(
     }
 }
 
+internal fun showDailyProofAction(status: DailyProofStatus): Boolean =
+    status == DailyProofStatus.SETUP || status == DailyProofStatus.RECOVER_SMART
+
 @Composable
 private fun DailyProofCard(
     gamState: com.ironlog.app.ui.viewmodel.GamificationUiState,
@@ -578,111 +557,31 @@ private fun DailyProofCard(
     onOpenLedger: () -> Unit,
 ) {
     val c = useTheme()
-    val xpAnim by animateFloatAsState(
-        targetValue = if (gamState.xpForNextLevel > 0L) {
-            (gamState.xpInLevel.toFloat() / gamState.xpForNextLevel.toFloat()).coerceIn(0f, 1f)
-        } else {
-            0f
-        },
-        label = "dailyProofXp",
-    )
-    val accent = when (gamState.dailyProofStatus) {
-        DailyProofStatus.PROOF_LOGGED -> c.success
-        DailyProofStatus.RECOVER_SMART -> c.info
-        DailyProofStatus.AT_RISK -> c.warning
-        DailyProofStatus.SETUP -> c.accent
-        else -> c.accent
-    }
-
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(IronLogRadius.xl.dp))
-            .background(c.card)
-            .border(1.dp, c.cardBorder, RoundedCornerShape(IronLogRadius.xl.dp))
-            .clickable(onClick = onOpenLedger)
-            .padding(14.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(IronLogRadius.xl.dp)).background(c.card)
+            .border(1.dp, c.cardBorder, RoundedCornerShape(IronLogRadius.xl.dp)).appPadding(14.dp),
+        verticalArrangement = appSpacedBy(8.dp),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.Top,
-        ) {
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(3.dp),
-            ) {
-                Text(
-                    "DAILY PROOF",
-                    color = c.muted,
-                    fontSize = IronLogType.eyebrow.fontSize.sp,
-                    fontWeight = FontWeight(IronLogType.eyebrow.fontWeight),
-                    letterSpacing = IronLogType.eyebrow.letterSpacing.sp,
-                )
-                Text(
-                    gamState.dailyProofHeadline,
-                    color = c.text,
-                    fontSize = IronLogType.title.fontSize.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    lineHeight = IronLogType.title.lineHeight.sp,
-                )
-                Text(
-                    gamState.dailyProofDetail,
-                    color = c.subtext,
-                    fontSize = IronLogType.meta.fontSize.sp,
-                    lineHeight = 16.sp,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f), verticalArrangement = appSpacedBy(4.dp)) {
+                Text("DAILY PROOF", color = c.muted, fontSize = 12.sp, letterSpacing = 1.5.sp)
+                Text(gamState.dailyProofHeadline, color = c.text, fontSize = IronLogType.section.fontSize.sp, fontWeight = FontWeight.Bold)
+                Text(gamState.dailyProofDetail, color = c.subtext, fontSize = 12.sp)
             }
-
             Image(
-                painter = painterResource(ForgeFoxExpression.fromId(gamState.foxExpressionId).drawableRes),
-                contentDescription = gamState.dailyProofHeadline,
-                modifier = Modifier
-                    .padding(start = 8.dp)
-                    .size(72.dp),
+                painterResource(ForgeFoxExpression.fromId(gamState.foxExpressionId).drawableRes),
+                contentDescription = null, modifier = Modifier.padding(start = 8.dp).size(56.dp),
             )
         }
-
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            LinearProgressIndicator(
-                progress = { xpAnim },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(6.dp)
-                    .clip(RoundedCornerShape(4.dp)),
-                color = accent,
-                trackColor = c.faint,
-            )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = "${gamState.rank} · Level ${gamState.level}  ·  ${gamState.xpInLevel}/${gamState.xpForNextLevel} XP",
-                    color = c.subtext,
-                    fontSize = 11.sp,
-                )
-                Text(
-                    text = if (gamState.dailyStreakDays > 0) "${gamState.dailyStreakDays}d streak" else "Open ledger",
-                    color = c.subtext,
-                    fontSize = 11.sp,
-                )
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = appSpacedBy(8.dp)) {
+            Text("${gamState.rank} · Level ${gamState.level}", color = c.subtext, fontSize = 12.sp, modifier = Modifier.weight(1f))
+            TextButton(onClick = onOpenLedger, modifier = Modifier.heightIn(min = 48.dp)) {
+                Text(if (gamState.dailyStreakDays > 0) "${gamState.dailyStreakDays}d streak · Ledger" else "Open Ledger", fontSize = 12.sp)
             }
         }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Button(
-                onClick = onPrimaryAction,
-                modifier = Modifier.weight(1f),
-            ) {
-                Text(gamState.dailyProofPrimaryActionLabel.uppercase())
+        if (showDailyProofAction(gamState.dailyProofStatus)) {
+            Button(onClick = onPrimaryAction, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                Text(gamState.dailyProofPrimaryActionLabel)
             }
         }
     }
@@ -692,21 +591,12 @@ private fun DailyProofCard(
 private fun ThisWeekDayChips(
     planDays: List<com.ironlog.app.ui.model.UiPlanDay>,
     history: List<HistoryEntry>,
+    nowEpochMs: Long,
 ) {
     val c = useTheme()
-    val fields = remember { WeekFields.ISO }
-    val now = LocalDate.now()
-    val nowYear = now.get(fields.weekBasedYear())
-    val nowWeek = now.get(fields.weekOfWeekBasedYear())
-    val thisWeekHistory = remember(history) {
-        history.filter {
-            runCatching { LocalDate.parse(it.date.substringBefore('T')) }.getOrNull()?.let { d ->
-                d.get(fields.weekBasedYear()) == nowYear && d.get(fields.weekOfWeekBasedYear()) == nowWeek
-            } == true
-        }
-    }
+    val now = Instant.ofEpochMilli(nowEpochMs)
 
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(verticalArrangement = appSpacedBy(8.dp)) {
         Text(
             "THIS WEEK",
             color = c.muted,
@@ -714,18 +604,15 @@ private fun ThisWeekDayChips(
             fontWeight = FontWeight(IronLogType.eyebrow.fontWeight),
             letterSpacing = IronLogType.eyebrow.letterSpacing.sp,
         )
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        LazyRow(horizontalArrangement = appSpacedBy(8.dp)) {
             lazyItems(planDays) { day ->
-                val hit = thisWeekHistory.any {
-                    (it.planDayUid != null && it.planDayUid == day.id) ||
-                        ((it.dayName ?: it.name).trim().equals(day.name.trim(), ignoreCase = true))
-                }
+                val hit = com.ironlog.app.domain.gamification.hasPlanDayProofThisWeek(history, day.id, day.name, now)
                 Box(
                     modifier = Modifier
                         .clip(CircleShape)
                         .background(if (hit) c.accent.copy(alpha = 0.18f) else c.surface)
                         .border(1.dp, if (hit) c.accent else c.cardBorder, CircleShape)
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                        .appPadding(horizontal = 12.dp, vertical = 8.dp),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
@@ -783,8 +670,8 @@ private fun WeeklyGoalCard(sessions: Int, goalDays: Int, goalStreak: Int) {
             .clip(RoundedCornerShape(IronLogRadius.lg.dp))
             .background(c.card)
             .border(1.dp, c.cardBorder, RoundedCornerShape(IronLogRadius.lg.dp))
-            .padding(14.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+            .appPadding(14.dp),
+        verticalArrangement = appSpacedBy(10.dp),
     ) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Text("Weekly Goal", color = c.text, fontWeight = FontWeight(IronLogType.section.fontWeight), fontSize = IronLogType.section.fontSize.sp)
@@ -814,44 +701,12 @@ private fun WeeklyGoalCard(sessions: Int, goalDays: Int, goalStreak: Int) {
                     ),
             )
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(horizontalArrangement = appSpacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(
                 "Goal streak: ${goalStreak} week${if (goalStreak == 1) "" else "s"}",
                 color = c.muted,
                 fontSize = IronLogType.meta.fontSize.sp,
             )
-        }
-    }
-}
-
-@Composable
-private fun NoPlanCard(onOpenPlans: () -> Unit) {
-    val c = useTheme()
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(IronLogRadius.xl.dp))
-            .background(c.faint)
-            .border(1.dp, c.cardBorder, RoundedCornerShape(IronLogRadius.xl.dp))
-            .padding(20.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Icon(Icons.Outlined.FitnessCenter, contentDescription = null, tint = c.muted, modifier = Modifier.size(32.dp))
-            Text(
-                "No program selected",
-                color = c.subtext,
-                fontWeight = FontWeight(IronLogType.section.fontWeight),
-                fontSize = IronLogType.section.fontSize.sp,
-            )
-            Text(
-                "Pick a plan and start building.",
-                color = c.muted,
-                fontSize = IronLogType.body.fontSize.sp,
-            )
-            Button(onClick = onOpenPlans) {
-                Text("BROWSE PROGRAMS")
-            }
         }
     }
 }
@@ -881,7 +736,7 @@ private fun ActiveWorkoutTimerText(startMs: Long, c: IronLogThemeTokens) {
 }
 
 @Composable
-private fun StartWorkoutCard(
+internal fun StartWorkoutCard(
     goalModeLabel: String,
     activePlanName: String,
     avgDurationMin: Int,
@@ -892,6 +747,7 @@ private fun StartWorkoutCard(
     pbKeys: Set<String> = emptySet(),
     onClick: () -> Unit = {},
     onStartDay: (dayId: String) -> Unit = {},
+    onStartEmptyWorkout: () -> Unit = {},
     activeWorkoutDayName: String? = null,
     activeWorkoutStartMs: Long = 0L,
     onResumeWorkout: () -> Unit = {},
@@ -901,56 +757,35 @@ private fun StartWorkoutCard(
     // A workout is active as soon as its day name is persisted — elapsed may still be 0 if no
     // sets have been logged yet (timer only starts on first set).
     val isWorkoutActive = !activeWorkoutDayName.isNullOrBlank()
-    val animatedBrush = rememberAnimatedCardBrush(c.accent)
-
     Box(
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(IronLogRadius.xl.dp))
             .background(c.card)
-            .background(animatedBrush)
-            .border(2.dp, c.accent.copy(alpha = 0.50f), RoundedCornerShape(IronLogRadius.xl.dp)),
+            .animatedCardShine(c.accent)
+            .border(1.dp, c.accent.copy(alpha = 0.35f), RoundedCornerShape(IronLogRadius.xl.dp)),
     ) {
         Column(
-            Modifier.padding(horizontal = 20.dp, vertical = 22.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+            Modifier.appPadding(16.dp),
+            verticalArrangement = appSpacedBy(12.dp),
         ) {
-            // Eyebrow
-            Text(
-                if (isWorkoutActive) "IN PROGRESS" else "TODAY'S WORKOUT",
-                color = c.accent,
-                fontSize = IronLogType.eyebrow.fontSize.sp,
-                fontWeight = FontWeight(IronLogType.eyebrow.fontWeight),
-                letterSpacing = IronLogType.eyebrow.letterSpacing.sp,
-            )
-            // Top row: play icon (left) + arrow button (right)
+            // One header/action row; no empty row between the eyebrow and plan name.
             Row(
                 Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                Text(
+                    if (isWorkoutActive) "IN PROGRESS" else "TODAY'S WORKOUT",
+                    color = c.accent,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    letterSpacing = 1.sp,
+                    modifier = Modifier.weight(1f),
+                )
                 Box(
                     Modifier
-                        .size(50.dp)
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(c.textOnAccent),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Box(
-                        Modifier
-                            .fillMaxSize()
-                            .clickable { if (isWorkoutActive) onResumeWorkout() else onClick() },
-                    )
-                    Icon(
-                        if (isWorkoutActive) Icons.Outlined.Loop else Icons.Outlined.PlayArrow,
-                        contentDescription = null,
-                        tint = c.bg,
-                        modifier = Modifier.size(26.dp),
-                    )
-                }
-                Box(
-                    Modifier
-                        .size(44.dp)
+                        .size(48.dp)
                         .clip(CircleShape)
                         .background(c.accent.copy(alpha = 0.12f))
                         .border(1.dp, c.accent.copy(alpha = 0.20f), CircleShape)
@@ -958,28 +793,28 @@ private fun StartWorkoutCard(
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
-                        Icons.AutoMirrored.Outlined.ArrowForward,
-                        contentDescription = null,
+                        if (isWorkoutActive) Icons.Outlined.Loop else Icons.Outlined.PlayArrow,
+                        contentDescription = if (isWorkoutActive) "Resume workout" else "Start workout",
                         tint = c.accent,
-                        modifier = Modifier.size(15.dp),
+                        modifier = Modifier.size(22.dp),
                     )
                 }
             }
 
             // Plan / workout name + badges row
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Column(verticalArrangement = appSpacedBy(6.dp)) {
                 Text(
                     if (isWorkoutActive) (activeWorkoutDayName ?: "Workout") else activePlanName.ifBlank { "Start Workout" },
                     color = c.text,
                     fontWeight = FontWeight(IronLogType.display.fontWeight),
-                    fontSize = IronLogType.display.fontSize.sp,
-                    lineHeight = IronLogType.display.lineHeight.sp,
+                    fontSize = 24.sp,
+                    lineHeight = 30.sp,
                     letterSpacing = (-0.5).sp,
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = appSpacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     if (isWorkoutActive) {
@@ -987,7 +822,7 @@ private fun StartWorkoutCard(
                             Modifier
                                 .clip(RoundedCornerShape(IronLogRadius.full.dp))
                                 .background(c.success.copy(alpha = 0.18f))
-                                .padding(horizontal = 8.dp, vertical = 3.dp),
+                                .appPadding(horizontal = 8.dp, vertical = 3.dp),
                         ) {
                             // FIXED: 1
                             Text("● IN PROGRESS", color = c.success, fontSize = IronLogType.micro.fontSize.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = IronLogType.micro.letterSpacing.sp)
@@ -998,7 +833,7 @@ private fun StartWorkoutCard(
                             Modifier
                                 .clip(RoundedCornerShape(IronLogRadius.full.dp))
                                 .background(c.accent.copy(alpha = 0.14f))
-                                .padding(horizontal = 8.dp, vertical = 3.dp),
+                                .appPadding(horizontal = 8.dp, vertical = 3.dp),
                         ) {
                             Text(goalModeLabel, color = c.accent, fontSize = IronLogType.micro.fontSize.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
                         }
@@ -1036,80 +871,49 @@ private fun StartWorkoutCard(
                 }
             } else if (planDays.isNotEmpty()) {
                 LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    contentPadding = PaddingValues(start = 20.dp, top = 4.dp, end = 20.dp, bottom = 0.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .layout { measurable, constraints ->
-                            val sidePx = 20.dp.roundToPx()
-                            val placeable = measurable.measure(
-                                constraints.copy(maxWidth = constraints.maxWidth + sidePx * 2)
-                            )
-                            layout(constraints.maxWidth, placeable.height) {
-                                placeable.place(-sidePx, 0)
-                            }
-                        },
+                    horizontalArrangement = appSpacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
                     lazyItems(planDays) { day ->
                         val isRecommended = day.id == recommendedDayId
-                        // Pulsing glow on the recommended card
-                        val infiniteTransition = rememberInfiniteTransition(label = "glow_${day.id}")
-                        val glowAlpha by infiniteTransition.animateFloat(
-                            initialValue = 0.45f,
-                            targetValue = 1.0f,
-                            animationSpec = infiniteRepeatable(
-                                animation = tween(durationMillis = 900),
-                                repeatMode = RepeatMode.Reverse,
-                            ),
-                            label = "glowAlpha_${day.id}",
-                        )
-                        val borderColor by animateColorAsState(
-                            targetValue = if (isRecommended) c.accent.copy(alpha = glowAlpha)
-                                          else c.text.copy(alpha = 0.26f),
-                            animationSpec = tween(400),
-                            label = "borderColor_${day.id}",
-                        )
-                        val borderWidth = if (isRecommended) 2.dp else 1.dp
-                        val cardBg = if (isRecommended) c.accent.copy(alpha = 0.10f)
-                                     else c.text.copy(alpha = 0.08f)
+                        val borderColor = if (isRecommended) c.accent else c.cardBorder
+                        val cardBg = if (isRecommended) c.accent.copy(alpha = 0.14f) else c.surface
 
                         Box(
                             Modifier
-                                .width(128.dp)
-                                .clip(RoundedCornerShape(22.dp))
+                                .width(116.dp)
+                                .heightIn(min = 64.dp)
+                                .clip(RoundedCornerShape(16.dp))
                                 .background(cardBg)
-                                .border(borderWidth, borderColor, RoundedCornerShape(22.dp))
+                                .border(1.5.dp, borderColor, RoundedCornerShape(16.dp))
+                                .semantics { if (isRecommended) stateDescription = "Recommended for today" }
                                 .clickable { onStartDay(day.id) },
                             contentAlignment = Alignment.Center,
                         ) {
                             Column(
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
+                                modifier = Modifier.appPadding(horizontal = 12.dp, vertical = 12.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(4.dp),
+                                verticalArrangement = appSpacedBy(4.dp),
                             ) {
                                 Text(
                                     day.name.uppercase(),
                                     color = if (isRecommended) c.accent else c.text,
-                                    fontWeight = FontWeight.ExtraBold,
+                                    fontWeight = FontWeight.SemiBold,
                                     fontSize = 13.sp,
+                                    lineHeight = 18.sp,
                                     letterSpacing = 0.5.sp,
                                     maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
                                 )
                                 Text(
-                                    "${day.exercises.size} ex",
-                                    color = c.muted,
-                                    fontSize = 10.sp,
+                                    "${day.exercises.size} exercises",
+                                    color = c.subtext,
+                                    fontSize = 12.sp,
+                                    lineHeight = 16.sp,
                                     letterSpacing = 0.1.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
                                 )
-                                if (isRecommended) {
-                                    Text(
-                                        "⚡ Best Today",
-                                        color = c.accent,
-                                        fontSize = 9.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        letterSpacing = 0.3.sp,
-                                    )
-                                }
                             }
                         }
                     }
@@ -1120,7 +924,7 @@ private fun StartWorkoutCard(
                         text = recoveryBlurb,
                         color = c.muted,
                         fontSize = IronLogType.meta.fontSize.sp,
-                        modifier = Modifier.padding(horizontal = 2.dp),
+                        modifier = Modifier.appPadding(horizontal = 2.dp),
                     )
                 }
 
@@ -1130,11 +934,11 @@ private fun StartWorkoutCard(
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(IronLogRadius.sm.dp))
                         .border(1.dp, c.accent.copy(alpha = 0.13f), RoundedCornerShape(IronLogRadius.sm.dp))
-                        .clickable(onClick = onClick)
+                        .clickable(onClick = onStartEmptyWorkout)
                         .padding(vertical = 9.dp),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = appSpacedBy(5.dp)) {
                         Icon(Icons.Outlined.Add, null, tint = c.muted, modifier = Modifier.size(12.dp))
                         // FIXED: 1
                         Text("START WITHOUT PLAN", color = c.muted, fontSize = IronLogType.micro.fontSize.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = IronLogType.micro.letterSpacing.sp)
@@ -1167,7 +971,7 @@ private fun HomeStatsRow(sessions: Int, streak: Int, avgDurationMin: Int) {
             .clip(RoundedCornerShape(IronLogRadius.lg.dp))
             .background(c.card)
             .border(1.dp, c.cardBorder, RoundedCornerShape(IronLogRadius.lg.dp))
-            .padding(vertical = 18.dp),
+            .appPadding(vertical = 18.dp),
         horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -1190,7 +994,7 @@ private fun HomeStatMetric(value: String, label: String) {
                 tint = c.accent,
                 modifier = Modifier.size(14.dp),
             )
-            Spacer(Modifier.height(2.dp))
+            Spacer(Modifier.height(appGapDp(2.dp)))
         }
         Text(
             value,
@@ -1229,7 +1033,7 @@ private fun FullWidthIntelCard(
         Box(Modifier.width(4.dp).fillMaxHeight().background(barColor))
         Column(
             Modifier.weight(1f).padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = appSpacedBy(4.dp),
         ) {
             Text(sup, color = c.muted, fontSize = IronLogType.eyebrow.fontSize.sp, fontWeight = FontWeight(IronLogType.eyebrow.fontWeight), letterSpacing = IronLogType.eyebrow.letterSpacing.sp)
             content()
@@ -1245,6 +1049,7 @@ private fun TrainingIntelligenceCard(
     recommendedDay: UiPlanDay?,
     history: List<HistoryEntry>,
     weightUnit: String,
+    progressionPolicies: ProgressionPolicySnapshot,
     onOpenInsights: () -> Unit,
     onOpenTrainingIntelligence: () -> Unit,
 ) {
@@ -1260,8 +1065,8 @@ private fun TrainingIntelligenceCard(
             .clip(RoundedCornerShape(IronLogRadius.lg.dp))
             .background(cardBg)
             .border(1.dp, accentBorder, RoundedCornerShape(IronLogRadius.lg.dp))
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+            .appPadding(16.dp),
+        verticalArrangement = appSpacedBy(10.dp),
     ) {
         // Eyebrow
         Text(
@@ -1292,19 +1097,20 @@ private fun TrainingIntelligenceCard(
             fontSize = IronLogType.micro.fontSize.sp,
             fontWeight = FontWeight.Medium,
         )
-        val suggestions = remember(recommendedDay, history) {
-            buildAdaptiveTargets(recommendedDay, history)
+        val suggestions = remember(recommendedDay, history, progressionPolicies) {
+            buildAdaptiveTargets(recommendedDay, history, progressionPolicies)
         }
         if (suggestions.isNotEmpty()) {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Column(verticalArrangement = appSpacedBy(4.dp)) {
                 suggestions.forEach { s ->
-                    val base =
-                        if (s.suggestedWeightKg != null) {
-                            "${s.name} → ${formatWeightFromKg(s.suggestedWeightKg, weightUnit)} × ${s.suggestedReps}"
-                        } else {
-                            "${s.name} → Build to a working weight"
-                        }
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    val base = when (s.advice?.action) {
+                        ProgressionAction.ADD_LOAD ->
+                            "${s.name} → ${formatWeightFromKg(s.advice.weightKg, weightUnit)} × ${s.advice.reps}"
+                        ProgressionAction.ADD_REPS -> "${s.name} → ${s.advice.reps} reps at the same load"
+                        ProgressionAction.HOLD -> "${s.name} → Hold the current target"
+                        null -> "${s.name} → Build to a working weight"
+                    }
+                    Row(horizontalArrangement = appSpacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             base,
                             color = c.subtext,
@@ -1319,6 +1125,11 @@ private fun TrainingIntelligenceCard(
                             )
                         }
                     }
+                    Text(
+                        "${s.policy.label} · ${s.policy.source.label}",
+                        color = c.muted,
+                        fontSize = 12.sp,
+                    )
                 }
             }
         }
@@ -1354,34 +1165,58 @@ private fun TrainingIntelligenceCard(
     }
 }
 
-private data class AdaptiveTarget(
+internal data class AdaptiveTarget(
     val name: String,
-    val suggestedWeightKg: Double?,
-    val suggestedReps: Int,
+    val advice: ProgressionAdvice?,
+    val policy: ResolvedProgressionPolicy,
     val plateau: Boolean,
 )
 
-private fun buildAdaptiveTargets(day: UiPlanDay?, history: List<HistoryEntry>): List<AdaptiveTarget> {
+internal fun buildAdaptiveTargets(
+    day: UiPlanDay?,
+    history: List<HistoryEntry>,
+    policies: ProgressionPolicySnapshot,
+): List<AdaptiveTarget> {
     if (day == null) return emptyList()
     return day.exercises.take(3).map { ex ->
-        val allSets = history
-            .flatMap { it.exercises }
-            .filter { hx ->
+        val policy = policies.forPlanExercise(ex.id)
+        val matchingSession = history.firstOrNull { workout ->
+            workout.exercises.any { hx ->
                 hx.exerciseId == ex.exerciseId || hx.name.equals(ex.name, ignoreCase = true)
             }
-            .flatMap { it.sets.filter { st -> st.type != "warmup" && st.weight > 0 && st.reps > 0 } }
-        if (allSets.isEmpty()) {
-            AdaptiveTarget(ex.name, null, parseRepTarget(ex.reps, 8), plateau = false)
+        }
+        val matchingHistory = matchingSession?.exercises?.firstOrNull { hx ->
+            hx.exerciseId == ex.exerciseId || hx.name.equals(ex.name, ignoreCase = true)
+        }
+        val workingSets = matchingHistory?.sets.orEmpty().filter { set ->
+            !set.isWarmup && !set.type.equals("warmup", ignoreCase = true) && set.reps > 0
+        }
+        if (workingSets.isEmpty()) {
+            AdaptiveTarget(ex.name, advice = null, policy = policy, plateau = false)
         } else {
-            val latest = allSets.last()
-            val e1rm = latest.weight * (1.0 + latest.reps / 30.0)
-            val suggested = ((e1rm * 0.85) / 2.5).roundToInt() * 2.5
-            val recentE1rm = allSets.takeLast(3).map { it.weight * (1.0 + it.reps / 30.0) }
+            val ghostSets = workingSets.map { set ->
+                com.ironlog.app.ui.state.GhostSet(
+                    weight = set.weight,
+                    reps = set.reps,
+                    type = set.type,
+                    rpe = set.rpe,
+                    rir = set.rir,
+                )
+            }
+            val advice = ProgressionRecommendationEngine.recommend(
+                previous = ghostSets,
+                trackingType = matchingHistory?.trackingType ?: ex.trackingType,
+                targetSets = ex.sets,
+                targetReps = parseRepTarget(ex.reps, 8),
+                sourceDate = matchingSession?.date,
+                policy = policy,
+            )
+            val recentE1rm = workingSets.takeLast(3).map { it.weight * (1.0 + it.reps / 30.0) }
             val plateau = recentE1rm.size >= 3 && recentE1rm.zipWithNext().all { (a, b) -> b <= a + 0.25 }
             AdaptiveTarget(
                 name = ex.name,
-                suggestedWeightKg = suggested.coerceAtLeast(2.5),
-                suggestedReps = parseRepTarget(ex.reps, 8),
+                advice = advice,
+                policy = policy,
                 plateau = plateau,
             )
         }
@@ -1402,7 +1237,7 @@ private fun AccentBorderCard(modifier: Modifier, onClick: () -> Unit = {}, conte
         Box(Modifier.width(3.dp).fillMaxHeight().background(c.accent))
         Column(
             Modifier.weight(1f).padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = appSpacedBy(4.dp),
         ) {
             content()
         }
@@ -1489,14 +1324,14 @@ private fun WeeklySummaryCard(
             .clip(RoundedCornerShape(IronLogRadius.lg.dp))
             .background(c.card)
             .border(1.dp, c.cardBorder, RoundedCornerShape(IronLogRadius.lg.dp))
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+            .appPadding(16.dp),
+        verticalArrangement = appSpacedBy(12.dp),
     ) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Text("WEEKLY SUMMARY", color = c.muted, fontSize = IronLogType.eyebrow.fontSize.sp, fontWeight = FontWeight(IronLogType.eyebrow.fontWeight), letterSpacing = IronLogType.eyebrow.letterSpacing.sp)
             TextButton(onClick = onShare) { Text("SHARE", color = c.accent, fontSize = IronLogType.meta.fontSize.sp, fontWeight = FontWeight.Bold) }
         }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(0.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = appSpacedBy(0.dp)) {
             SummaryStatPill("Workouts", sessions.toString(), Modifier.weight(1f))
             SummaryStatPill("Sets", sets.toString(), Modifier.weight(1f))
             SummaryStatPill("Volume", "$volStr $weightUnit", Modifier.weight(1f))
@@ -1508,7 +1343,7 @@ private fun WeeklySummaryCard(
 @Composable
 private fun SummaryStatPill(label: String, value: String, modifier: Modifier = Modifier) {
     val c = useTheme()
-    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = appSpacedBy(2.dp)) {
         Text(value, color = c.text, fontWeight = FontWeight.ExtraBold, fontSize = IronLogType.section.fontSize.sp)
         Text(label, color = c.muted, fontSize = IronLogType.micro.fontSize.sp, fontWeight = FontWeight(IronLogType.eyebrow.fontWeight), letterSpacing = 0.5.sp)
     }
@@ -1517,17 +1352,7 @@ private fun SummaryStatPill(label: String, value: String, modifier: Modifier = M
 @Composable
 private fun AthleteProfileCard(totalSessions: Int, streak: Int, onOpen: () -> Unit) {
     val c = useTheme()
-    // Tier thresholds: (label, emoji, minSessions, nextTierMin)
-    val (tier, tierEmoji, tierMin, tierNext) = when {
-        totalSessions >= 200 -> TierInfo("Elite", "⚡", 200, Int.MAX_VALUE)
-        totalSessions >= 76  -> TierInfo("Advanced", "🔥", 76, 200)
-        totalSessions >= 21  -> TierInfo("Intermediate", "💪", 21, 76)
-        else                 -> TierInfo("Beginner", "🌱", 0, 21)
-    }
-    val xpProgress = if (tierNext == Int.MAX_VALUE) 1f
-    else ((totalSessions - tierMin).toFloat() / (tierNext - tierMin)).coerceIn(0f, 1f)
-
-    Column(
+    Row(
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(IronLogRadius.lg.dp))
@@ -1535,70 +1360,76 @@ private fun AthleteProfileCard(totalSessions: Int, streak: Int, onOpen: () -> Un
             .border(1.dp, c.cardBorder, RoundedCornerShape(IronLogRadius.lg.dp))
             .clickable(onClick = onOpen)
             .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("ATHLETE PROFILE", color = c.muted, fontSize = IronLogType.eyebrow.fontSize.sp, fontWeight = FontWeight(IronLogType.eyebrow.fontWeight), letterSpacing = IronLogType.eyebrow.letterSpacing.sp)
-                Text("$tierEmoji $tier", color = c.text, fontWeight = FontWeight.ExtraBold, fontSize = IronLogType.section.fontSize.sp)
-                Text("$totalSessions sessions · $streak-day streak", color = c.subtext, fontSize = IronLogType.meta.fontSize.sp)
-            }
-            Text("→", color = c.accent, fontSize = IronLogType.title.fontSize.sp, fontWeight = FontWeight.Bold)
+        Column(verticalArrangement = appSpacedBy(4.dp)) {
+            Text("TRAINING PROFILE", color = c.muted, fontSize = IronLogType.eyebrow.fontSize.sp, fontWeight = FontWeight(IronLogType.eyebrow.fontWeight), letterSpacing = IronLogType.eyebrow.letterSpacing.sp)
+            Text("Program intelligence", color = c.text, fontWeight = FontWeight.ExtraBold, fontSize = IronLogType.section.fontSize.sp)
+            Text("$totalSessions logged sessions · $streak-day streak", color = c.subtext, fontSize = IronLogType.meta.fontSize.sp)
         }
-        // XP progress bar toward next tier
-        LinearProgressIndicator(
-            progress = { xpProgress },
-            modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(IronLogRadius.full.dp)),
-            color = c.accent,
-            trackColor = c.faint,
-        )
-        if (tierNext != Int.MAX_VALUE) {
-            Text(
-                "${totalSessions - tierMin} / ${tierNext - tierMin} sessions to ${ when(tierNext) { 76 -> "Intermediate"; 200 -> "Advanced"; else -> "Elite" } }",
-                color = c.muted,
-                fontSize = IronLogType.meta.fontSize.sp,
-            )
-        }
+        Text("→", color = c.accent, fontSize = IronLogType.title.fontSize.sp, fontWeight = FontWeight.Bold)
     }
-}
-
-private data class TierInfo(val tier: String, val tierEmoji: String, val tierMin: Int, val tierNext: Int)
-
-private val GAMIFICATION_BADGE_LABELS: Map<String, Pair<String, String>> = buildMap {
-    BadgeDefinitions.all.forEach { badge -> put(badge.id, "◆" to badge.title) }
-    IronGrade.entries.filter { it != IronGrade.UNCALIBRATED }
-        .forEach { grade -> put(grade.label, "◇" to "${grade.label} grade") }
 }
 
 @Composable
 private fun MilestonesCard(unlocked: Set<String>) {
     val c = useTheme()
+    val grades = IronGrade.entries.filter { it != IronGrade.UNCALIBRATED && it.label in unlocked }
+    val achievements = BadgeDefinitions.all.filter { it.id in unlocked }
     Column(
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(IronLogRadius.lg.dp))
             .background(c.card)
             .border(1.dp, c.cardBorder, RoundedCornerShape(IronLogRadius.lg.dp))
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+            .appPadding(16.dp),
+        verticalArrangement = appSpacedBy(12.dp),
     ) {
-        Text("MILESTONES", color = c.muted, fontSize = IronLogType.eyebrow.fontSize.sp, fontWeight = FontWeight(IronLogType.eyebrow.fontWeight), letterSpacing = IronLogType.eyebrow.letterSpacing.sp)
-        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            GAMIFICATION_BADGE_LABELS.entries.filter { it.key in unlocked }.forEach { (_, pair) ->
-                val (emoji, label) = pair
-                Column(
-                    Modifier
-                        .clip(RoundedCornerShape(IronLogRadius.md.dp))
-                        .background(c.accentSoft)
-                        .border(1.dp, c.accent.copy(alpha = 0.3f), RoundedCornerShape(IronLogRadius.md.dp))
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    Text(emoji, fontSize = IronLogType.title.fontSize.sp)
-                    Text(label, color = c.text, fontSize = IronLogType.micro.fontSize.sp, fontWeight = FontWeight.SemiBold)
-                }
-            }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Text("MILESTONES", color = c.muted, fontSize = IronLogType.eyebrow.fontSize.sp, fontWeight = FontWeight(IronLogType.eyebrow.fontWeight), letterSpacing = IronLogType.eyebrow.letterSpacing.sp)
+            Text("${grades.size + achievements.size} earned", color = c.subtext, fontSize = IronLogType.meta.fontSize.sp)
         }
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = appSpacedBy(10.dp)) {
+            grades.forEach { grade -> HomeGradeMilestone(grade) }
+            achievements.forEach { badge -> HomeAchievementMilestone(badge) }
+        }
+    }
+}
+
+@Composable
+private fun HomeGradeMilestone(grade: IronGrade) {
+    val c = useTheme()
+    val accent = ironGradeColor(grade.label)
+    Column(
+        Modifier
+            .width(108.dp)
+            .clip(RoundedCornerShape(IronLogRadius.md.dp))
+            .background(c.card)
+            .border(1.dp, accent.copy(alpha = 0.36f), RoundedCornerShape(IronLogRadius.md.dp))
+            .padding(horizontal = 8.dp, vertical = 10.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = appSpacedBy(6.dp),
+    ) {
+        IronGradeBadge(rank = grade.label, accent = accent, modifier = Modifier.size(58.dp))
+        Text("${grade.label} grade", color = c.text, fontSize = IronLogType.micro.fontSize.sp, fontWeight = FontWeight.SemiBold, maxLines = 2)
+    }
+}
+
+@Composable
+private fun HomeAchievementMilestone(badge: com.ironlog.app.domain.badges.BadgeDefinition) {
+    val c = useTheme()
+    Column(
+        Modifier
+            .width(108.dp)
+            .clip(RoundedCornerShape(IronLogRadius.md.dp))
+            .background(c.card)
+            .border(1.dp, c.cardBorder, RoundedCornerShape(IronLogRadius.md.dp))
+            .padding(horizontal = 8.dp, vertical = 10.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = appSpacedBy(6.dp),
+    ) {
+        AchievementBadge(definition = badge, unlocked = true, modifier = Modifier.size(56.dp))
+        Text(badge.title, color = c.text, fontSize = IronLogType.micro.fontSize.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
     }
 }

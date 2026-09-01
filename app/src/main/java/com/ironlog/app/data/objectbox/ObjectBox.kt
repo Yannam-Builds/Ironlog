@@ -8,6 +8,8 @@ import io.objectbox.BoxStore
  * Initialised once in IronLogApplication and shared across all repositories.
  */
 object ObjectBox {
+    lateinit var filesDirectory: java.io.File
+        private set
     lateinit var store: BoxStore
         private set
 
@@ -15,6 +17,7 @@ object ObjectBox {
     fun init(context: Context) {
         if (::store.isInitialized) return
         val appCtx = context.applicationContext
+        filesDirectory = appCtx.filesDir
         // Never turn an initialization failure into silent data loss. Schema migrations must
         // preserve the stable IDs in objectbox-models/default.json; disk/corruption failures
         // are surfaced to the caller so recovery can be explicit and backup-aware.

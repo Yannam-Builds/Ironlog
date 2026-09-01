@@ -1,5 +1,8 @@
 package com.ironlog.app.ui.screens.onboarding.steps
 
+import com.ironlog.app.ui.theme.appGapDp
+import com.ironlog.app.ui.theme.appPadding
+import com.ironlog.app.ui.theme.appSpacedBy
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
@@ -16,7 +19,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Text
+import com.ironlog.app.ui.theme.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -61,7 +64,7 @@ fun Step1Awakening(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 24.dp, vertical = 24.dp),
+                    .appPadding(horizontal = 24.dp, vertical = 24.dp),
                 verticalArrangement = Arrangement.SpaceBetween,
             ) {
                 Column {
@@ -81,7 +84,7 @@ fun Step1Awakening(
                             letterSpacing = 2.sp,
                         )
                     }
-                    Spacer(Modifier.height(28.dp))
+                    Spacer(Modifier.height(appGapDp(28.dp)))
                     Text(
                         "Train with evidence.\nProgress like a game.",
                         color = OnboardingConfig.textPrimary,
@@ -90,7 +93,7 @@ fun Step1Awakening(
                         fontWeight = FontWeight.Black,
                         letterSpacing = (-1.1).sp,
                     )
-                    Spacer(Modifier.height(14.dp))
+                    Spacer(Modifier.height(appGapDp(14.dp)))
                     Text(
                         "IronLog turns verified training into adaptive programming, recovery guidance and a progression ledger that cannot be faked.",
                         color = OnboardingConfig.textMuted,
@@ -114,13 +117,13 @@ fun Step1Awakening(
                 Column {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalArrangement = appSpacedBy(8.dp),
                     ) {
                         WelcomeSignal("PRIVATE", "Local first", Modifier.weight(1f))
                         WelcomeSignal("ADAPTIVE", "Recovery aware", Modifier.weight(1f))
                         WelcomeSignal("VERIFIED", "Earned XP", Modifier.weight(1f))
                     }
-                    Spacer(Modifier.height(18.dp))
+                    Spacer(Modifier.height(appGapDp(18.dp)))
                     GlowButton(text = "Build my training system", onClick = onAdvance)
                     TextButton(onClick = onSkip, modifier = Modifier.fillMaxWidth()) {
                         Text("Explore with sensible defaults", color = OnboardingConfig.textMuted, fontSize = 13.sp)
@@ -138,8 +141,8 @@ private fun WelcomeSignal(label: String, value: String, modifier: Modifier = Mod
             .background(OnboardingConfig.surfaceDark.copy(alpha = 0.88f), RoundedCornerShape(16.dp))
             .padding(horizontal = 10.dp, vertical = 12.dp),
     ) {
-        Text(label, color = OnboardingConfig.accentBlue, fontSize = 9.sp, fontWeight = FontWeight.Black, letterSpacing = 0.8.sp)
-        Spacer(Modifier.height(4.dp))
-        Text(value, color = Color.White, fontSize = 11.sp, lineHeight = 14.sp, fontWeight = FontWeight.SemiBold)
+        Text(label, color = OnboardingConfig.accentBlue, fontSize = 12.sp, fontWeight = FontWeight.Black, letterSpacing = 0.8.sp)
+        Spacer(Modifier.height(appGapDp(4.dp)))
+        Text(value, color = Color.White, fontSize = 12.sp, lineHeight = 16.sp, fontWeight = FontWeight.SemiBold)
     }
 }

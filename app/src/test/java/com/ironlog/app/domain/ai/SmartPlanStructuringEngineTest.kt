@@ -32,6 +32,7 @@ class SmartPlanStructuringEngineTest {
         val day = out.plan.days.first()
         assertTrue(out.insertedWarmupRows >= 1)
         assertTrue(day.exercises.first().isWarmup == true)
+        assertEquals("5", day.exercises.first().reps)
         assertEquals(60, day.exercises.first().restSeconds)
         assertEquals(120, day.exercises[1].restSeconds) // normalized compound rest (clamped from 20)
     }
@@ -82,7 +83,7 @@ class SmartPlanStructuringEngineTest {
 
         val out = SmartPlanStructuringEngine.structure(plan, lib)
         val rows = out.plan.days.first().exercises
-        assertEquals(75, rows[0].restSeconds)
+        assertEquals(120, rows[0].restSeconds)
         assertEquals(60, rows[1].restSeconds)
         assertTrue(rows.all { it.supersetGroup.isNullOrBlank() })
     }

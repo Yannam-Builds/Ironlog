@@ -1,5 +1,8 @@
 ﻿package com.ironlog.app.ui.screens.body
 
+import com.ironlog.app.ui.theme.appGapDp
+import com.ironlog.app.ui.theme.appPadding
+import com.ironlog.app.ui.theme.appSpacedBy
 import android.content.Intent
 import android.net.Uri
 import androidx.core.content.FileProvider
@@ -9,6 +12,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -16,16 +21,19 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ChevronLeft
 import androidx.compose.material.icons.outlined.ChevronRight
@@ -36,7 +44,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Slider
-import androidx.compose.material3.Text
+import com.ironlog.app.ui.theme.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.Composable
@@ -45,6 +53,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -52,6 +61,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.semantics.paneTitle
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -61,6 +77,7 @@ import com.ironlog.app.data.objectbox.ObjectBox
 import com.ironlog.app.data.objectbox.ProgressPhotoEntity
 import com.ironlog.app.data.objectbox.ProgressPhotoEntity_
 import com.ironlog.app.data.objectbox.newUid
+import com.ironlog.app.data.photos.ProgressPhotoStorage
 import com.ironlog.app.services.ShareService
 import com.ironlog.app.ui.components.ScreenHeader
 import com.ironlog.app.ui.context.useTheme
@@ -99,9 +116,12 @@ fun ProgressPhotosScreen(onBack: () -> Unit = {}) {
     var showAddPhotoDialog by remember { mutableStateOf<LocalDate?>(null) }
     var selectedA by remember { mutableStateOf<ProgressPhotoEntity?>(null) }
     var selectedB by remember { mutableStateOf<ProgressPhotoEntity?>(null) }
-    var compareMix by remember { mutableStateOf(0.5f) }
-    var showViewer by remember { mutableStateOf(false) }
-    var viewerStartIndex by remember { mutableStateOf(0) }
+    var viewerState by remember { mutableStateOf<ProgressPhotoViewerState?>(null) }
+    var viewerOpener by remember { mutableStateOf<FocusRequester?>(null) }
+    val compareFocus = remember { FocusRequester() }
+    var photoError by remember { mutableStateOf<String?>(null) }
+    var isDeleting by remember { mutableStateOf(false) }
+    val photoStorage = remember(context) { ProgressPhotoStorage(context.filesDir, "${context.packageName}.fileprovider") }
     var showClearAllConfirm by remember { mutableStateOf(false) }
     var isExportingZip by remember { mutableStateOf(false) }
     // Calendar state
@@ -115,10 +135,54 @@ fun ProgressPhotosScreen(onBack: () -> Unit = {}) {
         val loaded = withContext(Dispatchers.IO) {
             photoBox.query().orderDesc(ProgressPhotoEntity_.takenAt).build().use { it.find() }
         }
-        withContext(Dispatchers.Main) { rows = loaded }
+        withContext(Dispatchers.Main) {
+            rows = loaded
+            selectedA = selectedA?.let { selected -> loaded.firstOrNull { it.uid == selected.uid } }
+            selectedB = selectedB?.let { selected -> loaded.firstOrNull { it.uid == selected.uid } }
+            if (viewerState?.let { resolveProgressPhotoViewer(it, loaded).isEmpty() } == true) viewerState = null
+        }
     }
 
-    LaunchedEffect(Unit) { refresh() }
+    fun dismissViewer() {
+        viewerState = null
+        scope.launch {
+            withFrameNanos { }
+            runCatching { viewerOpener?.requestFocus() }
+        }
+    }
+
+    fun deletePhotos(targets: List<ProgressPhotoEntity>) {
+        if (isDeleting) return
+        isDeleting = true
+        photoError = null
+        scope.launch {
+            try {
+                val result = withContext(Dispatchers.IO) {
+                    photoStorage.deletePhotos(targets) { photoBox.remove(it) }
+                }
+                refresh()
+                val orphanFailures = withContext(Dispatchers.IO) {
+                    photoStorage.reconcileOrphans(rows.map { it.fileUri }, System.currentTimeMillis() - 86_400_000L)
+                }
+                if (result.failedPhotoIds.isNotEmpty() || orphanFailures.isNotEmpty()) {
+                    photoError = "Some photos could not be deleted. Please try again."
+                }
+                if (rows.isEmpty()) { compareDateA = null; compareDateB = null }
+            } catch (exception: kotlinx.coroutines.CancellationException) {
+                throw exception
+            } catch (_: Exception) {
+                photoError = "Could not finish deleting photos. Please try again."
+            } finally {
+                isDeleting = false
+            }
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        try { refresh() }
+        catch (exception: kotlinx.coroutines.CancellationException) { throw exception }
+        catch (_: Exception) { photoError = "Could not load progress photos. Please reopen this screen." }
+    }
 
     val dateComparePhotos = remember(rows, compareDateA, compareDateB) {
         resolveDateComparePhotos(
@@ -154,7 +218,11 @@ fun ProgressPhotosScreen(onBack: () -> Unit = {}) {
                 ?.atStartOfDay(java.time.ZoneId.systemDefault())?.toInstant()?.toEpochMilli()
                 ?: now
             // Compress/resize to max 1080px before storing
-            val savedUri = compressAndSavePhoto(context, uri) ?: uri
+            val savedUri = compressAndSavePhoto(context, uri)
+            if (savedUri == null) {
+                withContext(Dispatchers.Main) { photoError = "Could not copy this photo. The original has not been changed." }
+                return@launch
+            }
             photoBox.put(
                 ProgressPhotoEntity().apply {
                     uid = newUid()
@@ -186,7 +254,9 @@ fun ProgressPhotosScreen(onBack: () -> Unit = {}) {
                 ?: now
             // Compress/resize camera JPEG to max 1080px and save to app private storage
             val savedUri = compressAndSavePhoto(context, uri) ?: uri
-            if (savedUri != uri) deleteOwnedProgressPhoto(context, uri)
+            if (savedUri != uri && !photoStorage.deleteOwnedReference(uri.toString())) {
+                withContext(Dispatchers.Main) { photoError = "Photo saved, but the temporary camera copy could not be removed." }
+            }
             photoBox.put(
                 ProgressPhotoEntity().apply {
                     uid = newUid()
@@ -203,9 +273,10 @@ fun ProgressPhotosScreen(onBack: () -> Unit = {}) {
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().background(c.bg).statusBarsPadding().padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = com.ironlog.app.ui.theme.appCardSpacedBy(12.dp),
     ) {
         item { ScreenHeader(title = "PROGRESS PHOTOS", onBack = onBack) }
+        photoError?.let { message -> item { Text(message, color = c.danger) } }
 
         // ── Month calendar ────────────────────────────────────────────────────
         item {
@@ -234,7 +305,7 @@ fun ProgressPhotosScreen(onBack: () -> Unit = {}) {
             )
         }
         item {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(horizontalArrangement = appSpacedBy(8.dp)) {
                 TextButton(
                     onClick = {
                         calendarCompareMode = false
@@ -270,7 +341,7 @@ fun ProgressPhotosScreen(onBack: () -> Unit = {}) {
 
         // ── Add photo buttons ─────────────────────────────────────────────────
         item {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(horizontalArrangement = appSpacedBy(8.dp)) {
                 Button(
                     onClick = {
                         val out = createProgressPhotoUri(context)
@@ -286,11 +357,16 @@ fun ProgressPhotosScreen(onBack: () -> Unit = {}) {
             }
         }
         item {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(horizontalArrangement = appSpacedBy(8.dp)) {
                 Button(
                     onClick = {
                         val latest = rows.firstOrNull() ?: return@Button
-                        val uri = runCatching { Uri.parse(latest.fileUri) }.getOrNull() ?: return@Button
+                        val file = photoStorage.ownedFile(latest.fileUri)?.takeIf { it.isFile }
+                        if (file == null) {
+                            photoError = "This image is unavailable on this device."
+                            return@Button
+                        }
+                        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
                         context.startActivity(
                             Intent(Intent.ACTION_SEND).apply {
                                 type = "image/*"
@@ -329,6 +405,7 @@ fun ProgressPhotosScreen(onBack: () -> Unit = {}) {
                     else Text("Export All")
                 }
                 Button(
+                    enabled = !isDeleting,
                     onClick = { showClearAllConfirm = true },
                     modifier = Modifier.weight(1f),
                 ) { Text("Clear All") }
@@ -344,8 +421,8 @@ fun ProgressPhotosScreen(onBack: () -> Unit = {}) {
                         .clip(RoundedCornerShape(12.dp))
                         .background(c.accentSoft)
                         .border(1.dp, c.accentBorder, RoundedCornerShape(12.dp))
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        .appPadding(horizontal = 12.dp, vertical = 10.dp),
+                    horizontalArrangement = appSpacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     // Slot A
@@ -380,9 +457,12 @@ fun ProgressPhotosScreen(onBack: () -> Unit = {}) {
                         modifier = Modifier
                             .clip(RoundedCornerShape(8.dp))
                             .background(if (activeSelectedB != null) c.accent else c.faint)
+                            .focusRequester(compareFocus)
                             .clickable(enabled = activeSelectedB != null) {
-                                showViewer = true
-                                viewerStartIndex = rows.indexOfFirst { it.uid == activeSelectedA?.uid }.coerceAtLeast(0)
+                                val before = activeSelectedA ?: return@clickable
+                                val after = activeSelectedB ?: return@clickable
+                                viewerOpener = compareFocus
+                                viewerState = ProgressPhotoViewerState.Compare(before.uid, after.uid)
                             }
                             .padding(horizontal = 12.dp, vertical = 8.dp),
                         contentAlignment = Alignment.Center,
@@ -411,7 +491,7 @@ fun ProgressPhotosScreen(onBack: () -> Unit = {}) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 32.dp),
+                        .appPadding(vertical = 32.dp),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
@@ -427,6 +507,7 @@ fun ProgressPhotosScreen(onBack: () -> Unit = {}) {
             }
         } else {
             items(displayRows, key = { it.uid }) { row ->
+                val viewFocus = remember(row.uid) { FocusRequester() }
                 val isA = activeSelectedA?.uid == row.uid
                 val isB = activeSelectedB?.uid == row.uid
                 val isSelected = isA || isB
@@ -455,8 +536,8 @@ fun ProgressPhotosScreen(onBack: () -> Unit = {}) {
                                     else -> { selectedA = row; selectedB = null }
                                 }
                             }
-                            .padding(10.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            .appPadding(10.dp),
+                        horizontalArrangement = appSpacedBy(12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         // ── Thumbnail ─────────────────────────────────────────
@@ -468,7 +549,7 @@ fun ProgressPhotosScreen(onBack: () -> Unit = {}) {
                             contentAlignment = Alignment.Center,
                         ) {
                             AsyncImage(
-                                model = row.fileUri.takeIf { it.isNotBlank() }?.let { Uri.parse(it) },
+                                model = photoStorage.ownedFile(row.fileUri)?.takeIf { it.isFile },
                                 contentDescription = null,
                                 modifier = Modifier.fillMaxSize(),
                                 contentScale = ContentScale.Crop,
@@ -497,7 +578,7 @@ fun ProgressPhotosScreen(onBack: () -> Unit = {}) {
                         // ── Info + actions ────────────────────────────────────
                         Column(
                             modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalArrangement = appSpacedBy(4.dp),
                         ) {
                             Text(
                                 formatTakenAt(row.takenAt),
@@ -505,6 +586,9 @@ fun ProgressPhotosScreen(onBack: () -> Unit = {}) {
                                 fontWeight = FontWeight.SemiBold,
                                 fontSize = IronLogType.body.fontSize.sp,
                             )
+                            if (photoStorage.ownedFile(row.fileUri)?.isFile != true) {
+                                Text("Image unavailable on this device", color = c.muted, fontSize = IronLogType.micro.fontSize.sp)
+                            }
                             if (row.notes.isNotBlank() && row.notes != "Imported from gallery" && row.notes != "Captured from camera") {
                                 Text(
                                     row.notes,
@@ -520,33 +604,18 @@ fun ProgressPhotosScreen(onBack: () -> Unit = {}) {
                                 color = if (isSelected) c.accent else c.muted,
                                 fontSize = IronLogType.meta.fontSize.sp,
                             )
-                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Row(horizontalArrangement = appSpacedBy(4.dp)) {
                                 TextButton(
                                     onClick = {
-                                        if (calendarCompareMode) {
-                                            calendarCompareMode = false
-                                            compareDateA = null
-                                            compareDateB = null
-                                        }
-                                        viewerStartIndex = rows.indexOfFirst { it.uid == row.uid }.coerceAtLeast(0)
-                                        if (selectedA == null) selectedA = row
-                                        showViewer = true
+                                        viewerOpener = viewFocus
+                                        viewerState = ProgressPhotoViewerState.Single(row.uid)
                                     },
+                                    modifier = Modifier.focusRequester(viewFocus),
                                     contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 4.dp),
                                 ) { Text("View", fontSize = IronLogType.meta.fontSize.sp) }
                                 TextButton(
-                                    onClick = {
-                                        val uid = row.uid
-                                        if (selectedA?.uid == uid) selectedA = null
-                                        if (selectedB?.uid == uid) selectedB = null
-                                        if (compareDateA != null && progressPhotoLocalDate(row.takenAt) == compareDateA) compareDateA = null
-                                        if (compareDateB != null && progressPhotoLocalDate(row.takenAt) == compareDateB) compareDateB = null
-                                        // Single coroutine so refresh runs after remove completes.
-                                        scope.launch(Dispatchers.IO) {
-                                            photoBox.remove(row)
-                                            refresh()
-                                        }
-                                    },
+                                    enabled = !isDeleting,
+                                    onClick = { deletePhotos(listOf(row)) },
                                     contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 4.dp),
                                 ) { Text("Delete", color = c.danger, fontSize = IronLogType.meta.fontSize.sp) }
                             }
@@ -556,152 +625,27 @@ fun ProgressPhotosScreen(onBack: () -> Unit = {}) {
             }
         }
         // Bottom scroll clearance
-        item { Spacer(Modifier.height(16.dp).navigationBarsPadding()) }
+        item { Spacer(Modifier.height(appGapDp(16.dp)).navigationBarsPadding()) }
     }
 
-    if (showViewer && activeSelectedA != null) {
-        val pagerState = rememberPagerState(
-            initialPage = viewerStartIndex.coerceIn(0, (rows.size - 1).coerceAtLeast(0)),
-            pageCount = { rows.size.coerceAtLeast(1) },
+    viewerState?.let { state ->
+        val viewerPhotos = resolveProgressPhotoViewer(state, rows)
+        if (viewerPhotos.isNotEmpty()) ProgressPhotoViewerDialog(
+            photos = viewerPhotos,
+            onDismiss = ::dismissViewer,
+            onSaveNote = { photoId, note ->
+                withContext(Dispatchers.IO) {
+                    ObjectBox.store.runInTx {
+                        val latest = photoBox.get(photoId) ?: error("Photo no longer exists")
+                        check(latest.uid == viewerPhotos.first().uid) { "Photo has changed" }
+                        latest.notes = note
+                        latest.updatedAt = System.currentTimeMillis()
+                        photoBox.put(latest)
+                    }
+                }
+                refresh()
+            },
         )
-        // Full-screen overlay viewer
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(c.bg.copy(alpha = 0.97f)),
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .statusBarsPadding()
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                // Header
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        if (activeSelectedB != null) "BEFORE / AFTER" else "PHOTO VIEWER",
-                        color = c.accent,
-                        fontSize = IronLogType.eyebrow.fontSize.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        letterSpacing = 2.sp,
-                    )
-                    TextButton(onClick = { showViewer = false }) {
-                        Text("CLOSE", color = c.muted, fontSize = IronLogType.meta.fontSize.sp, fontWeight = FontWeight.Bold)
-                    }
-                }
-
-                if (activeSelectedB == null) {
-                    // Single photo pager
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f)
-                            .clip(RoundedCornerShape(16.dp)),
-                    ) {
-                        HorizontalPager(
-                            state = pagerState,
-                            modifier = Modifier.fillMaxSize(),
-                        ) { page ->
-                            val row = rows.getOrNull(page)
-                            AsyncImage(
-                                model = row?.fileUri?.takeIf { it.isNotBlank() }?.let { Uri.parse(it) },
-                                contentDescription = null,
-                                modifier = Modifier.fillMaxSize(),
-                                contentScale = ContentScale.Fit,
-                            )
-                        }
-                    }
-                    val currentPhoto = rows.getOrNull(pagerState.currentPage)
-                    Text(
-                        "${pagerState.currentPage + 1} / ${rows.size}  •  ${currentPhoto?.let { formatTakenAt(it.takenAt) } ?: ""}",
-                        color = c.subtext,
-                        fontSize = IronLogType.meta.fontSize.sp,
-                    )
-                    var notesDraft by remember(currentPhoto?.uid) { mutableStateOf(currentPhoto?.notes.orEmpty()) }
-                    OutlinedTextField(
-                        value = notesDraft,
-                        onValueChange = { notesDraft = it },
-                        label = { Text("Notes", color = c.muted) },
-                        placeholder = { Text("Add a note for this photo…", color = c.muted, fontSize = IronLogType.body.fontSize.sp) },
-                        modifier = Modifier.fillMaxWidth(),
-                        minLines = 2,
-                        maxLines = 4,
-                    )
-                    if (notesDraft != currentPhoto?.notes.orEmpty()) {
-                        Button(
-                            onClick = {
-                                val photo = currentPhoto ?: return@Button
-                                scope.launch(Dispatchers.IO) {
-                                    photo.notes = notesDraft
-                                    photo.updatedAt = System.currentTimeMillis()
-                                    photoBox.put(photo)
-                                    refresh()
-                                }
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                        ) { Text("SAVE NOTE") }
-                    }
-                } else {
-                    // Before / after compare with slider
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f)
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(c.card),
-                    ) {
-                        AsyncImage(
-                            model = activeSelectedA?.fileUri?.takeIf { it.isNotBlank() }?.let { Uri.parse(it) },
-                            contentDescription = "Before",
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Crop,
-                        )
-                        AsyncImage(
-                            model = activeSelectedB?.fileUri?.takeIf { it.isNotBlank() }?.let { Uri.parse(it) },
-                            contentDescription = "After",
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .drawWithContent {
-                                    val revealWidth = size.width * compareMix
-                                    clipRect(left = 0f, top = 0f, right = revealWidth, bottom = size.height) {
-                                        this@drawWithContent.drawContent()
-                                    }
-                                },
-                            contentScale = ContentScale.Crop,
-                        )
-                        // A / B labels
-                        Row(
-                            modifier = Modifier.fillMaxWidth().align(Alignment.BottomCenter).padding(12.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                        ) {
-                            Box(
-                                Modifier
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(c.bg.copy(alpha = 0.75f))
-                                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                            // GAP-08: slider right → more B (After) visible; labels corrected
-                            ) { Text("◀  A", color = c.text, fontSize = IronLogType.meta.fontSize.sp, fontWeight = FontWeight.Bold) }
-                            Box(
-                                Modifier
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(c.bg.copy(alpha = 0.75f))
-                                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                            ) { Text("B  ▶", color = c.text, fontSize = IronLogType.meta.fontSize.sp, fontWeight = FontWeight.Bold) }
-                        }
-                    }
-                    Slider(value = compareMix, onValueChange = { compareMix = it })
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("B: ${activeSelectedB?.let { formatTakenAt(it.takenAt) }}", color = c.muted, fontSize = IronLogType.meta.fontSize.sp)
-                        Text("A: ${activeSelectedA?.let { formatTakenAt(it.takenAt) }}", color = c.muted, fontSize = IronLogType.meta.fontSize.sp)
-                    }
-                }
-            }
-        }
     }
 
     // Add-photo-for-day dialog (empty calendar day tap)
@@ -721,7 +665,7 @@ fun ProgressPhotosScreen(onBack: () -> Unit = {}) {
                 }) { Text("Camera") }
             },
             dismissButton = {
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(horizontalArrangement = appSpacedBy(4.dp)) {
                     TextButton(onClick = {
                         showAddPhotoDialog = null
                         pendingPhotoDate = dayToAdd
@@ -741,42 +685,140 @@ fun ProgressPhotosScreen(onBack: () -> Unit = {}) {
             confirmButton = {
                 TextButton(onClick = {
                     showClearAllConfirm = false
-                    scope.launch(Dispatchers.IO) {
-                        // Collect file URIs before removing from DB
-                        val fileUris = runCatching {
-                            photoBox.query().build().find().mapNotNull { it.fileUri }
-                        }.getOrElse { emptyList() }
-                        photoBox.removeAll()
-                        // Delete underlying files from storage.
-                        // URIs are content:// from FileProvider — .path returns the provider's
-                        // virtual path, not a real filesystem path. Reconstruct from filesDir.
-                        fileUris.forEach { uriStr ->
-                            runCatching {
-                                val uri = android.net.Uri.parse(uriStr)
-                                when (uri.scheme) {
-                                    "file" -> java.io.File(uri.path!!).delete()
-                                    else -> {
-                                        // Last path segment is the filename; files live in
-                                        // context.filesDir/progress_photos/
-                                        val filename = uri.lastPathSegment
-                                        if (filename != null) {
-                                            java.io.File(context.filesDir, "progress_photos/$filename").delete()
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        selectedA = null
-                        selectedB = null
-                        compareDateA = null
-                        compareDateB = null
-                        refresh()
-                    }
+                    deletePhotos(rows)
                 }) { Text("Delete all") }
             },
             dismissButton = {
                 TextButton(onClick = { showClearAllConfirm = false }) { Text("Cancel") }
             },
+        )
+    }
+}
+
+@Composable
+internal fun ProgressPhotoViewerDialog(
+    photos: List<ProgressPhotoEntity>,
+    onDismiss: () -> Unit,
+    onSaveNote: suspend (Long, String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val c = useTheme()
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val closeFocus = remember { FocusRequester() }
+    val photo = photos.firstOrNull() ?: return
+    val after = photos.getOrNull(1)
+    val storage = remember(context) { ProgressPhotoStorage(context.filesDir, "${context.packageName}.fileprovider") }
+    var compareMix by remember(photo.uid, after?.uid) { mutableStateOf(0.5f) }
+    var savedNote by remember(photo.uid) { mutableStateOf(photo.notes) }
+    var notesDraft by remember(photo.uid) { mutableStateOf(photo.notes) }
+    var saving by remember { mutableStateOf(false) }
+    var saveError by remember { mutableStateOf<String?>(null) }
+    var confirmDiscard by remember { mutableStateOf(false) }
+
+    fun requestDismiss() {
+        when (photoViewerDismissal(savedNote, notesDraft, saving)) {
+            PhotoViewerDismissal.CLOSE -> onDismiss()
+            PhotoViewerDismissal.CONFIRM_DISCARD -> { confirmDiscard = true }
+            PhotoViewerDismissal.WAIT_FOR_SAVE -> Unit
+        }
+    }
+
+    Dialog(
+        onDismissRequest = ::requestDismiss,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            dismissOnBackPress = true,
+            dismissOnClickOutside = false,
+            decorFitsSystemWindows = false,
+        ),
+    ) {
+        val focusManager = LocalFocusManager.current
+        BoxWithConstraints(
+            modifier.fillMaxSize().background(c.bg).safeDrawingPadding().imePadding().padding(16.dp),
+        ) {
+            LaunchedEffect(photo.uid, after?.uid) { closeFocus.requestFocus() }
+            // Fill the normal viewport, but grow beyond it when controls and the minimum photo slot
+            // need more room. Intrinsic height keeps a weighted photo from collapsing in a scrollable column.
+            Column(
+                Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
+                    .heightIn(min = maxHeight).height(IntrinsicSize.Min)
+                    .semantics { paneTitle = if (after == null) "Photo viewer" else "Before and after comparison" },
+                verticalArrangement = appSpacedBy(12.dp),
+            ) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        if (after == null) "PHOTO VIEWER" else "BEFORE / AFTER",
+                        color = c.accent, fontSize = IronLogType.eyebrow.fontSize.sp, fontWeight = FontWeight.ExtraBold,
+                    )
+                    TextButton(onClick = { focusManager.clearFocus(); requestDismiss() }, enabled = !saving, modifier = Modifier.focusRequester(closeFocus)) {
+                        Text("CLOSE", color = c.muted)
+                    }
+                }
+                Box(Modifier.fillMaxWidth().weight(1f).heightIn(min = 160.dp).clip(RoundedCornerShape(16.dp)).background(c.card), contentAlignment = Alignment.Center) {
+                    val beforeFile = storage.ownedFile(photo.fileUri)?.takeIf { it.isFile }
+                    if (beforeFile == null) Text("Image unavailable on this device", color = c.muted)
+                    else AsyncImage(
+                        model = beforeFile,
+                        contentDescription = if (after == null) "Progress photo taken ${formatTakenAt(photo.takenAt)}" else "Before photo",
+                        modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Fit,
+                    )
+                    if (after != null) {
+                        val afterFile = storage.ownedFile(after.fileUri)?.takeIf { it.isFile }
+                        if (afterFile == null) Text("After image unavailable on this device", color = c.muted, modifier = Modifier.align(Alignment.BottomCenter))
+                        else AsyncImage(
+                            model = afterFile, contentDescription = "After photo",
+                            modifier = Modifier.fillMaxSize().drawWithContent {
+                                clipRect(right = size.width * compareMix) { this@drawWithContent.drawContent() }
+                            },
+                            contentScale = ContentScale.Fit,
+                        )
+                    }
+                }
+                if (after == null) {
+                    Text(formatTakenAt(photo.takenAt), color = c.subtext, fontSize = IronLogType.meta.fontSize.sp)
+                    OutlinedTextField(
+                        value = notesDraft,
+                        onValueChange = { notesDraft = it; saveError = null },
+                        enabled = !saving,
+                        label = { Text("Notes", color = c.muted) },
+                        modifier = Modifier.fillMaxWidth(), minLines = 1, maxLines = 3,
+                    )
+                    saveError?.let { Text(it, color = c.danger) }
+                    if (notesDraft != savedNote || saving) Button(
+                        enabled = !saving,
+                        onClick = {
+                            val idToSave = photo.objectBoxId
+                            val noteToSave = notesDraft
+                            saving = true
+                            saveError = null
+                            scope.launch {
+                                try {
+                                    onSaveNote(idToSave, noteToSave)
+                                    savedNote = noteToSave
+                                    focusManager.clearFocus()
+                                } catch (exception: kotlinx.coroutines.CancellationException) {
+                                    throw exception
+                                } catch (_: Exception) {
+                                    saveError = "Could not save note. Please try again."
+                                } finally { saving = false }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text(if (saving) "SAVING…" else "SAVE NOTE") }
+                } else {
+                    Slider(value = compareMix, onValueChange = { compareMix = it })
+                    Text("Before: ${formatTakenAt(photo.takenAt)}", color = c.muted, fontSize = IronLogType.meta.fontSize.sp)
+                    Text("After: ${formatTakenAt(after.takenAt)}", color = c.muted, fontSize = IronLogType.meta.fontSize.sp)
+                }
+            }
+        }
+        if (confirmDiscard) AlertDialog(
+            onDismissRequest = { confirmDiscard = false },
+            title = { Text("Discard unsaved note?") },
+            text = { Text("Your changes have not been saved.") },
+            confirmButton = { TextButton(onClick = { confirmDiscard = false; onDismiss() }) { Text("Discard") } },
+            dismissButton = { TextButton(onClick = { confirmDiscard = false }) { Text("Keep editing") } },
         )
     }
 }
@@ -809,8 +851,8 @@ private fun PhotoCalendar(
             .clip(RoundedCornerShape(IronLogRadius.lg.dp))
             .background(c.card)
             .border(1.dp, c.cardBorder, RoundedCornerShape(IronLogRadius.lg.dp))
-            .padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+            .appPadding(12.dp),
+        verticalArrangement = appSpacedBy(8.dp),
     ) {
         // ── Month navigation ─────────────────────────────────────────────────
         Row(
@@ -862,7 +904,7 @@ private fun PhotoCalendar(
                             Box(
                                 modifier = Modifier
                                     .aspectRatio(1f)
-                                    .padding(2.dp)
+                                    .appPadding(2.dp)
                                     .clip(CircleShape)
                                     .background(
                                         when {
@@ -904,7 +946,7 @@ private fun PhotoCalendar(
         // ── Legend ────────────────────────────────────────────────────────────
         if (photoDates.isNotEmpty()) {
             Row(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                horizontalArrangement = appSpacedBy(6.dp),
                 verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
             ) {
                 Box(Modifier.size(8.dp).clip(CircleShape).background(c.accentSoft).border(1.dp, c.accent, CircleShape))
@@ -924,12 +966,6 @@ private fun createProgressPhotoUri(context: android.content.Context): Uri {
     val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
     val file = File(dir, "progress_$stamp.jpg")
     return FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-}
-
-private fun deleteOwnedProgressPhoto(context: android.content.Context, uri: Uri) {
-    if (uri.authority != "${context.packageName}.fileprovider") return
-    val filename = uri.lastPathSegment?.substringAfterLast('/') ?: return
-    File(context.filesDir, "progress_photos/$filename").takeIf { it.isFile }?.delete()
 }
 
 private fun formatTakenAt(millis: Long): String {
@@ -982,15 +1018,16 @@ private suspend fun buildProgressPhotosZip(
     rows: List<ProgressPhotoEntity>,
 ): Uri? = withContext(Dispatchers.IO) {
     runCatching {
-        val cacheDir = File(context.cacheDir, "photo_exports").also { it.mkdirs() }
+        val cacheDir = File(context.cacheDir, "exports").also { it.mkdirs() }
         val zipFile = File(cacheDir, "ironlog_progress_photos.zip")
         val dateFmt = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        val storage = ProgressPhotoStorage(context.filesDir, "${context.packageName}.fileprovider")
         ZipOutputStream(FileOutputStream(zipFile)).use { zos ->
             rows.forEachIndexed { idx, row ->
                 val entryName = "photo_${dateFmt.format(Date(row.takenAt))}_${idx + 1}.jpg"
                 runCatching {
-                    val uri = Uri.parse(row.fileUri)
-                    context.contentResolver.openInputStream(uri)?.use { input ->
+                    val file = storage.ownedFile(row.fileUri)?.takeIf { it.isFile } ?: return@runCatching
+                    file.inputStream().use { input ->
                         zos.putNextEntry(ZipEntry(entryName))
                         input.copyTo(zos)
                         zos.closeEntry()

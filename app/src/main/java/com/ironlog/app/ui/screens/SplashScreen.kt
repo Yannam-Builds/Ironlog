@@ -1,5 +1,7 @@
 package com.ironlog.app.ui.screens
 
+import com.ironlog.app.ui.theme.appSpacedBy
+
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -65,7 +67,7 @@ fun SplashScreen(onFinish: () -> Unit) {
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(24.dp),
+            verticalArrangement = appSpacedBy(24.dp),
         ) {
             // Logo row
             Row(
@@ -127,7 +129,7 @@ private fun LoadingDots() {
         ), label = "dot3",
     )
 
-    Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+    Row(horizontalArrangement = appSpacedBy(7.dp)) {
         listOf(dot1, dot2, dot3).forEach { t ->
             Box(
                 Modifier

@@ -2,12 +2,15 @@ package com.ironlog.app.ui.screens
 
 import com.ironlog.app.ui.screens.intelligence.recommendedPlanDayId
 import com.ironlog.app.ui.screens.stats.parseHistoryEditTimestampOrNull
+import com.ironlog.app.ui.screens.stats.historyEditLocalFields
 import com.ironlog.app.ui.model.HistoryEntry
 import com.ironlog.app.ui.model.UiPlan
 import com.ironlog.app.ui.model.UiPlanDay
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
+import java.time.Instant
+import java.time.ZoneId
 
 class ParityClosureLogicTest {
     @Test
@@ -55,6 +58,34 @@ class ParityClosureLogicTest {
 
         requireNotNull(parsed)
         assert(parsed.contains("T"))
+    }
+
+    @Test
+    fun historyEditorRoundTripsTheAthletesLocalWallClockInsteadOfUtcText() {
+        val source = "2026-08-31T20:00:00Z"
+        val kolkata = ZoneId.of("Asia/Kolkata")
+        val fields = historyEditLocalFields(source, kolkata)
+
+        assertEquals("2026-09-01", fields.date)
+        assertEquals("01:30", fields.time)
+        assertEquals(
+            Instant.parse(source),
+            Instant.parse(requireNotNull(parseHistoryEditTimestampOrNull(fields.date, fields.time, kolkata))),
+        )
+    }
+
+    @Test
+    fun historyEditorPreservesPreviousLocalDayInLosAngeles() {
+        val source = "2026-09-01T02:30:00Z"
+        val zone = ZoneId.of("America/Los_Angeles")
+        val fields = historyEditLocalFields(source, zone)
+
+        assertEquals("2026-08-31", fields.date)
+        assertEquals("19:30", fields.time)
+        assertEquals(
+            Instant.parse(source),
+            Instant.parse(requireNotNull(parseHistoryEditTimestampOrNull(fields.date, fields.time, zone))),
+        )
     }
 
     private fun planOf(vararg ids: String) = UiPlan(

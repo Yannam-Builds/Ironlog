@@ -1,6 +1,8 @@
 package com.ironlog.app.ui.screens.onboarding
 
 import androidx.lifecycle.ViewModel
+import com.ironlog.app.domain.intelligence.INTELLIGENCE_MODE_BUILTIN
+import com.ironlog.app.domain.intelligence.INTELLIGENCE_MODE_CLOUD_AI
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -18,8 +20,7 @@ data class OnboardingDraft(
     val cloudAiApiKey: String = "",
     val cloudAiModelName: String = "gemini-2.0-flash-lite",
     val cloudAiProviderPreset: String = "gemini",
-    val intelligenceMode: String = "LOCAL",
-    val cameraGranted: Boolean = false,
+    val intelligenceMode: String = INTELLIGENCE_MODE_BUILTIN,
     val healthConnectGranted: Boolean = false,
     val notificationsGranted: Boolean = false,
     // Step 3 — Baseline calibration fields
@@ -78,17 +79,17 @@ class OnboardingViewModel : ViewModel() {
         _draft.update {
             it.copy(
                 cloudAiApiKey    = key.trim(),
-                intelligenceMode = if (key.isNotBlank()) "AUTO" else "LOCAL",
+                intelligenceMode = if (key.isNotBlank()) {
+                    INTELLIGENCE_MODE_CLOUD_AI
+                } else {
+                    INTELLIGENCE_MODE_BUILTIN
+                },
             )
         }
     }
 
     fun updateCloudModelName(model: String) {
         _draft.update { it.copy(cloudAiModelName = model) }
-    }
-
-    fun setCameraGranted(granted: Boolean) {
-        _draft.update { it.copy(cameraGranted = granted) }
     }
 
     fun setHealthConnectGranted(granted: Boolean) {

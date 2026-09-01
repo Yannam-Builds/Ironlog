@@ -1,5 +1,8 @@
 ﻿package com.ironlog.app.ui.screens.settings
 
+import com.ironlog.app.ui.theme.appGapDp
+import com.ironlog.app.ui.theme.appPadding
+import com.ironlog.app.ui.theme.appSpacedBy
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.BorderStroke
@@ -24,6 +27,8 @@ import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material.icons.outlined.TrendingUp
 import androidx.compose.material3.*
+import com.ironlog.app.ui.theme.Text
+import com.ironlog.app.ui.theme.typographyTextStyle
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -87,6 +92,7 @@ fun ExerciseLibraryScreen(
     var favoriteIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var videoMap by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var confirmDeleteExercise by remember { mutableStateOf<LegacyExerciseShape?>(null) }
+    var deleteExerciseError by remember { mutableStateOf<String?>(null) }
     var activeProfileUnavailableEquipment by remember { mutableStateOf<Set<String>>(emptySet()) }
     // FIXED: 27 — filter bottom sheet state
     var showFilterSheet by remember { mutableStateOf(false) }
@@ -186,13 +192,13 @@ fun ExerciseLibraryScreen(
 
         // FIXED: 27 — Single filter trigger row with active chips + FILTERS button
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            Modifier.fillMaxWidth().appPadding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = appSpacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             LazyRow(
                 Modifier.weight(1f),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                horizontalArrangement = appSpacedBy(6.dp),
             ) {
                 if (scope == "favorites") item { ActiveFilterChip("★ Favorites") { scope = "all" } }
                 if (scope == "custom") item { ActiveFilterChip("Custom") { scope = "all" } }
@@ -217,7 +223,7 @@ fun ExerciseLibraryScreen(
                     .clickable { showFilterSheet = true }
                     .padding(horizontal = 14.dp, vertical = 8.dp),
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = appSpacedBy(4.dp)) {
                     Icon(Icons.Outlined.FilterList, null, tint = if (hasActiveFilters) c.accent else c.muted, modifier = Modifier.size(14.dp))
                     Text("FILTERS", color = if (hasActiveFilters) c.accent else c.muted, fontSize = IronLogType.meta.fontSize.sp, fontWeight = FontWeight(IronLogType.button.fontWeight))
                 }
@@ -228,13 +234,13 @@ fun ExerciseLibraryScreen(
         Row(
             Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 6.dp)
+                .appPadding(horizontal = 16.dp, vertical = 6.dp)
                 .clip(RoundedCornerShape(IronLogRadius.lg.dp))
                 .background(c.card)
                 .border(1.dp, if (searchFocused) c.accent.copy(alpha = 0.6f) else c.cardBorder, RoundedCornerShape(IronLogRadius.lg.dp))
                 .padding(horizontal = 14.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalArrangement = appSpacedBy(10.dp),
         ) {
             Icon(Icons.Filled.Search, null, tint = if (searchFocused) c.accent else c.muted, modifier = Modifier.size(18.dp))
             Box(Modifier.weight(1f)) {
@@ -248,7 +254,7 @@ fun ExerciseLibraryScreen(
                         .fillMaxWidth()
                         .focusRequester(focusRequester)
                         .onFocusChanged { searchFocused = it.isFocused },
-                    textStyle = TextStyle(color = c.text, fontSize = IronLogType.body.fontSize.sp),
+                    textStyle = typographyTextStyle(TextStyle(color = c.text, fontSize = IronLogType.body.fontSize.sp)),
                     singleLine = true,
                 )
             }
@@ -263,7 +269,7 @@ fun ExerciseLibraryScreen(
             "${filtered.size} exercise${if (filtered.size == 1) "" else "s"}",
             color = c.muted,
             fontSize = IronLogType.meta.fontSize.sp,
-            modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 6.dp)
+            modifier = Modifier.appPadding(horizontal = 16.dp).appPadding(bottom = 6.dp)
         )
 
         // ── Exercise list ─────────────────────────────────────────────────────
@@ -275,8 +281,8 @@ fun ExerciseLibraryScreen(
             if (recentlyUsed.isNotEmpty() && debouncedSearch.isBlank() && muscle == null && cat == null && equip == null && movement == null && difficulty == null && !bwOnly && scope == "all") {
                 item {
                     Column(
-                        Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                        Modifier.fillMaxWidth().appPadding(horizontal = 16.dp),
+                        verticalArrangement = appSpacedBy(6.dp),
                     ) {
                         Text(
                             "RECENTLY USED",
@@ -286,7 +292,7 @@ fun ExerciseLibraryScreen(
                             letterSpacing = IronLogType.eyebrow.letterSpacing.sp,
                         )
                         LazyRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            horizontalArrangement = appSpacedBy(8.dp),
                         ) {
                             items(recentlyUsed) { name ->
                                 Box(
@@ -310,15 +316,15 @@ fun ExerciseLibraryScreen(
             if (filtered.isEmpty()) {
                 item {
                     Column(
-                        Modifier.fillMaxWidth().padding(40.dp),
+                        Modifier.fillMaxWidth().appPadding(40.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                        verticalArrangement = appSpacedBy(8.dp)
                     ) {
                         Text("No exercises found", color = c.text, fontWeight = FontWeight.Bold, fontSize = IronLogType.section.fontSize.sp)
                         Text("Try a different filter or search term.", color = c.muted, fontSize = IronLogType.body.fontSize.sp)
                         if (missingExerciseSeed.isNotBlank() && !hasExactMatch) {
-                            Spacer(Modifier.height(8.dp))
-                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Spacer(Modifier.height(appGapDp(8.dp)))
+                            Row(horizontalArrangement = appSpacedBy(10.dp)) {
                                 Box(
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(10.dp))
@@ -350,7 +356,10 @@ fun ExerciseLibraryScreen(
                             context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(link)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                         }
                     },
-                    onDeleteCustom = if (ex.isCustom) ({ confirmDeleteExercise = ex }) else null,
+                    onDeleteCustom = if (ex.isCustom) ({
+                        deleteExerciseError = null
+                        confirmDeleteExercise = ex
+                    }) else null,
                     // GAP-09: progress icon — uses dedicated callback if provided, else falls through to onExerciseClick
                     onOpenProgress = onOpenExerciseProgress?.let { cb -> { cb(ex.name) } },
                 )
@@ -360,9 +369,9 @@ fun ExerciseLibraryScreen(
             if (missingExerciseSeed.isNotBlank() && !hasExactMatch && filtered.isNotEmpty()) {
                 item {
                     Column(
-                        Modifier.fillMaxWidth().padding(16.dp),
+                        Modifier.fillMaxWidth().appPadding(16.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                        verticalArrangement = appSpacedBy(8.dp)
                     ) {
                         Text("Can't find it?", color = c.muted, fontSize = IronLogType.body.fontSize.sp)
                         Box(
@@ -386,12 +395,12 @@ fun ExerciseLibraryScreen(
             onDismissRequest = { showFilterSheet = false },
             containerColor = c.card,
         ) {
-            Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Column(Modifier.fillMaxWidth().appPadding(horizontal = 20.dp).appPadding(bottom = 32.dp), verticalArrangement = appSpacedBy(16.dp)) {
                 Text("FILTERS", color = c.muted, fontSize = IronLogType.eyebrow.fontSize.sp, fontWeight = FontWeight(IronLogType.eyebrow.fontWeight), letterSpacing = IronLogType.eyebrow.letterSpacing.sp)
                 // Scope
                 Text("Scope", color = c.muted, fontSize = IronLogType.meta.fontSize.sp)
                 @OptIn(ExperimentalLayoutApi::class)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                FlowRow(horizontalArrangement = appSpacedBy(8.dp), verticalArrangement = appSpacedBy(8.dp)) {
                     ExerciseFilterChip("All", scope == "all" && !bwOnly, onClick = { scope = "all"; bwOnly = false })
                     ExerciseFilterChip("★ Favorites", scope == "favorites", onClick = { scope = if (scope == "favorites") "all" else "favorites" })
                     ExerciseFilterChip("Custom", scope == "custom", onClick = { scope = if (scope == "custom") "all" else "custom" })
@@ -401,7 +410,7 @@ fun ExerciseLibraryScreen(
                 if (muscles.isNotEmpty()) {
                     Text("Muscle Group", color = c.muted, fontSize = IronLogType.meta.fontSize.sp)
                     @OptIn(ExperimentalLayoutApi::class)
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FlowRow(horizontalArrangement = appSpacedBy(8.dp), verticalArrangement = appSpacedBy(8.dp)) {
                         muscles.forEach { m -> ExerciseFilterChip(m, muscle == m) { muscle = if (muscle == m) null else m } }
                     }
                 }
@@ -409,7 +418,7 @@ fun ExerciseLibraryScreen(
                 if (equipmentOptions.isNotEmpty()) {
                     Text("Equipment", color = c.muted, fontSize = IronLogType.meta.fontSize.sp)
                     @OptIn(ExperimentalLayoutApi::class)
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FlowRow(horizontalArrangement = appSpacedBy(8.dp), verticalArrangement = appSpacedBy(8.dp)) {
                         equipmentOptions.forEach { e -> ExerciseFilterChip(e, equip == e) { equip = if (equip == e) null else e } }
                     }
                 }
@@ -417,7 +426,7 @@ fun ExerciseLibraryScreen(
                 if (categories.isNotEmpty()) {
                     Text("Category", color = c.muted, fontSize = IronLogType.meta.fontSize.sp)
                     @OptIn(ExperimentalLayoutApi::class)
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FlowRow(horizontalArrangement = appSpacedBy(8.dp), verticalArrangement = appSpacedBy(8.dp)) {
                         categories.forEach { catOpt -> ExerciseFilterChip(catOpt, cat == catOpt) { cat = if (cat == catOpt) null else catOpt } }
                     }
                 }
@@ -425,7 +434,7 @@ fun ExerciseLibraryScreen(
                 if (movementOptions.isNotEmpty()) {
                     Text("Movement Pattern", color = c.muted, fontSize = IronLogType.meta.fontSize.sp)
                     @OptIn(ExperimentalLayoutApi::class)
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FlowRow(horizontalArrangement = appSpacedBy(8.dp), verticalArrangement = appSpacedBy(8.dp)) {
                         movementOptions.forEach { m -> ExerciseFilterChip(m, movement == m) { movement = if (movement == m) null else m } }
                     }
                 }
@@ -433,7 +442,7 @@ fun ExerciseLibraryScreen(
                 if (difficultyOptions.isNotEmpty()) {
                     Text("Difficulty", color = c.muted, fontSize = IronLogType.meta.fontSize.sp)
                     @OptIn(ExperimentalLayoutApi::class)
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FlowRow(horizontalArrangement = appSpacedBy(8.dp), verticalArrangement = appSpacedBy(8.dp)) {
                         difficultyOptions.forEach { d -> ExerciseFilterChip(d.replaceFirstChar { it.titlecase() }, difficulty == d) { difficulty = if (difficulty == d) null else d } }
                     }
                 }
@@ -457,27 +466,51 @@ fun ExerciseLibraryScreen(
     // Confirm delete dialog for custom exercises
     confirmDeleteExercise?.let { ex ->
         AlertDialog(
-            onDismissRequest = { confirmDeleteExercise = null },
+            onDismissRequest = {
+                confirmDeleteExercise = null
+                deleteExerciseError = null
+            },
             containerColor = c.card,
             title = { Text("Delete \"${ex.name}\"?", color = c.text) },
-            text = { Text("This will permanently remove this custom exercise.", color = c.muted) },
+            text = {
+                Column(verticalArrangement = appSpacedBy(8.dp)) {
+                    Text("This will permanently remove this custom exercise.", color = c.muted)
+                    deleteExerciseError?.let { message ->
+                        Text(message, color = c.danger)
+                    }
+                }
+            },
             confirmButton = {
                 TextButton(onClick = {
                     coroutineScope.launch {
-                        repoWithCtx.deleteCustomExercise(ex.id)
-                        exercises = repoWithCtx.getExercisesSnapshot()
-                        confirmDeleteExercise = null
+                        try {
+                            repoWithCtx.deleteCustomExercise(ex.id)
+                            exercises = repoWithCtx.getExercisesSnapshot()
+                            confirmDeleteExercise = null
+                            deleteExerciseError = null
+                        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                            throw cancelled
+                        } catch (failure: Exception) {
+                            deleteExerciseError = customExerciseDeleteFailureMessage(failure)
+                        }
                     }
                 }) {
                     Text("DELETE", color = c.danger, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { confirmDeleteExercise = null }) { Text("CANCEL", color = c.muted) }
+                TextButton(onClick = {
+                    confirmDeleteExercise = null
+                    deleteExerciseError = null
+                }) { Text("CANCEL", color = c.muted) }
             },
         )
     }
 }
+
+internal fun customExerciseDeleteFailureMessage(failure: Throwable): String =
+    failure.message?.takeIf(String::isNotBlank)
+        ?: "This exercise could not be deleted. Try again."
 
 // FIXED: 27 — Dismissable active filter chip shown in the trigger row
 @Composable
@@ -488,9 +521,9 @@ private fun ActiveFilterChip(label: String, onDismiss: () -> Unit) {
             .clip(RoundedCornerShape(IronLogRadius.full.dp))
             .background(c.accentSoft)
             .border(1.dp, c.accentBorder, RoundedCornerShape(IronLogRadius.full.dp))
-            .padding(start = 10.dp, end = 6.dp, top = 5.dp, bottom = 5.dp),
+            .appPadding(start = 10.dp, end = 6.dp, top = 5.dp, bottom = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        horizontalArrangement = appSpacedBy(4.dp),
     ) {
         Text(label, color = c.accent, fontSize = IronLogType.meta.fontSize.sp, fontWeight = FontWeight.Bold)
         Box(Modifier.size(32.dp).clickable(onClick = onDismiss), contentAlignment = Alignment.Center) {
@@ -506,12 +539,12 @@ private fun FilterRow(borderBottom: Boolean = true, content: @Composable RowScop
         modifier = Modifier
             .fillMaxWidth()
             .then(if (borderBottom) Modifier.drawBottomBorder(c.faint) else Modifier)
-            .padding(vertical = 5.dp),
+            .appPadding(vertical = 5.dp),
         contentPadding = PaddingValues(horizontal = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = appSpacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        item { Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically, content = content) }
+        item { Row(horizontalArrangement = appSpacedBy(8.dp), verticalAlignment = Alignment.CenterVertically, content = content) }
     }
 }
 
@@ -550,11 +583,11 @@ private fun ExerciseRow(
             .clickable(onClick = onClick)
             .drawBottomBorder(c.faint)
             .padding(horizontal = 16.dp, vertical = 10.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalArrangement = appSpacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = appSpacedBy(8.dp)) {
                 // FIXED: 1, 29
                 Text(exercise.name, color = c.text, fontWeight = FontWeight.Bold, fontSize = IronLogType.body.fontSize.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                 if (exercise.isCustom) {
@@ -563,7 +596,7 @@ private fun ExerciseRow(
                             .clip(RoundedCornerShape(4.dp))
                             .background(c.accentSoft)
                             .border(1.dp, c.accentBorder, RoundedCornerShape(4.dp))
-                            .padding(horizontal = 5.dp, vertical = 2.dp)
+                            .appPadding(horizontal = 5.dp, vertical = 2.dp)
                     ) { Text("CUSTOM", color = c.accent, fontSize = IronLogType.micro.fontSize.sp, fontWeight = FontWeight.Black, letterSpacing = IronLogType.micro.letterSpacing.sp) }
                 }
             }
@@ -577,7 +610,7 @@ private fun ExerciseRow(
                 Text(subtitle, color = c.muted, fontSize = IronLogType.meta.fontSize.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp))
             }
         }
-        Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Column(horizontalAlignment = Alignment.End, verticalArrangement = appSpacedBy(4.dp)) {
             // FIXED: 29 — 44dp touch target
             IconButton(onClick = onFavorite, modifier = Modifier.size(44.dp)) {
                 Icon(

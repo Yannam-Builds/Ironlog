@@ -45,4 +45,11 @@ data class GamificationProfileEntity(
 
     /** Comma-separated list of unlocked badge IDs. */
     var unlockedBadges: String = "",
+
+    /** Authoritative badge ID -> earned epoch millis map. */
+    // Nullable for additive ObjectBox migrations: rows created before this property existed
+    // hydrate it as null. Startup normalization persists the canonical empty JSON value.
+    var badgeUnlocksJson: String? = "{}",
+
+    var updatedAt: Long = 0L,
 )

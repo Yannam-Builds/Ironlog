@@ -1,6 +1,8 @@
 package com.ironlog.app.domain.gamification
 
 import com.ironlog.app.ui.model.HistoryEntry
+import com.ironlog.app.ui.model.HistoryExercise
+import com.ironlog.app.ui.model.HistoryExerciseSet
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import java.time.LocalDate
@@ -12,6 +14,15 @@ class StreakEngineTest {
     private fun entry(date: LocalDate) = HistoryEntry(
         id = date.toString(),
         date = date.toString(),
+        duration = 45 * 60,
+        exercises = listOf(
+            HistoryExercise(
+                id = "ex-$date",
+                exerciseId = "bench",
+                name = "Bench Press",
+                sets = List(8) { HistoryExerciseSet(id = "$date-$it", weight = 60.0, reps = 8.0) },
+            ),
+        ),
     )
 
     // Week of 2026-05-18 is ISO week 21 (Mon May 18 - Sun May 24).

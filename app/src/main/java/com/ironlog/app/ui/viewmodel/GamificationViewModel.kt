@@ -16,6 +16,7 @@ import com.ironlog.app.data.objectbox.GamificationProfileEntity_
 import com.ironlog.app.data.objectbox.PlanEntity
 import com.ironlog.app.data.objectbox.WorkoutImportProvenanceMigration
 import com.ironlog.app.data.repository.SettingsRepository
+import com.ironlog.app.data.repository.currentAthleteBodyweightKg
 import com.ironlog.app.domain.badges.AppStats
 import com.ironlog.app.domain.badges.BadgeDefinitions
 import com.ironlog.app.domain.gamification.AthleteCalibration
@@ -31,8 +32,10 @@ import com.ironlog.app.domain.gamification.StreakEngine
 import com.ironlog.app.domain.gamification.XpAction
 import com.ironlog.app.domain.gamification.XpEngine
 import com.ironlog.app.domain.gamification.buildDailyProofSummary
+import com.ironlog.app.domain.gamification.CreditedProof
 import com.ironlog.app.domain.gamification.dailyWorkoutStreakDays
 import com.ironlog.app.domain.intelligence.CloudAiKeyStore
+import com.ironlog.app.domain.intelligence.canonicalIntelligenceMode
 import com.ironlog.app.ui.model.HistoryEntry
 import com.ironlog.app.widget.WidgetUpdateWorker
 import io.objectbox.BoxStore
@@ -43,6 +46,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
@@ -77,6 +82,7 @@ data class GamificationUiState(
     val dailyProofPrimaryRoute: String = "ProgramPicker",
     val foxExpressionId: String = ForgeFoxExpression.Clipboard.id,
     val recoveryCircuitCompletedThisWeek: Boolean = false,
+    val refreshError: String? = null,
 )
 
 internal fun totalXpFromLedger(ledgerTotalXp: Long, bonusXp: Long): Long =
@@ -87,11 +93,33 @@ internal fun isCloudAiBadgeActive(
     baseUrl: String,
     modelName: String,
     apiKey: String,
-): Boolean = intelligenceMode == "cloud_ai" &&
+): Boolean = canonicalIntelligenceMode(intelligenceMode) == "cloud_ai" &&
     baseUrl.isNotBlank() && modelName.isNotBlank() && apiKey.isNotBlank()
 
 internal fun mergedGoalModes(existing: Set<String>, current: String): Set<String> =
     (existing + current).mapNotNull(::canonicalGamificationGoalMode).toSet()
+
+internal data class GoalModeEvidence(
+    val goalModes: Set<String>,
+    val lastCreditedWorkoutId: String?,
+)
+
+/** Settings changes are preferences, not training proof. A mode counts only with a new credited workout. */
+internal fun goalModeEvidenceAfterProof(
+    existing: Set<String>,
+    current: String,
+    lastCreditedWorkoutId: String?,
+    latestCreditedWorkoutId: String?,
+): GoalModeEvidence {
+    val canonicalExisting = existing.mapNotNull(::canonicalGamificationGoalMode).toSet()
+    if (latestCreditedWorkoutId.isNullOrBlank() || latestCreditedWorkoutId == lastCreditedWorkoutId) {
+        return GoalModeEvidence(canonicalExisting, lastCreditedWorkoutId)
+    }
+    return GoalModeEvidence(
+        goalModes = mergedGoalModes(canonicalExisting, current),
+        lastCreditedWorkoutId = latestCreditedWorkoutId,
+    )
+}
 
 internal fun canonicalGamificationGoalMode(value: String): String? = when (value.trim().lowercase()) {
     "strength" -> "strength"
@@ -120,13 +148,15 @@ internal fun unlockedBadgesAfterGrade(
 class GamificationViewModel(
     application: Application,
     private val boxStore: BoxStore,
+    private val clock: java.time.Clock = java.time.Clock.systemDefaultZone(),
 ) : AndroidViewModel(application) {
 
     private val xpEngine = XpEngine()
     private val statEngine = StatEngine()
     private val streakEngine = StreakEngine()
     private val ledgerEngine = IronLedgerEngine()
-    private val settingsRepo = SettingsRepository()
+    private val mutationMutex = Mutex()
+    private val settingsRepo = SettingsRepository(boxStore.boxFor(com.ironlog.app.data.objectbox.AppSettingEntity::class.java))
 
     private val profileBox get() = boxStore.boxFor(GamificationProfileEntity::class.java)
     private val calibrationBox get() = boxStore.boxFor(AthleteCalibrationEntity::class.java)
@@ -137,36 +167,36 @@ class GamificationViewModel(
 
     init {
         loadProfile()
+        viewModelScope.launch(Dispatchers.IO) {
+            com.ironlog.app.data.repository.observeEntityChanges({ boxStore },
+                com.ironlog.app.data.objectbox.WorkoutEntity::class.java,
+                com.ironlog.app.data.objectbox.WorkoutExerciseEntity::class.java,
+                com.ironlog.app.data.objectbox.WorkoutSetEntity::class.java,
+                com.ironlog.app.data.objectbox.ExerciseEntity::class.java,
+                com.ironlog.app.data.objectbox.ExerciseMuscleEntity::class.java,
+                AthleteCalibrationEntity::class.java, PlanEntity::class.java,
+            ).collect { refreshFromHistory(emptyList(), 4).join() }
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            settingsRepo.observeStrings(setOf("ironlog_settings", "manual_recovery_input", "active_workout_day_name",
+                "gamification_rest_timer_used", "gamification_user_created_plan") +
+                com.ironlog.app.domain.intelligence.RECOVERY_REGIONS.map { "pain_flag_$it" })
+                .collect { refreshFromHistory(emptyList(), 4).join() }
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            CloudAiKeyStore.revision.collect { refreshFromHistory(emptyList(), 4).join() }
+        }
     }
 
     private fun getOrCreateProfile(): GamificationProfileEntity {
-        WorkoutImportProvenanceMigration.run()
         return profileBox.query(GamificationProfileEntity_.offlineUserId.equal("local"))
             .build().use { it.findFirst() }
             ?: GamificationProfileEntity(offlineUserId = "local")
                 .also { profileBox.put(it) }
     }
 
-    fun loadProfile() {
-        viewModelScope.launch(Dispatchers.IO) {
-            val profile = getOrCreateProfile()
-            val badges = profile.unlockedBadges.split(",").filter { it.isNotBlank() }
-            val stats = runCatching { Json.decodeFromString<RpgStats>(profile.statsJson) }
-                .getOrDefault(RpgStats())
-            _uiState.value = GamificationUiState(
-                level = profile.level,
-                xpInLevel = profile.xpInLevel,
-                xpForNextLevel = xpEngine.xpForLevel(profile.level),
-                totalXp = profile.totalXp,
-                rank = profile.rank,
-                streakWeeks = profile.streakWeeks,
-                stats = stats,
-                activeTitle = profile.activeTitle,
-                unlockedBadges = badges,
-                latestBadgeTitle = badges.lastOrNull()?.let(::displayTitleForBadgeId),
-            )
-        }
-    }
+    /** Bootstrap follows the same canonical refresh path; cached defaults cannot overwrite derived state. */
+    fun loadProfile() { refreshFromHistory(emptyList(), 4) }
 
     /**
      * Award XP for an action. Persists to ObjectBox and refreshes UI state.
@@ -199,186 +229,95 @@ class GamificationViewModel(
      * Recompute streak, stats, and refresh profile from history.
      * Call this after every workout completion.
      */
-    fun refreshFromHistory(history: List<HistoryEntry>, weeklyGoal: Int) {
+    @Suppress("UNUSED_PARAMETER")
+    fun refreshFromHistory(history: List<HistoryEntry>, weeklyGoal: Int): kotlinx.coroutines.Job =
         viewModelScope.launch(Dispatchers.IO) {
-            refreshFromHistoryNow(history, weeklyGoal)
-        }
-    }
-
-    private suspend fun refreshFromHistoryNow(history: List<HistoryEntry>, weeklyGoal: Int) {
-        val profile = getOrCreateProfile()
-
-            val recoveryCircuitCompletions: Map<String, Int> = runCatching {
-                Json.decodeFromString<Map<String, Int>>(profile.makeupCompletionsJson)
-            }.getOrDefault(emptyMap())
-
-            profile.streakWeeks = streakEngine.computeStreakWeeks(history, weeklyGoal, recoveryCircuitCompletions)
-            val dailyStreakDays = dailyWorkoutStreakDays(history)
-
-            // Stats
-            val stats = statEngine.compute(history, profile.streakWeeks, history.size)
-            profile.statsJson = Json.encodeToString(stats)
-
-            val snapshot = ledgerEngine.rebuild(
-                history = history,
-                weeklyGoal = weeklyGoal,
-                calibration = readCalibration(weeklyGoal),
-            )
-            migrateLegacyBonusXp(profile, snapshot.totalXp)
-            val bonusEvents = bonusLedgerEvents()
-            val currentWeekKey = currentIsoWeekKey()
-            val recoveryCircuitCompletedThisWeek =
-                (recoveryCircuitCompletions[currentWeekKey] ?: 0) > 0 ||
-                    bonusEvents.any { it.eventId == "recovery:$currentWeekKey" }
-            val bonusXp = bonusEvents.sumOf { it.xpDelta.toLong() }.coerceAtLeast(0L)
-            val reconciledTotalXp = totalXpFromLedger(snapshot.totalXp, bonusXp)
-            val reconciledLevel = ledgerEngine.levelFromTotalXp(reconciledTotalXp)
-            val reconciledXpInLevel = ledgerEngine.xpInCurrentLevel(reconciledTotalXp)
-            val reconciledXpForNextLevel = ledgerEngine.xpForLevel(reconciledLevel)
-            profile.totalXp = reconciledTotalXp
-            profile.level = reconciledLevel
-            profile.xpInLevel = reconciledXpInLevel
-            profile.rank = snapshot.grade.label
-            val settingsJson = currentSettingsJson()
-            val unlockedBadges = mergedUnlockedBadges(
-                existingCsv = profile.unlockedBadges,
-                currentGrade = snapshot.grade,
-                appBadges = evaluateAppBadges(
-                    history = history,
-                    snapshot = snapshot,
-                    settingsJson = settingsJson,
-                ),
-            )
-            profile.unlockedBadges = unlockedBadges.joinToString(",")
-            profile.activeTitle = activeTitleFor(unlockedBadges, snapshot.grade)
-
-            profileBox.put(profile)
-            persistLedgerEvents(snapshot.events)
-            val badges = unlockedBadges
-            val dailyProof = buildDailyProofSummary(
-                history = history,
-                hasActivePlan = hasAnyPlan(),
-                activeWorkoutDayName = settingsRepo.getString("active_workout_day_name"),
-                readinessScore = computeReadinessScore(history),
-            )
-            val xpLogs = buildList {
-                addAll(bonusEvents.sortedByDescending { it.occurredAt }.map(::bonusEventLogEntry))
-                addAll(
-                    snapshot.events.map {
-                        XpLogEntry(
-                            kind = it.kind,
-                            title = it.title,
-                            detail = it.detail,
-                            xp = it.xp,
-                        )
-                    }
-                )
+            mutationMutex.withLock {
+                try {
+                    refreshFromHistoryNow()
+                    WidgetUpdateWorker.enqueueOneTime(getApplication())
+                } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                    throw cancelled
+                } catch (failure: Exception) {
+                    _uiState.update { it.copy(refreshError = "Progress could not refresh. Your saved workouts are safe; retry from the Ledger.") }
+                }
             }
-            _uiState.value = GamificationUiState(
-                level = reconciledLevel,
-                xpInLevel = reconciledXpInLevel,
-                xpForNextLevel = reconciledXpForNextLevel,
-                totalXp = reconciledTotalXp,
-                rank = snapshot.grade.label,
-                dailyStreakDays = dailyStreakDays,
-                streakWeeks = profile.streakWeeks,
-                stats = toRpgStats(snapshot.stats),
+        }
+
+    private fun refreshFromHistoryNow() {
+        val committed = com.ironlog.app.data.repository.recomputeGamificationAtomically(boxStore) { history ->
+            val capturedClock = java.time.Clock.fixed(clock.instant(), clock.zone)
+            val now = capturedClock.instant()
+            val nowEpochMs = capturedClock.millis()
+            val zone = capturedClock.zone
+            val engine = IronLedgerEngine(zone, capturedClock)
+            val settingsJson = currentSettingsJson()
+            val weeklyGoal = settingsJson.optInt("weeklyGoalDays", 4).coerceIn(1, 7)
+            val profile = getOrCreateProfile()
+            val snapshot = engine.rebuild(history, weeklyGoal, readCalibration(weeklyGoal))
+            com.ironlog.app.data.repository.migrateLegacyBonusXpBlocking(boxStore, profile.totalXp, snapshot.totalXp, nowEpochMs)
+            val bonusEvents = bonusLedgerEvents()
+            val historicalUnlocks = com.ironlog.app.domain.gamification.historicalBadgeUnlocks(history, now, zone) +
+                com.ironlog.app.domain.gamification.historicalPrBadgeUnlocks(history, snapshot.events, now, zone)
+            val badges = mergedUnlockedBadges(profile.unlockedBadges, snapshot.grade,
+                evaluateAppBadges(history, snapshot, settingsJson, capturedClock) + historicalUnlocks.keys)
+            val durable = runCatching { Json.decodeFromString<Map<String, Long>>(profile.badgeUnlocksJson.orEmpty()) }
+                .getOrDefault(emptyMap())
+            profile.unlockedBadges = badges.joinToString(",")
+            profile.badgeUnlocksJson = Json.encodeToString(com.ironlog.app.domain.gamification.mergeBadgeUnlockTimes(
+                badges, durable, historicalUnlocks, profile.updatedAt.takeIf { it > 0L } ?: nowEpochMs) as Map<String, Long>)
+            profile.rank = snapshot.grade.label
+            profile.statsJson = Json.encodeToString(toRpgStats(snapshot.stats))
+            // An event failure escapes and rolls back profile, bonus migration and event invalidations together.
+            persistLedgerEvents(snapshot.events)
+            com.ironlog.app.data.repository.commitGamificationProfile(boxStore, profile, snapshot.totalXp, history, weeklyGoal, capturedClock)
+            val painFlags = com.ironlog.app.domain.intelligence.RECOVERY_REGIONS.filter {
+                settingsRepo.getStringBlocking("pain_flag_$it") == "true"
+            }.toSet()
+            val manual = com.ironlog.app.domain.intelligence.RecoveryCheckInCodec.decode(
+                settingsRepo.getStringBlocking("manual_recovery_input"), nowEpochMs)
+            val daily = buildDailyProofSummary(history, hasAnyPlan(),
+                settingsRepo.getStringBlocking("active_workout_day_name"),
+                computeReadinessScore(history, painFlags, manual, nowEpochMs, zone),
+                nowEpochMs, painFlags, zone)
+            GamificationUiState(
+                level = profile.level, xpInLevel = profile.xpInLevel,
+                xpForNextLevel = if (profile.level >= 100) 0L else engine.xpForLevel(profile.level),
+                totalXp = profile.totalXp, rank = profile.rank,
+                dailyStreakDays = dailyWorkoutStreakDays(history, nowEpochMs, zone),
+                streakWeeks = profile.streakWeeks, stats = toRpgStats(snapshot.stats),
                 activeTitle = profile.activeTitle,
-                unlockedBadges = badges,
-                latestBadgeTitle = badges.lastOrNull()?.let(::displayTitleForBadgeId),
+                unlockedBadges = profile.unlockedBadges.split(',').filter(String::isNotBlank),
+                latestBadgeTitle = com.ironlog.app.domain.gamification.latestEarnedBadgeId(profile.unlockedBadges, profile.badgeUnlocksJson)
+                    ?.let(::displayTitleForBadgeId),
                 integrityScore = snapshot.integrityScore,
-                xpLogs = xpLogs,
-                nextGradeLabel = snapshot.nextGrade?.label,
-                nextGradeGates = snapshot.nextGradeGates,
-                ledgerStats = snapshot.stats,
-                dailyProofStatus = dailyProof.status,
-                dailyProofHeadline = dailyProof.headline,
-                dailyProofDetail = dailyProof.detail,
-                dailyProofPrimaryActionLabel = dailyProof.primaryActionLabel,
-                dailyProofPrimaryRoute = dailyProof.primaryRoute,
-                foxExpressionId = dailyProof.foxExpressionId,
-                recoveryCircuitCompletedThisWeek = recoveryCircuitCompletedThisWeek,
+                xpLogs = bonusEvents.sortedByDescending { it.occurredAt }.map(::bonusEventLogEntry) +
+                    snapshot.events.map { XpLogEntry(it.kind, it.title, it.detail, it.xp) },
+                nextGradeLabel = snapshot.nextGrade?.label, nextGradeGates = snapshot.nextGradeGates,
+                ledgerStats = snapshot.stats, dailyProofStatus = daily.status,
+                dailyProofHeadline = daily.headline, dailyProofDetail = daily.detail,
+                dailyProofPrimaryActionLabel = daily.primaryActionLabel, dailyProofPrimaryRoute = daily.primaryRoute,
+                foxExpressionId = daily.foxExpressionId,
+                recoveryCircuitCompletedThisWeek = JSONObject(profile.makeupCompletionsJson)
+                    .optInt(currentIsoWeekKey(now.atZone(zone).toLocalDate())) > 0,
             )
+        }
+        _uiState.value = committed
     }
 
     /**
      * Record a completed recovery circuit for [isoWeekKey] and award XP.
      */
-    fun completeRecoveryCircuit(
+    suspend fun completeRecoveryCircuit(
         isoWeekKey: String,
         circuitId: String,
-        history: List<HistoryEntry>,
-        weeklyGoal: Int,
-    ) {
-        viewModelScope.launch(Dispatchers.IO) {
-            val profile = getOrCreateProfile()
-            val recoveryCircuitCompletions = runCatching {
-                Json.decodeFromString<Map<String, Int>>(profile.makeupCompletionsJson).toMutableMap()
-            }.getOrDefault(mutableMapOf())
-            val eventId = "recovery:$isoWeekKey"
-            val existingEvent = ledgerEventBox.query(IronLedgerEventEntity_.eventId.equal(eventId))
-                .build().use { it.findFirst() }
-            val canRecord = canRecordRecoveryCircuit(
-                completions = recoveryCircuitCompletions,
-                isoWeekKey = isoWeekKey,
-                hasDurableEvent = existingEvent?.invalidated == false,
-            )
-
-            if (canRecord) {
-                val gained = xpEngine.xpForAction(XpAction.RECOVERY_CIRCUIT)
-                boxStore.runInTx {
-                    recoveryCircuitCompletions[isoWeekKey] = 1
-                    profile.makeupCompletionsJson = Json.encodeToString(recoveryCircuitCompletions as Map<String, Int>)
-                    profile.weeklyXp += gained
-                    profileBox.put(profile)
-                    ledgerEventBox.put(
-                        IronLedgerEventEntity(
-                            eventId = eventId,
-                            sourceType = "bonus",
-                            sourceId = circuitId,
-                            eventKind = "recovery_circuit",
-                            occurredAt = System.currentTimeMillis(),
-                            xpDelta = gained,
-                            metadataJson = JSONObject()
-                                .put("title", "Recovery proof logged")
-                                .put("detail", "Protected $isoWeekKey with a recovery circuit")
-                                .put("circuitId", circuitId)
-                                .toString(),
-                        )
-                    )
-                }
-            } else if ((recoveryCircuitCompletions[isoWeekKey] ?: 0) == 0) {
-                recoveryCircuitCompletions[isoWeekKey] = 1
-                profile.makeupCompletionsJson = Json.encodeToString(recoveryCircuitCompletions as Map<String, Int>)
-                profileBox.put(profile)
-            }
-
-            refreshFromHistoryNow(history, weeklyGoal)
+    ): com.ironlog.app.data.repository.RecoveryCircuitResult = kotlinx.coroutines.withContext(Dispatchers.IO) {
+        mutationMutex.withLock {
+            val result = com.ironlog.app.data.repository.RecoveryCircuitRepository(boxStore, clock).complete(isoWeekKey, circuitId)
+            refreshFromHistoryNow()
             WidgetUpdateWorker.enqueueOneTime(getApplication())
+            result
         }
-    }
-
-    private suspend fun migrateLegacyBonusXp(profile: GamificationProfileEntity, ledgerTotalXp: Long) {
-        val migrationKey = "gamification_bonus_events_v2_migrated"
-        if (settingsRepo.getBoolean(migrationKey, false)) return
-        val legacyBonus = (profile.totalXp - ledgerTotalXp).coerceAtLeast(0L)
-        if (legacyBonus > 0L) {
-            ledgerEventBox.put(
-                IronLedgerEventEntity(
-                    eventId = "legacy:bonus-v1",
-                    sourceType = "bonus",
-                    sourceId = "legacy-profile",
-                    eventKind = "legacy_bonus",
-                    occurredAt = System.currentTimeMillis(),
-                    xpDelta = legacyBonus.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
-                    metadataJson = JSONObject()
-                        .put("title", "Legacy bonus XP")
-                        .put("detail", "Preserved XP earned outside workout proof")
-                        .toString(),
-                )
-            )
-        }
-        settingsRepo.setBoolean(migrationKey, true)
     }
 
     private fun bonusLedgerEvents(): List<IronLedgerEventEntity> = ledgerEventBox.all
@@ -395,55 +334,25 @@ class GamificationViewModel(
     }
 
     private fun persistLedgerEvents(events: List<com.ironlog.app.domain.gamification.IronLedgerEvent>) {
-        runCatching {
-            val box = ledgerEventBox
-            val currentIds = events.map { "${it.sourceId}:${it.kind}" }.toSet()
-            box.all
-                .filter { it.sourceType == "workout" || it.sourceType == "exercise" }
-                .filter { it.eventId !in currentIds && !it.invalidated }
-                .forEach { stale ->
-                    stale.invalidated = true
-                    box.put(stale)
-                }
-            events.forEach { event ->
-                val eventId = "${event.sourceId}:${event.kind}"
-                val existing = box.query(IronLedgerEventEntity_.eventId.equal(eventId))
-                    .build().use { it.findFirst() }
-                val entity = existing ?: IronLedgerEventEntity()
-                entity.eventId = eventId
-                entity.sourceType = if (event.sourceId.contains(':')) "exercise" else "workout"
-                entity.sourceId = event.sourceId
-                entity.eventKind = event.kind
-                entity.invalidated = false
-                entity.occurredAt = com.ironlog.app.domain.gamification.parseHistoryInstant(event.occurredAt)
-                    ?.toEpochMilli() ?: 0L
-                entity.xpDelta = event.xp
-                entity.trustScore = event.trust
-                entity.metadataJson = org.json.JSONObject()
-                    .put("title", event.title)
-                    .put("detail", event.detail)
-                    .toString()
-                box.put(entity)
-            }
-        }
+        com.ironlog.app.data.repository.persistLedgerSnapshotEvents(boxStore, events, clock.zone)
     }
 
-    private suspend fun readCalibration(weeklyGoal: Int): AthleteCalibration {
+    private fun readCalibration(weeklyGoal: Int): AthleteCalibration {
         val entity = calibrationBox.query(AthleteCalibrationEntity_.offlineUserId.equal("local"))
             .build().use { it.findFirst() }
-        suspend fun settingInt(key: String): Int =
-            runCatching { settingsRepo.getSettingString(key)?.toIntOrNull() ?: 0 }.getOrDefault(0)
+        fun settingInt(key: String): Int =
+            runCatching { settingsRepo.getStringBlocking(key)?.toIntOrNull() ?: 0 }.getOrDefault(0)
         val historicalTrainingDays = entity?.historicalTrainingDaysPerWeek?.takeIf { it in 1..7 }
             ?: settingInt("baseline_historical_training_days_per_week").takeIf { it in 1..7 }
             ?: 3
         return AthleteCalibration(
             trainingAgeMonths = entity?.trainingAgeMonths ?: settingInt("baseline_training_age_months"),
             historicalTrainingDaysPerWeek = historicalTrainingDays,
-            importedHistory = entity?.importedHistory ?: settingsRepo.getBoolean("ledger_imported_history", false),
+            importedHistory = entity?.importedHistory ?: (settingsRepo.getStringBlocking("ledger_imported_history")?.toBooleanStrictOrNull() ?: false),
             weeklyGoalDays = entity?.weeklyGoalDays ?: weeklyGoal,
-            bodyweightKg = entity?.bodyweightKg ?: settingInt("baseline_bodyweight_kg").takeIf { it > 0 }?.toDouble(),
-            hasPastTraining = entity?.hasPastTraining ?: settingsRepo.getBoolean("baseline_has_past_training", false),
-            hasGymAccess = entity?.hasGymAccess ?: settingsRepo.getBoolean("baseline_has_gym_access", true),
+            bodyweightKg = currentAthleteBodyweightKg(boxStore),
+            hasPastTraining = entity?.hasPastTraining ?: (settingsRepo.getStringBlocking("baseline_has_past_training")?.toBooleanStrictOrNull() ?: false),
+            hasGymAccess = entity?.hasGymAccess ?: (settingsRepo.getStringBlocking("baseline_has_gym_access")?.toBooleanStrictOrNull() ?: true),
             baselinePushups = entity?.baselinePushups ?: settingInt("baseline_pushups"),
             baselinePullups = entity?.baselinePullups ?: settingInt("baseline_pullups"),
             baselineBenchKg = entity?.baselineBenchKg ?: settingInt("baseline_bench_kg"),
@@ -461,71 +370,61 @@ class GamificationViewModel(
         luk = stats.power,
     )
 
-    private fun titleForGrade(grade: IronGrade): String = when (grade) {
-        IronGrade.UNCALIBRATED -> "Ledger Initiate"
-        IronGrade.GRAPHITE -> "Graphite Trainee"
-        IronGrade.IRON -> "Iron Regular"
-        IronGrade.STEEL -> "Steel Builder"
-        IronGrade.TITANIUM -> "Titanium Athlete"
-        IronGrade.OBSIDIAN -> "Obsidian Veteran"
-        IronGrade.IRIDIUM -> "Iridium Specialist"
-        IronGrade.AETHER -> "Aether Standard"
-        IronGrade.APEX -> "Apex Ledger"
-    }
+    private fun titleForGrade(grade: IronGrade): String = com.ironlog.app.domain.gamification.gradeTitle(grade)
 
-    private suspend fun currentSettingsJson(): JSONObject =
-        runCatching { JSONObject(settingsRepo.getString("ironlog_settings") ?: "{}") }
+    private fun currentSettingsJson(): JSONObject =
+        runCatching { JSONObject(settingsRepo.getStringBlocking("ironlog_settings") ?: "{}") }
             .getOrDefault(JSONObject())
 
     private fun hasAnyPlan(): Boolean =
         boxStore.boxFor(PlanEntity::class.java).query().build().use { it.count() > 0 }
 
-    private fun computeReadinessScore(history: List<HistoryEntry>): Int? {
-        if (history.isEmpty()) return null
+    private fun computeReadinessScore(
+        history: List<HistoryEntry>, painFlags: Set<String>,
+        manualInput: com.ironlog.app.domain.intelligence.ManualRecoveryInput?, nowEpochMs: Long, zone: java.time.ZoneId,
+    ): Int? {
         val readiness = com.ironlog.app.domain.intelligence.RecoveryReadinessEngine
             .readinessByRegion(
-                history.sortedByDescending { com.ironlog.app.domain.gamification.parseHistoryInstant(it.date) }.take(60)
+                history, painFlags, nowEpochMs, zoneId = zone
             )
         return com.ironlog.app.domain.intelligence.RecoveryReadinessEngine
-            .score(readiness)
-            .score
+            .score(readiness, manualInput, nowEpochMs)
+            .scoreOrNull
     }
 
-    private suspend fun evaluateAppBadges(
+    private fun evaluateAppBadges(
         history: List<HistoryEntry>,
         snapshot: IronLedgerSnapshot,
         settingsJson: JSONObject,
+        capturedClock: java.time.Clock,
     ): Set<String> {
-        val verifiedHistory = history.filterNot { it.imported }
+        val verifiedHistory = history.filter { CreditedProof.qualifies(it, capturedClock.instant(), capturedClock.zone) }
         val totalVolumeKg = verifiedHistory.sumOf { it.volume }
-        val dayStreak = dailyWorkoutStreakDays(verifiedHistory)
+        val dayStreak = dailyWorkoutStreakDays(verifiedHistory, capturedClock.millis(), capturedClock.zone)
         val currentRank = legacyRankForBadge(snapshot.grade)
-        val daysSinceFirstWorkout = verifiedHistory.mapNotNull { com.ironlog.app.domain.gamification.parseHistoryInstant(it.date) }
+        val daysSinceFirstWorkout = verifiedHistory.mapNotNull { com.ironlog.app.domain.gamification.parseHistoryInstant(it.date, capturedClock.zone) }
             .minOrNull()
-            ?.let { java.time.temporal.ChronoUnit.DAYS.between(it.atZone(java.time.ZoneId.systemDefault()).toLocalDate(), java.time.LocalDate.now()).toInt() }
+            ?.let { java.time.temporal.ChronoUnit.DAYS.between(it.atZone(capturedClock.zone).toLocalDate(), capturedClock.instant().atZone(capturedClock.zone).toLocalDate()).toInt() }
             ?: 0
-        val createdPlan = hasAnyPlan()
-        val usedRestTimer = verifiedHistory.any { entry ->
-            entry.exercises.any { exercise ->
-                exercise.sets.any { set -> set.restSeconds > 0 }
-            }
-        }
+        val createdPlan = settingsRepo.getStringBlocking("gamification_user_created_plan")
+            ?.toBooleanStrictOrNull() ?: false
+        val usedRestTimer = (settingsRepo.getStringBlocking("gamification_rest_timer_used")?.toBooleanStrictOrNull() ?: false)
         val hasLoggedPr = snapshot.events.any { it.kind == "pr" }
         val providerPreset = settingsJson.optString("cloudAiProviderPreset").ifBlank { "custom" }
         val cloudAiActivated = isCloudAiBadgeActive(
-            intelligenceMode = settingsJson.optString("intelligenceMode"),
+            intelligenceMode = canonicalIntelligenceMode(settingsJson.optString("intelligenceMode")),
             baseUrl = settingsJson.optString("cloudAiBaseUrl"),
             modelName = settingsJson.optString("cloudAiModelName"),
             apiKey = CloudAiKeyStore.load(getApplication(), providerPreset),
         )
         val goalMode = settingsJson.optString("goalMode").ifBlank { "hypertrophy" }
-        val goalModesUsed = recordGoalMode(goalMode)
+        val goalModesUsed = recordGoalMode(goalMode, verifiedHistory, capturedClock)
         val prWorkoutIds = snapshot.events
             .filter { it.kind == "pr" }
-            .map { it.sourceId.substringBefore(':') }
+            .mapNotNull { event -> event.workoutId ?: verifiedHistory.map { it.id }.sortedByDescending(String::length).firstOrNull { event.sourceId.startsWith("$it:") } }
             .toSet()
         var consecutivePrStreak = 0
-        for (workout in verifiedHistory.sortedByDescending { it.date }) {
+        for (workout in verifiedHistory.sortedByDescending { com.ironlog.app.domain.gamification.parseHistoryInstant(it.date, capturedClock.zone) }) {
             if (workout.id in prWorkoutIds) consecutivePrStreak++ else break
         }
 
@@ -547,21 +446,42 @@ class GamificationViewModel(
         )
     }
 
-    private suspend fun recordGoalMode(current: String): Set<String> {
+    private fun recordGoalMode(
+        current: String,
+        verifiedHistory: List<HistoryEntry>,
+        capturedClock: java.time.Clock,
+    ): Set<String> {
         val key = "gamification_goal_modes_used"
+        val markerKey = "gamification_goal_mode_last_workout_id"
         val existing = runCatching {
-            val array = JSONArray(settingsRepo.getString(key) ?: "[]")
+            val array = JSONArray(settingsRepo.getStringBlocking(key) ?: "[]")
             buildSet {
                 for (index in 0 until array.length()) {
                     array.optString(index).trim().lowercase().takeIf(String::isNotBlank)?.let(::add)
                 }
             }
         }.getOrDefault(emptySet())
-        val merged = mergedGoalModes(existing, current)
-        if (merged != existing) {
-            settingsRepo.setString(key, JSONArray(merged.sorted()).toString(), "json")
+        val latestWorkoutId = verifiedHistory.maxWithOrNull(
+            compareBy<HistoryEntry>(
+                { com.ironlog.app.domain.gamification.parseHistoryInstant(it.date, capturedClock.zone) ?: java.time.Instant.MIN },
+                { it.id },
+            )
+        )?.id
+        val evidence = goalModeEvidenceAfterProof(
+            existing = existing,
+            current = current,
+            lastCreditedWorkoutId = settingsRepo.getStringBlocking(markerKey),
+            latestCreditedWorkoutId = latestWorkoutId,
+        )
+        if (evidence.goalModes != existing) {
+            settingsRepo.setStringBlocking(key, JSONArray(evidence.goalModes.sorted()).toString(), "json")
         }
-        return merged
+        if (!evidence.lastCreditedWorkoutId.isNullOrBlank() &&
+            evidence.lastCreditedWorkoutId != settingsRepo.getStringBlocking(markerKey)
+        ) {
+            settingsRepo.setStringBlocking(markerKey, evidence.lastCreditedWorkoutId)
+        }
+        return evidence.goalModes
     }
 
     private fun activeTitleFor(unlockedBadges: List<String>, grade: IronGrade): String {
@@ -572,11 +492,7 @@ class GamificationViewModel(
     private fun badgeTitleForId(id: String): String =
         BadgeDefinitions.all.firstOrNull { it.id == id }?.title ?: id
 
-    private fun displayTitleForBadgeId(id: String): String {
-        BadgeDefinitions.all.firstOrNull { it.id == id }?.let { return it.title }
-        IronGrade.entries.firstOrNull { it.label == id }?.let { return titleForGrade(it) }
-        return id.replace('_', ' ').replaceFirstChar(Char::titlecase)
-    }
+    private fun displayTitleForBadgeId(id: String): String = com.ironlog.app.domain.gamification.earnedBadgeTitle(id)
 
     private fun legacyRankForBadge(grade: IronGrade): String = when (grade) {
         IronGrade.APEX, IronGrade.AETHER, IronGrade.IRIDIUM, IronGrade.OBSIDIAN -> "S"
@@ -606,18 +522,19 @@ internal fun mergedUnlockedBadges(
     currentGrade: IronGrade,
     appBadges: Set<String>,
 ): List<String> {
-    val existing = existingCsv.split(",").map(String::trim).filter(String::isNotBlank).distinct()
+    val existing = existingCsv.split(",").map(String::trim)
+        .filter { it.isNotBlank() && it != "s_rank" }
+        .distinct()
     val gradeBadges = IronGrade.entries
         .filter { it != IronGrade.UNCALIBRATED && it.ordinal <= currentGrade.ordinal }
         .map { it.label }
     val orderedAppBadges = BadgeDefinitions.all.map { it.id }.filter { it in appBadges }
-    val knownGradeBadges = IronGrade.entries.map { it.label }.toSet()
-    val knownAppBadges = BadgeDefinitions.all.map { it.id }.toSet()
-    val validKnownBadges = gradeBadges.toSet() + orderedAppBadges.toSet()
-    val reconciledExisting = existing.filter { badge ->
-        badge in validKnownBadges || (badge !in knownGradeBadges && badge !in knownAppBadges)
-    }
-    return (reconciledExisting + gradeBadges + orderedAppBadges).distinct()
+    return (existing + gradeBadges + orderedAppBadges).distinct()
+}
+
+internal fun creditedSessionsInWeek(history: List<HistoryEntry>, isoWeekKey: String): Int = history.count { workout ->
+    CreditedProof.qualifies(workout) &&
+        com.ironlog.app.domain.gamification.parseHistoryLocalDate(workout.date)?.let(::currentIsoWeekKey) == isoWeekKey
 }
 
 internal fun currentIsoWeekKey(date: java.time.LocalDate = java.time.LocalDate.now()): String {

@@ -12,6 +12,8 @@ import android.graphics.Shader
 import androidx.core.content.FileProvider
 import java.io.File
 import java.io.FileOutputStream
+import com.ironlog.app.ui.theme.TypographyRuntime
+import com.ironlog.app.ui.theme.applyTypography
 
 object ShareService {
     data class ShareMetric(
@@ -47,6 +49,7 @@ object ShareService {
         footnote: String? = null,
     ) {
         runCatching {
+            val typography = TypographyRuntime.store(context).selection.value
             val width = 1080
             val height = 1350
             val bmp = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
@@ -78,28 +81,29 @@ object ShareService {
             val titlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 color = Color.parseColor("#98A2B8")
                 textSize = 36f
-                isFakeBoldText = true
+                applyTypography(context, typography, 700)
                 letterSpacing = 0.08f
             }
             val headlinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 color = Color.WHITE
                 textSize = 72f
-                isFakeBoldText = true
+                applyTypography(context, typography, 700)
             }
             val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 color = Color.parseColor("#98A2B8")
                 textSize = 28f
-                isFakeBoldText = true
+                applyTypography(context, typography, 700)
                 letterSpacing = 0.05f
             }
             val valuePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 color = Color.WHITE
                 textSize = 48f
-                isFakeBoldText = true
+                applyTypography(context, typography, 700)
             }
             val footPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 color = Color.parseColor("#B7C0D4")
                 textSize = 30f
+                applyTypography(context, typography)
             }
 
             canvas.drawText(title.uppercase(), card.left + 70f, card.top + 90f, titlePaint)
@@ -117,7 +121,8 @@ object ShareService {
                 canvas.drawText(it, card.left + 70f, card.bottom - 70f, footPaint)
             }
 
-            val outFile = File(context.cacheDir, "ironlog_share_${System.currentTimeMillis()}.png")
+            val imageDirectory = File(context.cacheDir, "images").apply { mkdirs() }
+            val outFile = File(imageDirectory, "ironlog_share_${System.currentTimeMillis()}.png")
             FileOutputStream(outFile).use { out -> bmp.compress(Bitmap.CompressFormat.PNG, 100, out) }
             val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", outFile)
             shareFile(context, "Share", uri, "image/png")

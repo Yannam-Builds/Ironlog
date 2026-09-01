@@ -1,5 +1,8 @@
 package com.ironlog.app.ui.components
 
+import com.ironlog.app.ui.theme.appPadding
+import com.ironlog.app.ui.theme.appSpacedBy
+
 // FIXED: 6 — ScreenHeader updated with subtitle + action slot; also used as a tab-screen page header
 
 import androidx.compose.foundation.layout.Arrangement
@@ -12,7 +15,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.Text
+import com.ironlog.app.ui.theme.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -32,6 +35,7 @@ fun ScreenHeader(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     subtitle: String? = null,
+    action: @Composable (() -> Unit)? = null,
 ) {
     val c = useTheme()
     Row(
@@ -39,7 +43,7 @@ fun ScreenHeader(
             .fillMaxWidth()
             .padding(bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalArrangement = appSpacedBy(10.dp),
     ) {
         // Use IconButton instead of raw Icon + clickable to get the 48dp minimum touch target.
         IconButton(onClick = onBack) {
@@ -50,7 +54,7 @@ fun ScreenHeader(
                 modifier = Modifier.size(24.dp),
             )
         }
-        Column {
+        Column(Modifier.weight(1f)) {
             Text(
                 text = title,
                 color = c.text,
@@ -66,6 +70,7 @@ fun ScreenHeader(
                 )
             }
         }
+        action?.invoke()
     }
 }
 
@@ -85,7 +90,7 @@ fun PageHeader(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 20.dp),
+            .appPadding(horizontal = 20.dp, vertical = 20.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.Bottom,
     ) {
@@ -110,7 +115,7 @@ fun PageHeader(
                     it,
                     color = c.muted,
                     fontSize = IronLogType.meta.fontSize.sp,
-                    modifier = Modifier.padding(top = 2.dp),
+                    modifier = Modifier.appPadding(top = 2.dp),
                 )
             }
         }

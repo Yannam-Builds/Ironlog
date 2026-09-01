@@ -98,4 +98,4 @@ Existing Impeccable/redesign, accessibility, citation-verification, TDD, browser
 
 ## License
 
-IronLog Personal Use License 1.0 applies; see the repository's `LICENSE`. Third-party software/font notices are distinct from research citations. Research informs design principles and does not validate IronLog's exact readiness formula.
+IronLog is proprietary; see the repository's `LICENSE`. Public source visibility does not grant permission to copy, modify, deploy, redistribute, sell, rebrand or monetize the app. Third-party software, dataset and font notices remain governed by their own terms and are distinct from research citations. Research informs design principles and does not validate IronLog's exact readiness formula.

@@ -1,7 +1,6 @@
 // app/src/test/java/com/ironlog/app/domain/intelligence/RecoveryReadinessEngineTest.kt
 package com.ironlog.app.domain.intelligence
 
-import com.ironlog.app.data.health.BiometricSnapshot
 import com.ironlog.app.ui.model.HistoryEntry
 import com.ironlog.app.ui.model.HistoryExercise
 import com.ironlog.app.ui.model.HistoryExerciseSet
@@ -12,28 +11,77 @@ import org.junit.Test
 
 class RecoveryReadinessEngineTest {
 
-    @Test fun `blendWithBiometric returns training score when no biometrics`() {
-        val snap = BiometricSnapshot()  // all null
-        val result = RecoveryReadinessEngine.blendWithBiometric(0.8, snap)
-        assertEquals(0.8, result, 0.001)
+    private fun pushWorkout(
+        at: Instant,
+        setCount: Int = 8,
+        rir: Double? = 2.0,
+        type: String = "normal",
+    ) = HistoryEntry(
+        id = "push",
+        date = at.toString(),
+        duration = 55 * 60,
+        name = "Push",
+        exercises = listOf(
+            HistoryExercise(
+                exerciseId = "bench",
+                name = "Barbell Bench Press",
+                primaryMuscle = "chest",
+                equipment = "barbell",
+                sets = List(setCount) {
+                    HistoryExerciseSet(weight = 80.0, reps = 8.0, rir = rir, type = type)
+                },
+            ),
+        ),
+    )
+
+    @Test fun `yesterdays push session cannot be hidden by untouched regions`() {
+        val workoutAt = Instant.parse("2026-08-12T10:00:00Z")
+        val now = workoutAt.plusSeconds(24 * 3600)
+
+        val regions = RecoveryReadinessEngine.readinessByRegion(
+            listOf(pushWorkout(workoutAt)),
+            nowEpochMs = now.toEpochMilli(),
+        )
+        val score = RecoveryReadinessEngine.score(regions)
+
+        assertTrue("Push should still be recovering after 24 hours", regions.getValue("Push") < 0.75)
+        assertTrue("Fresh regions must not dilute the limiting muscle", score.score < 78)
     }
 
-    @Test fun `blendWithBiometric blends down when sleep is poor`() {
-        val snap = BiometricSnapshot(sleepHours = 4.0)  // worst sleep score
-        val result = RecoveryReadinessEngine.blendWithBiometric(1.0, snap)
-        assertTrue("Poor sleep should pull blend below 1.0", result < 1.0)
+    @Test fun `failure work creates more next day fatigue than submaximal work`() {
+        val workoutAt = Instant.parse("2026-08-12T10:00:00Z")
+        val now = workoutAt.plusSeconds(24 * 3600).toEpochMilli()
+
+        val submaximal = RecoveryReadinessEngine.readinessByRegion(
+            listOf(pushWorkout(workoutAt, rir = 3.0)), nowEpochMs = now,
+        ).getValue("Push")
+        val failure = RecoveryReadinessEngine.readinessByRegion(
+            listOf(pushWorkout(workoutAt, rir = 0.0, type = "failure")), nowEpochMs = now,
+        ).getValue("Push")
+
+        assertTrue("Failure training should recover more slowly", failure < submaximal)
     }
 
-    @Test fun `blendWithBiometric is 1_0 when training and biometrics are both perfect`() {
-        val snap = BiometricSnapshot(sleepHours = 8.0, hrvRmssd = 80.0)
-        val result = RecoveryReadinessEngine.blendWithBiometric(1.0, snap)
-        assertEquals(1.0, result, 0.001)
+    @Test fun `future dated workouts do not create recovery fatigue`() {
+        val now = Instant.parse("2026-08-13T10:00:00Z")
+        val future = pushWorkout(now.plusSeconds(24 * 3600))
+
+        val regions = RecoveryReadinessEngine.readinessByRegion(listOf(future), nowEpochMs = now.toEpochMilli())
+
+        assertTrue(regions.values.all { it == 1.0 })
     }
 
-    @Test fun `blendWithBiometric stays within 0_0 to 1_0`() {
-        val snap = BiometricSnapshot(sleepHours = 0.0, hrvRmssd = 0.0)
-        val result = RecoveryReadinessEngine.blendWithBiometric(0.0, snap)
-        assertTrue(result in 0.0..1.0)
+    @Test fun `neutral manual check in does not inflate readiness`() {
+        val now = Instant.parse("2026-08-13T10:00:00Z").toEpochMilli()
+        val readiness = mapOf("Push" to 0.60, "Pull" to 0.90, "Legs" to 0.95)
+        val withoutCheckIn = RecoveryReadinessEngine.score(readiness, nowEpochMs = now)
+        val neutralCheckIn = RecoveryReadinessEngine.score(
+            readiness,
+            ManualRecoveryInput(soreness = 3, sleepQuality = 3, energy = 3, recordedAt = now),
+            nowEpochMs = now,
+        )
+
+        assertEquals(withoutCheckIn.score, neutralCheckIn.score)
     }
 
     @Test fun `readiness can be evaluated against a historical clock`() {

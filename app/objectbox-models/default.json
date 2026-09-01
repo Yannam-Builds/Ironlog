@@ -701,7 +701,7 @@
     },
     {
       "id": "11:4741913948774127407",
-      "lastPropertyId": "11:621276958343896092",
+      "lastPropertyId": "12:883147216404790113",
       "name": "WorkoutExerciseEntity",
       "properties": [
         {
@@ -773,13 +773,18 @@
           "type": 11,
           "flags": 520,
           "relationTarget": "ExerciseEntity"
+        },
+        {
+          "id": "12:883147216404790113",
+          "name": "exerciseSnapshotJson",
+          "type": 9
         }
       ],
       "relations": []
     },
     {
       "id": "12:4360833741220823326",
-      "lastPropertyId": "17:5498549554904472762",
+      "lastPropertyId": "18:6414183758197295211",
       "name": "WorkoutSetEntity",
       "properties": [
         {
@@ -878,13 +883,18 @@
           "type": 11,
           "flags": 520,
           "relationTarget": "WorkoutExerciseEntity"
+        },
+        {
+          "id": "18:6414183758197295211",
+          "name": "notes",
+          "type": 9
         }
       ],
       "relations": []
     },
     {
       "id": "13:872393084237455310",
-      "lastPropertyId": "13:8058996708874307559",
+      "lastPropertyId": "15:8421761378460730487",
       "name": "GamificationProfileEntity",
       "properties": [
         {
@@ -954,6 +964,16 @@
           "id": "13:8058996708874307559",
           "name": "unlockedBadges",
           "type": 9
+        },
+        {
+          "id": "14:3269034639266092293",
+          "name": "badgeUnlocksJson",
+          "type": 9
+        },
+        {
+          "id": "15:8421761378460730487",
+          "name": "updatedAt",
+          "type": 6
         }
       ],
       "relations": []

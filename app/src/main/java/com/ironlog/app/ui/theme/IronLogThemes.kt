@@ -176,7 +176,7 @@ object IronLogType {
     val section = Token(16, 800,  0.2, 22)
     val body    = Token(14, 500,  0.0, 20)
     val meta    = Token(12, 500,  0.1, 16)
-    val eyebrow = Token(10, 800,  2.5, 14)
+    val eyebrow = Token(12, 800,  2.5, 16)
     val button  = Token(12, 800,  1.5, 16)
-    val micro   = Token( 9, 800,  1.2, 12)
+    val micro   = Token(12, 800,  1.2, 16)
 }

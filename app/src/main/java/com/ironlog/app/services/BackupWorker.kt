@@ -17,7 +17,12 @@ class BackupWorker(context: Context, params: WorkerParameters) : CoroutineWorker
             val out = File(dir, "ironlog_backup_auto_$stamp.json")
             out.writeText(payload)
             pruneOldAutoBackups(dir)
-            SettingsRepository().setString("last_auto_backup_ms", System.currentTimeMillis().toString())
+            val completedAt = System.currentTimeMillis().toString()
+            SettingsRepository().apply {
+                setString("last_auto_backup_ms", completedAt)
+                setString("last_successful_backup_ms", completedAt)
+            }
+            WorkoutNotificationBridge.cancelReminderAfterDataMutation(applicationContext)
             Result.success()
         }.getOrElse {
             // After 3 attempts give up rather than retrying a corrupt store indefinitely

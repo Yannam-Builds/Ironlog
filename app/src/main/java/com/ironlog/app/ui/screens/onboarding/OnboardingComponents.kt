@@ -1,5 +1,7 @@
 package com.ironlog.app.ui.screens.onboarding
 
+import com.ironlog.app.ui.theme.appGapDp
+import com.ironlog.app.ui.theme.appPadding
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -21,7 +23,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Text
+import com.ironlog.app.ui.theme.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -106,7 +108,7 @@ fun SetupBadge(
         modifier = modifier
             .background(accent.copy(alpha = 0.14f), RoundedCornerShape(999.dp))
             .border(1.dp, accent.copy(alpha = 0.64f), RoundedCornerShape(999.dp))
-            .padding(horizontal = 14.dp, vertical = 8.dp),
+            .appPadding(horizontal = 14.dp, vertical = 8.dp),
     ) {
         Text(
             text = code,
@@ -187,13 +189,13 @@ fun OnboardingPageHeader(
         Text(
             text = step.uppercase(),
             color = OnboardingConfig.accentBlue,
-            fontSize = 11.sp,
+            fontSize = 12.sp,
             fontWeight = FontWeight.ExtraBold,
             letterSpacing = 1.8.sp,
             textAlign = alignment,
             modifier = Modifier.fillMaxWidth(),
         )
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(appGapDp(8.dp)))
         Text(
             text = title,
             color = OnboardingConfig.textPrimary,
@@ -204,7 +206,7 @@ fun OnboardingPageHeader(
             textAlign = alignment,
             modifier = Modifier.fillMaxWidth(),
         )
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(appGapDp(10.dp)))
         Text(
             text = body,
             color = OnboardingConfig.textMuted,
@@ -231,10 +233,10 @@ fun OnboardingSection(
     ) {
         Text(title, color = OnboardingConfig.textPrimary, fontSize = 15.sp, fontWeight = FontWeight.Bold)
         if (!caption.isNullOrBlank()) {
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(appGapDp(4.dp)))
             Text(caption, color = OnboardingConfig.textFaint, fontSize = 12.sp, lineHeight = 17.sp)
         }
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(appGapDp(14.dp)))
         content()
     }
 }
@@ -247,7 +249,7 @@ fun SetupReward(
     Row(
         modifier = modifier
             .background(OnboardingConfig.accentGold.copy(alpha = 0.10f), RoundedCornerShape(14.dp))
-            .padding(horizontal = 12.dp, vertical = 9.dp),
+            .appPadding(horizontal = 12.dp, vertical = 9.dp),
         verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
     ) {
         Box(
@@ -255,7 +257,7 @@ fun SetupReward(
                 .size(8.dp)
                 .background(OnboardingConfig.accentGold, RoundedCornerShape(999.dp)),
         )
-        Spacer(Modifier.width(9.dp))
+        Spacer(Modifier.width(appGapDp(9.dp)))
         Text(text, color = OnboardingConfig.accentGold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
     }
 }

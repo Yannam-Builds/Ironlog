@@ -8,7 +8,7 @@ class IronLedgerBaselineSeedingTest {
     private val engine = IronLedgerEngine()
 
     @Test
-    fun `onboarding calibration seeds starting ledger grade and stats before workout history`() {
+    fun `onboarding calibration never grants earned ledger progress before workout history`() {
         val snapshot = engine.rebuild(
             history = emptyList(),
             weeklyGoal = 5,
@@ -27,16 +27,14 @@ class IronLedgerBaselineSeedingTest {
             ),
         )
 
-        assertEquals(IronGrade.TITANIUM, snapshot.grade)
-        assertTrue(snapshot.stats.strength > 1)
-        assertTrue(snapshot.stats.power > 1)
-        assertTrue(snapshot.stats.endurance > 1)
-        assertTrue(snapshot.stats.agility > 1)
-        assertTrue(snapshot.stats.discipline > 1)
+        assertEquals(IronGrade.UNCALIBRATED, snapshot.grade)
+        assertEquals(0L, snapshot.totalXp)
+        assertEquals(1, snapshot.level)
+        assertEquals(IronLedgerStats(), snapshot.stats)
     }
 
     @Test
-    fun `historical training frequency changes seeded baseline rank and stats`() {
+    fun `historical training frequency does not change earned rank or stats`() {
         val lowFrequency = engine.rebuild(
             history = emptyList(),
             weeklyGoal = 5,
@@ -70,8 +68,8 @@ class IronLedgerBaselineSeedingTest {
             ),
         )
 
-        assertTrue(highFrequency.grade.ordinal >= lowFrequency.grade.ordinal)
-        assertTrue(highFrequency.stats.discipline > lowFrequency.stats.discipline)
-        assertTrue(highFrequency.stats.recovery > lowFrequency.stats.recovery)
+        assertEquals(lowFrequency.grade, highFrequency.grade)
+        assertEquals(lowFrequency.stats, highFrequency.stats)
+        assertEquals(lowFrequency.totalXp, highFrequency.totalXp)
     }
 }

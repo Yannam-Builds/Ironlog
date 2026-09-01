@@ -17,8 +17,4 @@
     <cache-path
         name="cache_exports"
         path="exports/" />
-    <cache-path
-        name="cache_root"
-        path="." />
 </paths>
-

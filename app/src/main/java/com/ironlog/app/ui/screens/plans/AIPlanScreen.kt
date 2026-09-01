@@ -1,5 +1,7 @@
 ﻿package com.ironlog.app.ui.screens.plans
 
+import com.ironlog.app.ui.theme.appPadding
+import com.ironlog.app.ui.theme.appSpacedBy
 import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -9,6 +11,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
+import com.ironlog.app.ui.theme.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Warning
@@ -29,6 +32,7 @@ import com.ironlog.app.data.model.FullPlanObject
 import com.ironlog.app.data.model.LegacyExerciseShape
 import com.ironlog.app.data.model.PlanExerciseInput
 import com.ironlog.app.data.repository.ExerciseRepository
+import com.ironlog.app.data.repository.BodyMeasurementRepository
 import com.ironlog.app.data.repository.PlanRepository
 import com.ironlog.app.data.repository.SettingsRepository
 import com.ironlog.app.domain.ai.ExerciseResolutionEngine
@@ -37,12 +41,14 @@ import com.ironlog.app.domain.ai.SmartPlanStructuringEngine
 import com.ironlog.app.domain.intelligence.CloudAiEngine
 import com.ironlog.app.domain.intelligence.CloudAiKeyStore
 import com.ironlog.app.services.ShareService
+import com.ironlog.app.ui.components.IronLogSwitch
 import com.ironlog.app.ui.components.ScreenHeader
 import com.ironlog.app.ui.context.useTheme
 import com.ironlog.app.ui.theme.IronLogType
 import com.ironlog.app.ui.viewmodel.AppDataViewModel
 import com.ironlog.app.util.normalizeExerciseNameKey
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -80,12 +86,14 @@ fun AIPlanScreen(planRepo: PlanRepository = PlanRepository(), onBack: () -> Unit
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val settingsRepo = remember { SettingsRepository() }
+    val bodyMeasurementRepo = remember { BodyMeasurementRepository() }
     val exerciseRepo = remember { ExerciseRepository(context) }
 
     val appVm: AppDataViewModel = viewModel()
-    val appState by appVm.state.collectAsState()
+    val appState by appVm.state.collectAsStateWithLifecycle()
     val cloudSettings = appState.settings
-    val cloudApiKey = remember(cloudSettings.cloudAiProviderPreset) {
+    val credentialRevision by CloudAiKeyStore.revision.collectAsStateWithLifecycle()
+    val cloudApiKey = remember(credentialRevision, cloudSettings.cloudAiProviderPreset) {
         CloudAiKeyStore.load(context, cloudSettings.cloudAiProviderPreset)
     }
     val cloudConfigured = cloudApiKey.isNotBlank()
@@ -93,31 +101,14 @@ fun AIPlanScreen(planRepo: PlanRepository = PlanRepository(), onBack: () -> Unit
         && cloudSettings.cloudAiModelName.isNotBlank()
 
     var step by remember { mutableStateOf(Step.INTRO) }
-    var equipment by remember { mutableStateOf<List<String>>(emptyList()) }
-    var haptic by remember { mutableStateOf(true) }
+    var equipment by remember { mutableStateOf(AI_PLAN_EQUIPMENT_OPTIONS) }
 
     LaunchedEffect(Unit) {
-        withContext(Dispatchers.IO) {
-            haptic = settingsRepo.getBoolean("hapticFeedback", true)
-            // Just use a default equipment list if profiles are missing for now to keep it simple,
-            // or fetch from profiles if available.
-            val gpStr = settingsRepo.getString("ironlog_gym_profiles")
-            val actId = settingsRepo.getString("ironlog_active_gym_profile_id")
-            if (gpStr != null && actId != null) {
-                try {
-                    val arr = JSONArray(gpStr)
-                    for (i in 0 until arr.length()) {
-                        val p = arr.getJSONObject(i)
-                        if (p.optString("id") == actId) {
-                            val eqArr = p.optJSONArray("equipment") ?: JSONArray()
-                            val eqList = mutableListOf<String>()
-                            for (j in 0 until eqArr.length()) eqList += eqArr.getString(j)
-                            equipment = eqList
-                            break
-                        }
-                    }
-                } catch (e: Exception) {}
-            }
+        equipment = withContext(Dispatchers.IO) {
+            resolveAiPlanEquipment(
+                profilesJson = settingsRepo.getString(GYM_PROFILES_SETTINGS_KEY),
+                activeProfileId = settingsRepo.getString(ACTIVE_GYM_PROFILE_ID_SETTINGS_KEY),
+            )
         }
     }
 
@@ -402,16 +393,16 @@ Generate the plan now. Output ONLY the JSON object.
     LazyColumn(
         modifier = Modifier.fillMaxSize().background(c.bg).statusBarsPadding().padding(horizontal = 16.dp),
         contentPadding = PaddingValues(top = 16.dp, bottom = 80.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = com.ironlog.app.ui.theme.appCardSpacedBy(16.dp)
     ) {
         item { ScreenHeader(title = "AI PLAN CREATOR", onBack = onBack) }
         if (step == Step.INTRO) {
             item {
-                Column(Modifier.fillMaxWidth().background(c.card, RoundedCornerShape(18.dp)).padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Column(Modifier.fillMaxWidth().background(c.card, RoundedCornerShape(18.dp)).appPadding(20.dp), verticalArrangement = appSpacedBy(14.dp)) {
                     Text("CREATE PLAN WITH AI", color = c.text, fontWeight = FontWeight.Black, fontSize = IronLogType.title.fontSize.sp, letterSpacing = 1.5.sp)
                     Text("Use any AI assistant (Claude, ChatGPT, Gemini) to build a custom training plan - then import it directly into IronLog.", color = c.subtext, fontSize = IronLogType.body.fontSize.sp)
                     listOf("Answer a few questions about your goals", "Copy the tailored prompt to your AI app", "Share the exercise library file", "Paste the AI response back & import").forEachIndexed { i, txt ->
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = appSpacedBy(12.dp)) {
                             Box(Modifier.size(26.dp).background(c.accentSoft, RoundedCornerShape(13.dp)).border(1.dp, c.accentBorder, RoundedCornerShape(13.dp)), contentAlignment = Alignment.Center) {
                                 Text("${i + 1}", color = c.accent, fontWeight = FontWeight.Black, fontSize = IronLogType.meta.fontSize.sp)
                             }
@@ -425,7 +416,7 @@ Generate the plan now. Output ONLY the JSON object.
 
         if (step == Step.QUIZ) {
             item {
-                Column(Modifier.fillMaxWidth().background(c.card, RoundedCornerShape(18.dp)).padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Column(Modifier.fillMaxWidth().background(c.card, RoundedCornerShape(18.dp)).appPadding(20.dp), verticalArrangement = appSpacedBy(14.dp)) {
                     Surface(color = c.accentSoft, shape = RoundedCornerShape(999.dp)) { Text("STEP 1 OF 4", color = c.accent, fontWeight = FontWeight.Black, fontSize = IronLogType.eyebrow.fontSize.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)) }
                     Text("PLAN DETAILS", color = c.text, fontWeight = FontWeight.Black, fontSize = IronLogType.title.fontSize.sp, letterSpacing = 1.5.sp)
                     
@@ -438,7 +429,7 @@ Generate the plan now. Output ONLY the JSON object.
 
                     Text("GOAL", color = c.muted, fontWeight = FontWeight.Black, fontSize = IronLogType.eyebrow.fontSize.sp, letterSpacing = 1.5.sp)
                     @OptIn(ExperimentalLayoutApi::class)
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FlowRow(horizontalArrangement = appSpacedBy(8.dp), verticalArrangement = appSpacedBy(8.dp)) {
                         GOAL_OPTIONS.forEach { opt ->
                             FilterChip(selected = goalOption == opt, onClick = { goalOption = opt }, label = { Text(opt) })
                         }
@@ -449,7 +440,7 @@ Generate the plan now. Output ONLY the JSON object.
 
                     Text("SESSION LENGTH", color = c.muted, fontWeight = FontWeight.Black, fontSize = IronLogType.eyebrow.fontSize.sp, letterSpacing = 1.5.sp)
                     @OptIn(ExperimentalLayoutApi::class)
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FlowRow(horizontalArrangement = appSpacedBy(8.dp), verticalArrangement = appSpacedBy(8.dp)) {
                         DURATION_OPTIONS.forEach { opt ->
                             FilterChip(selected = sessionDuration == opt, onClick = { sessionDuration = opt }, label = { Text("$opt min") })
                         }
@@ -460,7 +451,7 @@ Generate the plan now. Output ONLY the JSON object.
                             Text("CARDIO EVERY SESSION", color = c.muted, fontWeight = FontWeight.Black, fontSize = IronLogType.eyebrow.fontSize.sp, letterSpacing = 1.5.sp)
                             Text("Include optional short cardio", color = c.subtext, fontSize = IronLogType.meta.fontSize.sp)
                         }
-                        Switch(checked = cardioEverySession, onCheckedChange = { cardioEverySession = it })
+                            IronLogSwitch(checked = cardioEverySession, onCheckedChange = { cardioEverySession = it })
                     }
 
                     Button(onClick = {
@@ -483,7 +474,7 @@ Generate the plan now. Output ONLY the JSON object.
                                             settingsRepo.getString("baseline_training_age_months")?.toIntOrNull() ?: 0,
                                             settingsRepo.getString("baseline_historical_training_days_per_week")?.toIntOrNull()
                                                 ?: cloudSettings.weeklyGoalDays,
-                                            settingsRepo.getString("baseline_bodyweight_kg")?.toDoubleOrNull(),
+                                            bodyMeasurementRepo.getCurrentBodyweightKg(),
                                         )
                                     }
                                     val json = CloudAiEngine.generatePlanJson(
@@ -532,7 +523,7 @@ Generate the plan now. Output ONLY the JSON object.
                 Column(
                     Modifier.fillMaxWidth().background(c.card, RoundedCornerShape(18.dp)).padding(20.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalArrangement = appSpacedBy(16.dp),
                 ) {
                     CircularProgressIndicator(color = c.accent, modifier = Modifier.size(36.dp))
                     Text("Generating your plan…", color = c.text, fontWeight = FontWeight.Bold, fontSize = IronLogType.section.fontSize.sp)
@@ -548,14 +539,14 @@ Generate the plan now. Output ONLY the JSON object.
 
         if (step == Step.PROMPT) {
             item {
-                Column(Modifier.fillMaxWidth().background(c.card, RoundedCornerShape(18.dp)).padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Column(Modifier.fillMaxWidth().background(c.card, RoundedCornerShape(18.dp)).padding(20.dp), verticalArrangement = appSpacedBy(14.dp)) {
                     Surface(color = c.accentSoft, shape = RoundedCornerShape(999.dp)) { Text("STEP 2 OF 4", color = c.accent, fontWeight = FontWeight.Black, fontSize = IronLogType.eyebrow.fontSize.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)) }
                     Text("REVIEW PROMPT", color = c.text, fontWeight = FontWeight.Black, fontSize = IronLogType.title.fontSize.sp, letterSpacing = 1.5.sp)
                     OutlinedTextField(
                         value = editablePrompt,
                         onValueChange = { editablePrompt = it },
                         modifier = Modifier.fillMaxWidth().height(240.dp),
-                        textStyle = androidx.compose.ui.text.TextStyle(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, fontSize = IronLogType.meta.fontSize.sp, color = c.text)
+                                    textStyle = MaterialTheme.typography.bodySmall.copy(fontSize = IronLogType.meta.fontSize.sp, color = c.text)
                     )
                     Button(onClick = {
                         clipboard.setText(AnnotatedString(editablePrompt))
@@ -574,7 +565,7 @@ Generate the plan now. Output ONLY the JSON object.
 
         if (step == Step.LIBRARY) {
             item {
-                Column(Modifier.fillMaxWidth().background(c.card, RoundedCornerShape(18.dp)).padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Column(Modifier.fillMaxWidth().background(c.card, RoundedCornerShape(18.dp)).appPadding(20.dp), verticalArrangement = appSpacedBy(14.dp)) {
                     Surface(color = c.accentSoft, shape = RoundedCornerShape(999.dp)) { Text("STEP 3 OF 4", color = c.accent, fontWeight = FontWeight.Black, fontSize = IronLogType.eyebrow.fontSize.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)) }
                     Text("SHARE EXERCISE CATALOG", color = c.text, fontWeight = FontWeight.Black, fontSize = IronLogType.title.fontSize.sp, letterSpacing = 1.5.sp)
                     Text("Share your exercise catalog as a compact Markdown file. The AI should use this list for names and metadata.", color = c.subtext, fontSize = IronLogType.body.fontSize.sp)
@@ -622,7 +613,7 @@ Generate the plan now. Output ONLY the JSON object.
 
         if (step == Step.PASTE) {
             item {
-                Column(Modifier.fillMaxWidth().background(c.card, RoundedCornerShape(18.dp)).padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Column(Modifier.fillMaxWidth().background(c.card, RoundedCornerShape(18.dp)).padding(20.dp), verticalArrangement = appSpacedBy(14.dp)) {
                     Surface(color = c.accentSoft, shape = RoundedCornerShape(999.dp)) { Text("STEP 4 OF 4", color = c.accent, fontWeight = FontWeight.Black, fontSize = IronLogType.eyebrow.fontSize.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)) }
                     Text("PASTE AI RESPONSE", color = c.text, fontWeight = FontWeight.Black, fontSize = IronLogType.title.fontSize.sp, letterSpacing = 1.5.sp)
                     
@@ -631,7 +622,7 @@ Generate the plan now. Output ONLY the JSON object.
                         onValueChange = { pastedJson = it },
                         modifier = Modifier.fillMaxWidth().height(200.dp),
                         placeholder = { Text("{\n  \"version\": 1,\n  \"type\": \"ironlog_plan\",\n  ...\n}") },
-                        textStyle = androidx.compose.ui.text.TextStyle(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, fontSize = IronLogType.meta.fontSize.sp, color = c.text)
+                                textStyle = MaterialTheme.typography.bodySmall.copy(fontSize = IronLogType.meta.fontSize.sp, color = c.text)
                     )
 
                     Button(onClick = {
@@ -660,10 +651,10 @@ Generate the plan now. Output ONLY the JSON object.
         if (step == Step.PREVIEW && parsedPlan != null) {
             val pPlan = parsedPlan!!
             item {
-                Column(Modifier.fillMaxWidth().background(c.card, RoundedCornerShape(18.dp)).padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Column(Modifier.fillMaxWidth().background(c.card, RoundedCornerShape(18.dp)).appPadding(20.dp), verticalArrangement = appSpacedBy(14.dp)) {
                     Text("PLAN PREVIEW", color = c.text, fontWeight = FontWeight.Black, fontSize = IronLogType.title.fontSize.sp, letterSpacing = 1.5.sp)
                     
-                    Column(Modifier.fillMaxWidth().background(c.accentSoft, RoundedCornerShape(12.dp)).border(1.dp, c.accentBorder, RoundedCornerShape(12.dp)).padding(14.dp)) {
+                    Column(Modifier.fillMaxWidth().background(c.accentSoft, RoundedCornerShape(12.dp)).border(1.dp, c.accentBorder, RoundedCornerShape(12.dp)).appPadding(14.dp)) {
                         Text(pPlan.name ?: "Plan", color = c.accent, fontWeight = FontWeight.Black, fontSize = IronLogType.section.fontSize.sp)
                         Text("${pPlan.days.size} days / ${pPlan.days.sumOf { it.exercises.size }} exercises", color = c.accent, fontWeight = FontWeight.Bold, fontSize = IronLogType.meta.fontSize.sp)
                     }
@@ -673,8 +664,8 @@ Generate the plan now. Output ONLY the JSON object.
                     }
                     if (smartNotes.isNotEmpty()) {
                         Column(
-                            modifier = Modifier.fillMaxWidth().background(c.accentSoft, RoundedCornerShape(12.dp)).border(1.dp, c.accentBorder, RoundedCornerShape(12.dp)).padding(12.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.fillMaxWidth().background(c.accentSoft, RoundedCornerShape(12.dp)).border(1.dp, c.accentBorder, RoundedCornerShape(12.dp)).appPadding(12.dp),
+                            verticalArrangement = appSpacedBy(6.dp),
                         ) {
                             Text("SMART PLAN ADJUSTMENTS", color = c.accent, fontWeight = FontWeight.ExtraBold, fontSize = IronLogType.meta.fontSize.sp)
                             smartNotes.forEach { note ->
@@ -684,22 +675,22 @@ Generate the plan now. Output ONLY the JSON object.
                     }
 
                     if (parseWarnings.isNotEmpty()) {
-                        Column(Modifier.fillMaxWidth().background(c.warning.copy(alpha = 0.07f), RoundedCornerShape(18.dp)).border(1.dp, c.warning.copy(alpha = 0.33f), RoundedCornerShape(18.dp)).padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Column(Modifier.fillMaxWidth().background(c.warning.copy(alpha = 0.07f), RoundedCornerShape(18.dp)).border(1.dp, c.warning.copy(alpha = 0.33f), RoundedCornerShape(18.dp)).appPadding(14.dp), verticalArrangement = appSpacedBy(10.dp)) {
                             Text("${parseWarnings.size} exercise(s) not in library - configure to add", color = c.accent, fontWeight = FontWeight.ExtraBold, fontSize = IronLogType.meta.fontSize.sp)
                             parseWarnings.forEach { name ->
                                 val cfg = missingConfigs[name] ?: ("" to "Other")
-                                Column(Modifier.fillMaxWidth().border(1.dp, c.warning.copy(alpha = 0.20f), RoundedCornerShape(12.dp)).padding(10.dp)) {
+                                Column(Modifier.fillMaxWidth().border(1.dp, c.warning.copy(alpha = 0.20f), RoundedCornerShape(12.dp)).appPadding(10.dp)) {
                                     Text(name, color = c.accent, fontWeight = FontWeight.ExtraBold, fontSize = IronLogType.body.fontSize.sp)
                                     Text("PRIMARY MUSCLE", color = c.muted, fontSize = IronLogType.eyebrow.fontSize.sp, fontWeight = FontWeight.Black, modifier = Modifier.padding(top = 6.dp, bottom = 4.dp))
                                     @OptIn(ExperimentalLayoutApi::class)
-                                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    FlowRow(horizontalArrangement = appSpacedBy(6.dp)) {
                                         MUSCLE_OPTIONS.forEach { m ->
                                             FilterChip(selected = cfg.first == m, onClick = { missingConfigs = missingConfigs.toMutableMap().apply { this[name] = m to cfg.second } }, label = { Text(m) })
                                         }
                                     }
                                     Text("EQUIPMENT", color = c.muted, fontSize = IronLogType.eyebrow.fontSize.sp, fontWeight = FontWeight.Black, modifier = Modifier.padding(top = 8.dp, bottom = 4.dp))
                                     @OptIn(ExperimentalLayoutApi::class)
-                                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    FlowRow(horizontalArrangement = appSpacedBy(6.dp)) {
                                         EQUIP_OPTIONS.forEach { eq ->
                                             FilterChip(selected = cfg.second == eq, onClick = { missingConfigs = missingConfigs.toMutableMap().apply { this[name] = cfg.first to eq } }, label = { Text(eq) })
                                         }
@@ -730,8 +721,8 @@ Generate the plan now. Output ONLY the JSON object.
                     }
                     if (parseNeedsReview.isNotEmpty()) {
                         Column(
-                            modifier = Modifier.fillMaxWidth().background(c.warning.copy(alpha = 0.08f), RoundedCornerShape(18.dp)).border(1.dp, c.warning.copy(alpha = 0.35f), RoundedCornerShape(18.dp)).padding(14.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth().background(c.warning.copy(alpha = 0.08f), RoundedCornerShape(18.dp)).border(1.dp, c.warning.copy(alpha = 0.35f), RoundedCornerShape(18.dp)).appPadding(14.dp),
+                            verticalArrangement = appSpacedBy(8.dp),
                         ) {
                             Text("NEEDS REVIEW (${parseNeedsReview.size})", color = c.warning, fontWeight = FontWeight.ExtraBold, fontSize = IronLogType.meta.fontSize.sp)
                             Text("These matches are ambiguous and were not auto-linked.", color = c.subtext, fontSize = IronLogType.meta.fontSize.sp)
@@ -739,15 +730,15 @@ Generate the plan now. Output ONLY the JSON object.
                                 val selectedId = manualReviewResolution[name]
                                 val selectedLabel = meta.candidates.firstOrNull { it.first == selectedId }?.second
                                 Column(
-                                    modifier = Modifier.fillMaxWidth().border(1.dp, c.warning.copy(alpha = 0.25f), RoundedCornerShape(10.dp)).padding(10.dp),
-                                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                                    modifier = Modifier.fillMaxWidth().border(1.dp, c.warning.copy(alpha = 0.25f), RoundedCornerShape(10.dp)).appPadding(10.dp),
+                                    verticalArrangement = appSpacedBy(4.dp),
                                 ) {
                                     Text(name, color = c.text, fontWeight = FontWeight.Bold, fontSize = IronLogType.body.fontSize.sp)
                                     Text(meta.suggestedText, color = c.subtext, fontSize = IronLogType.meta.fontSize.sp)
                                     if (selectedLabel != null) {
                                         Text("Selected: $selectedLabel", color = c.success, fontSize = IronLogType.meta.fontSize.sp, fontWeight = FontWeight.Bold)
                                     }
-                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Row(horizontalArrangement = appSpacedBy(8.dp)) {
                                         if (!meta.suggestedId.isNullOrBlank()) {
                                             Button(onClick = {
                                                 manualReviewResolution = manualReviewResolution.toMutableMap().also { it[name] = meta.suggestedId }
@@ -769,13 +760,13 @@ Generate the plan now. Output ONLY the JSON object.
 
                     pPlan.days.forEach { day ->
                         Column(Modifier.fillMaxWidth().border(1.dp, c.faint, RoundedCornerShape(18.dp))) {
-                            Row(Modifier.fillMaxWidth().padding(14.dp, 10.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Row(Modifier.fillMaxWidth().appPadding(14.dp, 10.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                                 Text(day.name ?: "Day", color = c.text, fontWeight = FontWeight.Black, fontSize = IronLogType.body.fontSize.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                                 Text("${day.exercises.size} ex", color = c.muted, fontWeight = FontWeight.Bold, fontSize = IronLogType.meta.fontSize.sp)
                             }
                             day.exercises.forEachIndexed { idx, ex ->
                                 if (idx > 0) HorizontalDivider(color = c.faint)
-                                Row(Modifier.fillMaxWidth().padding(14.dp, 7.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Row(Modifier.fillMaxWidth().appPadding(14.dp, 7.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                                     Text("${if (ex.isWarmup == true) "(W) " else ""}${ex.name}", color = if (ex.exerciseId != null) c.text else c.accent, fontSize = IronLogType.body.fontSize.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                                     Text("${ex.sets}x${ex.reps}", color = c.muted, fontWeight = FontWeight.Bold, fontSize = IronLogType.meta.fontSize.sp)
                                 }
@@ -838,7 +829,7 @@ Generate the plan now. Output ONLY the JSON object.
                 onDismissRequest = { pickingReviewName = null },
                 title = { Text("Pick match for $reviewName") },
                 text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Column(verticalArrangement = appSpacedBy(6.dp)) {
                         row.candidates.forEach { (id, label) ->
                             TextButton(
                                 onClick = {

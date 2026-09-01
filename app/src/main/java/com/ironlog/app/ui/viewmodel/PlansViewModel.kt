@@ -6,25 +6,44 @@ import com.ironlog.app.data.model.FullPlanDay
 import com.ironlog.app.data.model.FullPlanObject
 import com.ironlog.app.data.model.PlanExerciseInput
 import com.ironlog.app.data.model.PlanInput
+import com.ironlog.app.data.plan.PlanImportResult
 import com.ironlog.app.data.repository.ExerciseRepository
 import com.ironlog.app.data.repository.PlanRepository
+import com.ironlog.app.data.repository.SettingsRepository
 import com.ironlog.app.ui.model.UiPlan
-import com.ironlog.app.ui.model.UiPlanDay
-import com.ironlog.app.ui.model.UiPlanExercise
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+
+internal class PlanNoteMutationCoordinator {
+    private val mutex = Mutex()
+
+    fun launch(scope: CoroutineScope, block: suspend () -> Unit): Job =
+        scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            run(block)
+        }
+
+    suspend fun <T> run(block: suspend () -> T): T = mutex.withLock { block() }
+}
 
 /** Manages training plan data including CRUD and program scheduling. */
 class PlansViewModel(
     private val plansRepo: PlanRepository = PlanRepository(),
     private val exerciseRepo: ExerciseRepository = ExerciseRepository(),
+    private val settingsRepo: SettingsRepository = SettingsRepository(),
 ) : ViewModel() {
+    private val planSource = RepositoryPlanUiSource(plansRepo, exerciseRepo)
+    private val planNoteMutations = PlanNoteMutationCoordinator()
     private val _plans = MutableStateFlow<List<UiPlan>>(emptyList())
     val plans: StateFlow<List<UiPlan>> = _plans.asStateFlow()
 
@@ -47,52 +66,21 @@ class PlansViewModel(
 
     fun refresh() {
         viewModelScope.launch {
-            _loading.value = true
-            _plans.value = assemblePlans()
-            _loading.value = false
+            refreshNow()
         }
     }
 
-    private suspend fun assemblePlans(): List<UiPlan> = withContext(Dispatchers.IO) {
-        plansRepo.ensureActivePlanIfNeeded()
-        val planRows = plansRepo.getPlansFlowReplayOnce()
-        val exerciseIndex = exerciseRepo.getExercisesSnapshot().associateBy { it.id }
-        planRows.map { plan ->
-            val days = plansRepo.getPlanDaysSnapshot(plan.uid).sortedBy { it.orderIndex }
-            UiPlan(
-                id = plan.uid,
-                name = plan.name,
-                goal = plan.goal,
-                description = plan.description,
-                isActive = plan.isActive,
-                days = days.map { day ->
-                    val peRows = plansRepo.getPlanExercisesSnapshot(day.uid).sortedBy { it.orderIndex }
-                    UiPlanDay(
-                        id = day.uid,
-                        name = day.name,
-                        color = day.color,
-                        exercises = peRows.map { pe ->
-                            val ex = exerciseIndex[pe.exerciseUid]
-                            UiPlanExercise(
-                                id = pe.uid,
-                                exerciseId = pe.exerciseUid,
-                                name = ex?.name ?: "Unknown",
-                                sets = pe.sets,
-                                reps = pe.reps,
-                                restSeconds = pe.restSeconds,
-                                supersetGroup = pe.supersetGroup,
-                                isWarmup = pe.isWarmup,
-                                notes = pe.notes,
-                            )
-                        },
-                    )
-                },
-            )
-        }
+    suspend fun refreshNow() {
+        _loading.value = true
+        _plans.value = assemblePlans()
+        _loading.value = false
     }
+
+    private suspend fun assemblePlans(): List<UiPlan> = planSource.snapshot()
 
     fun addPlan(name: String) = viewModelScope.launch {
         plansRepo.createPlan(PlanInput(name = name.trim(), goal = "General Fitness", description = "", isActive = false))
+        settingsRepo.setBoolean("gamification_user_created_plan", true)
         refresh()
     }
 
@@ -163,10 +151,30 @@ class PlansViewModel(
         refresh()
     }
 
-    fun updateExercise(planExerciseId: String, updates: PlanExerciseInput) = viewModelScope.launch {
-        plansRepo.updatePlanExercise(planExerciseId, updates)
-        refresh()
+    fun updateExercise(planExerciseId: String, updates: PlanExerciseInput): Job =
+        if (updates.notes != null) {
+            planNoteMutations.launch(viewModelScope) {
+                plansRepo.updatePlanExercise(planExerciseId, updates)
+                refreshNow()
+            }
+        } else {
+            viewModelScope.launch {
+                plansRepo.updatePlanExercise(planExerciseId, updates)
+                refreshNow()
+            }
+        }
+
+    suspend fun clearPlanNotesNow(planId: String) {
+        planNoteMutations.run {
+            plansRepo.clearPlanNotes(planId)
+            refreshNow()
+        }
     }
+
+    fun clearPlanNotes(planId: String): Job =
+        viewModelScope.launch(start = CoroutineStart.UNDISPATCHED) {
+            clearPlanNotesNow(planId)
+        }
 
     fun removeExercise(planExerciseId: String) = viewModelScope.launch {
         plansRepo.removePlanExercise(planExerciseId)
@@ -174,8 +182,12 @@ class PlansViewModel(
     }
 
     fun reorderExercises(dayId: String, orderedIds: List<String>) = viewModelScope.launch {
+        reorderExercisesAndAwait(dayId, orderedIds)
+    }
+
+    suspend fun reorderExercisesAndAwait(dayId: String, orderedIds: List<String>) {
         plansRepo.reorderPlanExercises(dayId, orderedIds)
-        refresh()
+        refreshNow()
     }
 
     fun reorderPlans(orderedIds: List<String>) = viewModelScope.launch {
@@ -189,8 +201,16 @@ class PlansViewModel(
     }
 
     fun importPlans(planObjects: List<FullPlanObject>) = viewModelScope.launch {
-        planObjects.forEach { plansRepo.importFullPlan(it) }
-        refresh()
+        importPlansNow(planObjects)
+    }
+
+    suspend fun importPlansNow(
+        planObjects: List<FullPlanObject>,
+        initiallySkipped: Int = 0,
+    ): PlanImportResult {
+        val result = plansRepo.importPlansAtomically(planObjects, initiallySkipped)
+        refreshNow()
+        return result
     }
 
     // GAP-12: copy all exercises from one day to another day

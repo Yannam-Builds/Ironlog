@@ -4,4 +4,7 @@
     <string name="badge_widget_description">IronLog grade and streak badge</string>
     <string name="dashboard_widget_description">IronLog daily dashboard with ledger progress and workout</string>
     <string name="warroom_widget_description">IronLog training dashboard with stats and checkpoints</string>
+    <string name="health_connect_rationale_title">IronLog + Health Connect</string>
+    <string name="health_connect_rationale_body">IronLog reads recent sleep, resting heart rate, and HRV as read-only context. This build does not use these values to change your readiness score. It does not write workouts or body weight to Health Connect and does not send Health Connect data to Cloud AI. Recovery, readiness, and training estimates are informational and are not medical advice. IronLog does not diagnose, treat, or prevent any condition. Your data remains under Android Health Connect permission controls, and you can revoke access at any time.</string>
+    <string name="action_done">Done</string>
 </resources>

@@ -451,6 +451,10 @@ function Landing() {
             >
               Read WebKit’s storage policy.
             </a>
+            {" "}
+            <a href={`${import.meta.env.BASE_URL}privacy/`}>
+              Read the full IronLog privacy notice.
+            </a>
           </p>
           <h3>Software, font & artwork acknowledgments</h3>
           <p>
@@ -464,7 +468,7 @@ function Landing() {
             software credits.
           </p>
           <a href={`${import.meta.env.BASE_URL}licenses/IronLog-LICENSE.txt`}>
-            IronLog Personal Use License 1.0
+            IronLog Proprietary License
           </a>
           <span> · </span>
           <a href={`${import.meta.env.BASE_URL}licenses/Lexend-OFL.txt`}>
@@ -485,7 +489,7 @@ function Landing() {
         </a>
         <p>Train. Recover. Prove it.</p>
         <a href="https://github.com/Yannam-Builds/Ironlog">
-          Built in the open ↗
+          Source &amp; notices ↗
         </a>
       </footer>
     </>

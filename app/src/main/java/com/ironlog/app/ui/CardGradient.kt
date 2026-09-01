@@ -8,9 +8,17 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.foundation.background
+import androidx.compose.ui.Modifier
+import com.ironlog.app.ui.theme.LocalCardShineEnabled
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+
+/** The off branch does not compose an infinite transition or alter measurement. */
+@Composable
+fun Modifier.animatedCardShine(accent: Color): Modifier =
+    if (LocalCardShineEnabled.current) background(rememberAnimatedCardBrush(accent)) else this
 
 /**
  * Returns a [Brush] that slowly sweeps a diagonal gradient highlight across the card — the

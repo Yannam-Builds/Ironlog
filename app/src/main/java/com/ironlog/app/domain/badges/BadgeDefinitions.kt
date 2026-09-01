@@ -132,12 +132,6 @@ object BadgeDefinitions {
             iconResName = "ic_badge_3stars",
             unlockCondition = { it.goalModesUsed.size >= 3 },
         ),
-        BadgeDefinition(
-            id = "s_rank", title = "Diamond",
-            description = "Reach S-Rank status", tier = BadgeTier.BLUE,
-            iconResName = "ic_badge_diamond",
-            unlockCondition = { it.currentRank == "S" },
-        ),
     )
 
     /** Returns the set of badge IDs that are unlocked for the given [stats]. */

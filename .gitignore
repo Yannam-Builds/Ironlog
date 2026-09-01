@@ -7,6 +7,9 @@ app/build/
 # Kotlin compiler
 .kotlin/
 
+# Local ObjectBox desktop test helper
+app/objectbox-jni-windows-x64.dll
+
 # Local config
 local.properties
 
@@ -26,3 +29,6 @@ Thumbs.db
 .impeccable/
 artifacts/
 PROJECT.md
+
+# Local Android diagnostics can contain device and account metadata
+bugreport-*.zip

@@ -1,5 +1,8 @@
 ﻿package com.ironlog.app.ui.screens.settings
 
+import com.ironlog.app.ui.theme.appGapDp
+import com.ironlog.app.ui.theme.appPadding
+import com.ironlog.app.ui.theme.appSpacedBy
 import android.content.Intent
 import android.os.Build
 import android.provider.Settings
@@ -8,7 +11,6 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -35,7 +37,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Text
+import com.ironlog.app.ui.theme.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -53,6 +55,7 @@ import androidx.compose.ui.unit.sp
 import androidx.health.connect.client.PermissionController
 import com.ironlog.app.data.health.BiometricSnapshot
 import com.ironlog.app.data.health.HealthConnectRepository
+import com.ironlog.app.data.health.canReadAnyHealthContext
 import com.ironlog.app.ui.context.useTheme
 import com.ironlog.app.ui.theme.IronLogRadius
 import com.ironlog.app.ui.theme.IronLogType
@@ -89,18 +92,18 @@ fun HealthConnectScreen(
                 return@launch
             }
             val granted = withContext(Dispatchers.IO) { repo.grantedPermissions() }
-            grantedCount = granted.size
+            grantedCount = granted.intersect(repo.requiredPermissions).size
             hasAllPermissions = granted.containsAll(repo.requiredPermissions)
-            val canReadRecovery = granted.containsAll(repo.readPermissions)
-            snapshot = if (canReadRecovery) {
+            val canReadContext = canReadAnyHealthContext(granted, repo.readPermissions)
+            snapshot = if (canReadContext) {
                 withContext(Dispatchers.IO) { repo.readBiometricSnapshot() }
             } else {
                 BiometricSnapshot()
             }
             statusText = when {
-                hasAllPermissions -> "Connected. Ironlog can enrich recovery and sync workouts and body weight."
-                canReadRecovery -> "Recovery signals are connected. Grant write access to sync workouts and body weight."
-                else -> "Permissions needed before Ironlog can read recovery signals."
+                hasAllPermissions -> "Connected for read-only context."
+                canReadContext -> "Partially connected. Available health context is shown; grant the remaining permissions to fill missing fields."
+                else -> "Permission is needed before IronLog can display recent health context."
             }
             loading = false
         }
@@ -109,7 +112,7 @@ fun HealthConnectScreen(
     val permissionLauncher = rememberLauncherForActivityResult(
         PermissionController.createRequestPermissionResultContract()
     ) { granted ->
-        grantedCount = granted.size
+        grantedCount = granted.intersect(repo.requiredPermissions).size
         hasAllPermissions = granted.containsAll(repo.requiredPermissions)
         refresh()
     }
@@ -122,7 +125,7 @@ fun HealthConnectScreen(
             .background(c.bg)
             .statusBarsPadding(),
         contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 12.dp, bottom = 120.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        verticalArrangement = com.ironlog.app.ui.theme.appCardSpacedBy(16.dp),
     ) {
         item {
             Row(
@@ -140,7 +143,7 @@ fun HealthConnectScreen(
                         fontSize = IronLogType.title.fontSize.sp,
                     )
                     Text(
-                        "Recovery signals, workout sync, and body-weight writes.",
+                        "Read-only health context",
                         color = c.subtext,
                         fontSize = IronLogType.meta.fontSize.sp,
                     )
@@ -155,10 +158,10 @@ fun HealthConnectScreen(
                 shape = RoundedCornerShape(IronLogRadius.xl.dp),
             ) {
                 Column(
-                    modifier = Modifier.padding(18.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                    modifier = Modifier.appPadding(18.dp),
+                    verticalArrangement = appSpacedBy(14.dp),
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = appSpacedBy(12.dp)) {
                         androidx.compose.foundation.layout.Box(
                             modifier = Modifier
                                 .size(46.dp)
@@ -194,7 +197,7 @@ fun HealthConnectScreen(
                         enabled = isAvailable && !loading,
                         modifier = Modifier.fillMaxWidth(),
                     ) {
-                        Text(if (hasAllPermissions) "Review Permissions" else "Connect Health Connect")
+                        Text(if (hasAllPermissions) "Review Permissions" else "Connect read-only access")
                     }
 
                     OutlinedButton(
@@ -210,32 +213,42 @@ fun HealthConnectScreen(
 
         item {
             Text(
-                "LATEST SIGNALS",
-                color = c.muted,
-                fontSize = IronLogType.eyebrow.fontSize.sp,
-                letterSpacing = 3.sp,
-                modifier = Modifier.padding(horizontal = 4.dp),
+                "These values are shown for context only and do not change your readiness score. " +
+                    "IronLog does not write workouts or body weight to Health Connect in this build.",
+                color = c.subtext,
+                fontSize = IronLogType.meta.fontSize.sp,
+                modifier = Modifier.appPadding(horizontal = 4.dp),
             )
         }
 
         item {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(
+                "LATEST SIGNALS",
+                color = c.muted,
+                fontSize = IronLogType.eyebrow.fontSize.sp,
+                letterSpacing = 3.sp,
+                modifier = Modifier.appPadding(horizontal = 4.dp),
+            )
+        }
+
+        item {
+            Column(verticalArrangement = appSpacedBy(10.dp)) {
                 SignalRow(
                     label = "Sleep",
                     value = snapshot.sleepHours?.let { String.format(java.util.Locale.US, "%.1fh", it) } ?: "--",
-                    helper = "Last 36 hours",
+                    helper = "Most recent session in the last 36 hours",
                     icon = Icons.Outlined.Hotel,
                 )
                 SignalRow(
                     label = "Resting HR",
                     value = snapshot.restingHrBpm?.let { "$it bpm" } ?: "--",
-                    helper = "Lower is usually better recovered",
+                    helper = "Raw value; interpret against your own trend",
                     icon = Icons.Outlined.Favorite,
                 )
                 SignalRow(
                     label = "HRV",
                     value = snapshot.hrvRmssd?.let { String.format(java.util.Locale.US, "%.0f ms", it) } ?: "--",
-                    helper = "Used as a recovery confidence signal",
+                    helper = "Raw value; no population cutoff is applied",
                     icon = Icons.Outlined.MonitorHeart,
                 )
             }
@@ -262,7 +275,7 @@ fun HealthConnectScreen(
             )
         }
 
-        item { Spacer(Modifier.height(12.dp)) }
+        item { Spacer(Modifier.height(appGapDp(12.dp))) }
     }
 }
 
@@ -282,7 +295,7 @@ private fun SignalRow(
             .border(1.dp, c.cardBorder, RoundedCornerShape(IronLogRadius.lg.dp))
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = appSpacedBy(12.dp),
     ) {
         Icon(icon, contentDescription = null, tint = c.accent, modifier = Modifier.size(22.dp))
         Column(Modifier.weight(1f)) {

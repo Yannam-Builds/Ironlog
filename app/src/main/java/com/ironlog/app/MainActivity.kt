@@ -1,6 +1,5 @@
 package com.ironlog.app
 
-import android.net.Uri
 import android.os.Build.VERSION.SDK_INT
 import android.os.Build
 import android.os.Bundle
@@ -9,18 +8,15 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.lifecycle.lifecycleScope
-import com.ironlog.app.data.repository.SettingsRepository
-import com.ironlog.app.services.NotificationActionRouter
-import com.ironlog.app.services.PendingWorkoutNotificationBridge
 import com.ironlog.app.ui.IronLogApp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import timber.log.Timber
 
 /**
  * Native Android entry point equivalent to index.js + App.js.
- * React Native's AppRegistry is replaced by Activity startup, and the headless
- * Notifee task is represented by NotificationActionReceiver/BackupWorker stubs.
+ * Exported launcher entry point. Privileged notification requests are persisted
+ * by the app-private NotificationEntryActivity before this activity is opened.
  */
 class MainActivity : ComponentActivity() {
 
@@ -37,57 +33,27 @@ class MainActivity : ComponentActivity() {
             window.isNavigationBarContrastEnforced = false
         }
         requestMaxRefreshRate()
-        handleIntentRouting(intent)
         setContent { IronLogApp() }
-    }
-
-    override fun onResume() {
-        super.onResume()
-        lifecycleScope.launch {
-            val pending = PendingWorkoutNotificationBridge.consumePendingAction(this@MainActivity)
-            if (pending?.actionId != null) {
-                NotificationActionRouter.handleNotificationAction(
-                    actionId = pending.actionId,
-                    payload = pending,
-                    isForeground = true,
-                )
-            }
-        }
     }
 
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        handleIntentRouting(intent)
     }
 
-    private fun handleIntentRouting(intent: android.content.Intent?) {
-        val explicitRoute = intent?.getStringExtra("ironlog_route").orEmpty()
-        val workoutAction = intent?.getStringExtra("actionId").orEmpty()
-        val navigateToWorkout = intent?.getBooleanExtra("navigate_to_workout", false) == true
+    override fun onResume() {
+        super.onResume()
+        // Android permission/channel changes can happen while this process stays alive.
+        // Ordinary reconciliation uses KEEP, preserving healthy or already-due reminder work.
         lifecycleScope.launch(Dispatchers.IO) {
-            val repo = SettingsRepository()
-            if (workoutAction in setOf(
-                    NotificationActionRouter.Actions.SKIP_REST,
-                    NotificationActionRouter.Actions.ADD_30S,
-                    NotificationActionRouter.Actions.FINISH_WORKOUT,
-                )
-            ) {
-                repo.setString("pending_workout_action", workoutAction)
-            }
-            val route = when {
-                explicitRoute.isNotBlank() -> explicitRoute
-                workoutAction.isNotBlank() -> {
-                    val dayId = repo.getString("active_workout_day_id").orEmpty()
-                    if (dayId.isNotBlank()) "ActiveWorkout/${Uri.encode(dayId)}" else "ActiveWorkout"
-                }
-                navigateToWorkout -> {
-                    val dayId = repo.getString("active_workout_day_id").orEmpty()
-                    if (dayId.isNotBlank()) "ActiveWorkout/${Uri.encode(dayId)}" else "ActiveWorkout"
-                }
-                else -> ""
-            }
-            if (route.isNotBlank()) repo.setString("pending_nav_route", route)
+            // Opening IronLog fulfills the purpose of a re-engagement reminder. Serialize the
+            // dismissal with any worker that may currently be selecting/posting one.
+            runCatching {
+                com.ironlog.app.services.WorkoutNotificationBridge
+                    .acknowledgeAppForeground(this@MainActivity)
+            }.onFailure { Timber.w(it, "Could not dismiss the visible reminder on resume") }
+            runCatching { com.ironlog.app.services.NotificationCoordinator.reconcile(this@MainActivity) }
+                .onFailure { Timber.w(it, "Could not reconcile notifications on resume") }
         }
     }
 

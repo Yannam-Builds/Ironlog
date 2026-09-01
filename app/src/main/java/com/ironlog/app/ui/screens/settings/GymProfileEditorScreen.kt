@@ -1,5 +1,7 @@
 ﻿package com.ironlog.app.ui.screens.settings
 
+import com.ironlog.app.ui.theme.appPadding
+import com.ironlog.app.ui.theme.appSpacedBy
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -34,7 +36,7 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
+import com.ironlog.app.ui.theme.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -147,7 +149,7 @@ fun GymProfileEditorScreen(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().background(c.bg).statusBarsPadding().padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        verticalArrangement = com.ironlog.app.ui.theme.appCardSpacedBy(16.dp),
     ) {
         item { ScreenHeader(title = if (profileId.isBlank()) "NEW GYM PROFILE" else "EDIT GYM PROFILE", onBack = onBack) }
         item {
@@ -155,7 +157,7 @@ fun GymProfileEditorScreen(
                 colors = CardDefaults.cardColors(containerColor = c.card),
                 border = BorderStroke(1.dp, c.cardBorder),
             ) {
-                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = appSpacedBy(10.dp)) {
                     Text("PROFILE NAME", color = c.muted, fontSize = IronLogType.eyebrow.fontSize.sp, letterSpacing = 3.sp)
                     OutlinedTextField(
                         value = name,
@@ -173,7 +175,7 @@ fun GymProfileEditorScreen(
                 colors = CardDefaults.cardColors(containerColor = c.card),
                 border = BorderStroke(1.dp, c.cardBorder),
             ) {
-                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = appSpacedBy(10.dp)) {
                     Text("BAR WEIGHT ($unitLabel)", color = c.muted, fontSize = IronLogType.eyebrow.fontSize.sp, letterSpacing = 3.sp)
                     OutlinedTextField(
                         value = barWeight,
@@ -190,14 +192,14 @@ fun GymProfileEditorScreen(
                 colors = CardDefaults.cardColors(containerColor = c.card),
                 border = BorderStroke(1.dp, c.cardBorder),
             ) {
-                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(Modifier.fillMaxWidth().appPadding(16.dp), verticalArrangement = appSpacedBy(10.dp)) {
                     Text("AVAILABLE PLATES", color = c.muted, fontSize = IronLogType.eyebrow.fontSize.sp, letterSpacing = 3.sp)
                     Text("Quantity = pairs available per side", color = c.muted, fontSize = IronLogType.meta.fontSize.sp, modifier = Modifier.padding(bottom = 8.dp))
                     
                     plates.forEach { plate ->
                         Column(Modifier.fillMaxWidth()) {
                             Row(
-                                Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                                Modifier.fillMaxWidth().appPadding(vertical = 12.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
@@ -207,7 +209,7 @@ fun GymProfileEditorScreen(
                                     fontSize = IronLogType.section.fontSize.sp,
                                     fontWeight = FontWeight.Bold
                                 )
-                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = appSpacedBy(8.dp)) {
                                     Box(
                                         Modifier.size(44.dp).clickable { colorPickerTarget = if (colorPickerTarget == plate.weightKg) null else plate.weightKg },
                                         contentAlignment = Alignment.Center,
@@ -227,8 +229,8 @@ fun GymProfileEditorScreen(
                             }
                             if (colorPickerTarget == plate.weightKg) {
                                 Row(
-                                    Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                    Modifier.fillMaxWidth().appPadding(bottom = 8.dp),
+                                    horizontalArrangement = appSpacedBy(10.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     PRESET_PLATE_COLORS.forEach { (hexColor, colorName) ->
@@ -256,7 +258,7 @@ fun GymProfileEditorScreen(
                         }
                     }
 
-                    Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = appSpacedBy(10.dp)) {
                         OutlinedTextField(
                             value = newPlate,
                             onValueChange = { newPlate = it },
@@ -278,7 +280,7 @@ fun GymProfileEditorScreen(
                 colors = CardDefaults.cardColors(containerColor = c.card),
                 border = BorderStroke(1.dp, c.cardBorder),
             ) {
-                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(Modifier.fillMaxWidth().appPadding(16.dp), verticalArrangement = appSpacedBy(10.dp)) {
                     Text("UNAVAILABLE EQUIPMENT", color = c.muted, fontSize = IronLogType.eyebrow.fontSize.sp, letterSpacing = IronLogType.eyebrow.letterSpacing.sp)
                     Text("Check equipment types not available at this gym. These will be filtered from your exercise library when this profile is active.", color = c.subtext, fontSize = IronLogType.meta.fontSize.sp)
                     val equipmentOptions = listOf("Barbell", "Dumbbell", "Cable", "Machine", "Kettlebell", "Band")
@@ -289,7 +291,7 @@ fun GymProfileEditorScreen(
                                 unavailableEquipment = if (checked) unavailableEquipment - equip else unavailableEquipment + equip
                             }.padding(vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            horizontalArrangement = appSpacedBy(10.dp),
                         ) {
                             Checkbox(checked = checked, onCheckedChange = {
                                 unavailableEquipment = if (checked) unavailableEquipment - equip else unavailableEquipment + equip
@@ -324,7 +326,7 @@ fun GymProfileEditorScreen(
                         onSaved()
                     }
                 },
-                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                modifier = Modifier.fillMaxWidth().appPadding(vertical = 8.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = c.accent)
             ) {
                 Text("SAVE PROFILE", color = c.bg, fontWeight = FontWeight.Black, letterSpacing = 3.sp, modifier = Modifier.padding(vertical = 8.dp))

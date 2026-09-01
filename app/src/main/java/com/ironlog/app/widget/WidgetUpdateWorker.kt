@@ -14,17 +14,6 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.ironlog.app.data.objectbox.AppSettingEntity_
 import com.ironlog.app.data.objectbox.ObjectBox
-import com.ironlog.app.data.objectbox.WorkoutEntity
-import com.ironlog.app.data.objectbox.WorkoutEntity_
-import com.ironlog.app.data.objectbox.ExerciseEntity
-import com.ironlog.app.data.objectbox.ExerciseEntity_
-import com.ironlog.app.data.objectbox.WorkoutExerciseEntity
-import com.ironlog.app.data.objectbox.WorkoutExerciseEntity_
-import com.ironlog.app.data.objectbox.WorkoutSetEntity
-import com.ironlog.app.data.objectbox.WorkoutSetEntity_
-import com.ironlog.app.ui.model.HistoryEntry
-import com.ironlog.app.ui.model.HistoryExercise
-import com.ironlog.app.ui.model.HistoryExerciseSet
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.util.concurrent.TimeUnit
@@ -43,74 +32,16 @@ class WidgetUpdateWorker(
         runCatching {
             val box = ObjectBox.store
 
-            // Load history from ObjectBox
-            val workoutBox = box.boxFor(WorkoutEntity::class.java)
-            val exerciseBox = box.boxFor(WorkoutExerciseEntity::class.java)
-            val libraryExerciseBox = box.boxFor(ExerciseEntity::class.java)
-            val setBox = box.boxFor(WorkoutSetEntity::class.java)
-
-            val workouts = workoutBox.query(WorkoutEntity_.status.equal("completed"))
-                .orderDesc(WorkoutEntity_.startedAt)
-                .build().use { it.find() }
-
-            // Batch-load all workout exercises and sets in two queries, then map by parent UID.
-            val workoutUids = workouts.map { it.uid }.toTypedArray()
-            val allExercises: List<WorkoutExerciseEntity> = if (workoutUids.isEmpty()) emptyList()
-            else exerciseBox.query(WorkoutExerciseEntity_.workoutUid.oneOf(workoutUids))
-                .order(WorkoutExerciseEntity_.orderIndex).build().use { it.find() }
-            val exerciseUids = allExercises.map { it.uid }.toTypedArray()
-            val allSets: List<WorkoutSetEntity> = if (exerciseUids.isEmpty()) emptyList()
-            else setBox.query(WorkoutSetEntity_.workoutExerciseUid.oneOf(exerciseUids))
-                .order(WorkoutSetEntity_.setIndex).build().use { it.find() }
-            // Batch-load all exercise library names in one query.
-            val libraryUids = allExercises.map { it.exerciseUid }.distinct().toTypedArray()
-            val libraryNameByUid: Map<String, String> = if (libraryUids.isEmpty()) emptyMap()
-            else libraryExerciseBox.query(ExerciseEntity_.uid.oneOf(libraryUids))
-                .build().use { q -> q.find() }.associate { it.uid to it.name }
-            val exercisesByWorkout = allExercises.groupBy { it.workoutUid }
-            val setsByExercise = allSets.groupBy { it.workoutExerciseUid }
-
-            val history: List<HistoryEntry> = workouts.map { w ->
-                val historyExercises = (exercisesByWorkout[w.uid] ?: emptyList()).map { we ->
-                    val sets = setsByExercise[we.uid] ?: emptyList()
-                    HistoryExercise(
-                        id = we.uid,
-                        exerciseId = we.exerciseUid,
-                        name = libraryNameByUid[we.exerciseUid] ?: "Exercise",
-                        sets = sets.map { s ->
-                            HistoryExerciseSet(
-                                id = s.uid,
-                                weight = s.weight,
-                                reps = s.reps,
-                                type = when {
-                                    s.isWarmup  -> "warmup"
-                                    s.isDropset -> "dropset"
-                                    else        -> "normal"
-                                },
-                                rpe = s.rpe,
-                                rir = s.rir,
-                                restSeconds = s.restSeconds,
-                            )
-                        },
-                    )
-                }
-                HistoryEntry(
-                    id = w.uid,
-                    date = java.time.Instant.ofEpochMilli(w.startedAt)
-                        .atZone(java.time.ZoneId.systemDefault())
-                        .toLocalDate().toString(),
-                    duration = w.durationSeconds,
-                    rating = w.rating,
-                    name = w.name,
-                    imported = w.imported,
-                    exercises = historyExercises,
-                )
-            }
+            val history = com.ironlog.app.data.repository.HistoryRepository(box).completedSnapshotBlocking()
 
             // Load weekly goal from settings
             val settingBox = box.boxFor(com.ironlog.app.data.objectbox.AppSettingEntity::class.java)
-            val weeklyGoal = settingBox.query(AppSettingEntity_.key.equal("weeklyGoalDays"))
-                .build().use { it.findFirst()?.value?.toIntOrNull() } ?: 4
+            val weeklyGoal = settingBox.query(AppSettingEntity_.key.equal("ironlog_settings"))
+                .build().use { query ->
+                    query.findFirst()?.value?.let { raw ->
+                        runCatching { org.json.JSONObject(raw).optInt("weeklyGoalDays", 4) }.getOrNull()
+                    }
+                }?.coerceIn(1, 7) ?: 4
 
             // Build shared WidgetState
             val repo = WidgetDataRepository(applicationContext, box)

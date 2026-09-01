@@ -1,4 +1,6 @@
 import java.util.Properties
+import groovy.json.JsonOutput
+import groovy.json.JsonSlurper
 
 plugins {
     id("com.android.application")
@@ -35,9 +37,10 @@ android {
         minSdk = 26
         targetSdk = 36
         versionCode = providers.gradleProperty("IRONLOG_VERSION_CODE").orNull?.toIntOrNull()
-            ?: localProps.getProperty("version.code", "2").toInt()
+            ?: localProps.getProperty("version.code", "9").toInt()
         versionName = providers.gradleProperty("IRONLOG_VERSION_NAME").orNull
-            ?: localProps.getProperty("version.name", "0.1.0-pre-alpha.1")
+            ?: localProps.getProperty("version.name", "0.1.0-pre-alpha.8")
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildFeatures { compose = true; buildConfig = true }
@@ -62,6 +65,11 @@ android {
     }
 
     buildTypes {
+        getByName("debug") {
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-qa"
+            resValue("string", "app_name", "IronLog QA")
+        }
         getByName("release") {
             isMinifyEnabled = true
             isShrinkResources = true
@@ -73,12 +81,105 @@ android {
         }
     }
 
+    sourceSets.getByName("debug").assets.srcDir(layout.buildDirectory.dir("generated/ironlogQaAssets"))
+
 }
+
+val generateIronLogQaFixture by tasks.registering {
+    val outputDir = layout.buildDirectory.dir("generated/ironlogQaAssets")
+    outputs.dir(outputDir)
+    doLast {
+        val destination = outputDir.get().file("ironlog_qa_fixture.json").asFile
+        destination.delete()
+        val configured = localProps.getProperty("ironlog.debugFixturePath")?.trim().orEmpty()
+        if (configured.isBlank()) return@doLast
+        val source = file(configured)
+        require(source.isFile) { "Configured IronLog QA fixture does not exist: $configured" }
+
+        @Suppress("UNCHECKED_CAST")
+        val root = JsonSlurper().parse(source) as MutableMap<String, Any?>
+        @Suppress("UNCHECKED_CAST")
+        val data = root["data"] as? MutableMap<String, Any?>
+            ?: error("Configured IronLog QA fixture has no data object")
+        fun rows(key: String): List<MutableMap<String, Any?>> =
+            (data[key] as? List<*>)?.mapNotNull { it as? MutableMap<String, Any?> } ?: emptyList()
+        fun id(row: Map<String, Any?>, key: String = "id") = row[key]?.toString().orEmpty()
+
+        val exercises = rows("exercises")
+        val exerciseIds = exercises.map { id(it) }.filter(String::isNotBlank).toSet()
+        val plans = rows("plans")
+        val planIds = plans.map { id(it) }.toSet()
+        val planDays = rows("plan_days").filter { id(it, "plan_id") in planIds }
+        val dayIds = planDays.map { id(it) }.toSet()
+        val planExercises = rows("plan_exercises").filter {
+            id(it, "plan_day_id") in dayIds && id(it, "exercise_id") in exerciseIds
+        }
+        val workouts = rows("workouts").filter { it["status"]?.toString() == "completed" }
+        val workoutIds = workouts.map { id(it) }.toSet()
+        val workoutExercises = rows("workout_exercises").filter {
+            id(it, "workout_id") in workoutIds && id(it, "exercise_id") in exerciseIds
+        }
+        val workoutExerciseIds = workoutExercises.map { id(it) }.toSet()
+        val workoutSets = rows("workout_sets").filter { id(it, "workout_exercise_id") in workoutExerciseIds }
+
+        val now = System.currentTimeMillis()
+        val safeSettings = listOf(
+            mutableMapOf<String, Any?>("id" to "exercise_seed_complete", "key" to "exercise_seed_complete", "value" to "true", "value_type" to "boolean", "updated_at" to now),
+            mutableMapOf<String, Any?>("id" to "onboarding_complete", "key" to "onboarding_complete", "value" to "true", "value_type" to "boolean", "updated_at" to now),
+            mutableMapOf<String, Any?>(
+                "id" to "ironlog_settings", "key" to "ironlog_settings", "value_type" to "json", "updated_at" to now,
+                "value" to JsonOutput.toJson(mapOf(
+                    "theme" to "dark", "weightUnit" to "kg", "hapticFeedback" to true,
+                    "effortTracking" to "off", "defaultRestSeconds" to 90,
+                    "defaultRestHeavySeconds" to 180, "barWeightKg" to 20,
+                    "weeklyGoalDays" to 4, "goalMode" to "hypertrophy",
+                    "progressionStyle" to "balanced", "userName" to "QA Athlete",
+                    "performanceMode" to "balanced", "intelligenceMode" to "built_in",
+                )),
+            ),
+        )
+        val safeCalibration = listOf(mutableMapOf<String, Any?>(
+            "offline_user_id" to "local", "training_age_months" to 6,
+            "historical_training_days_per_week" to 3, "first_verified_session_at" to 0,
+            "weight_unit" to "kg", "bodyweight_kg" to 70, "goal_mode" to "hypertrophy",
+            "weekly_goal_days" to 4, "imported_history" to false, "confidence" to 0.5,
+            "updated_at" to now, "has_past_training" to true, "has_gym_access" to true,
+            "baseline_pushups" to 0, "baseline_pullups" to 0, "baseline_bench_kg" to 0,
+            "baseline_lat_pulldown_kg" to 0, "baseline_mile_run_seconds" to 0,
+        ))
+
+        data["exercises"] = exercises
+        data["exercise_muscles"] = rows("exercise_muscles").filter { id(it, "exercise_id") in exerciseIds }
+        data["plans"] = plans
+        data["plan_days"] = planDays
+        data["plan_exercises"] = planExercises
+        data["workouts"] = workouts
+        data["workout_exercises"] = workoutExercises
+        data["workout_sets"] = workoutSets
+        data["body_measurements"] = emptyList<Any>()
+        data["progress_photos"] = emptyList<Any>()
+        data["app_settings"] = safeSettings
+        data["athlete_calibrations"] = safeCalibration
+        data["gamification_profiles"] = emptyList<Any>()
+        data["iron_ledger_events"] = emptyList<Any>()
+        destination.parentFile.mkdirs()
+        destination.writeText(JsonOutput.toJson(root), Charsets.UTF_8)
+    }
+}
+
+tasks.matching { it.name == "mergeDebugAssets" }.configureEach { dependsOn(generateIronLogQaFixture) }
+tasks.matching {
+    it.name == "lintAnalyzeDebug" ||
+        it.name == "generateDebugLintReportModel" ||
+        it.name == "generateDebugAndroidTestLintModel" ||
+        it.name == "generateDebugUnitTestLintModel"
+}.configureEach { dependsOn(generateIronLogQaFixture) }
 
 dependencies {
     implementation("androidx.core:core-ktx:1.16.0")
     implementation("androidx.activity:activity-compose:1.10.1")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.9.1")
+    implementation("androidx.lifecycle:lifecycle-process:2.9.1")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.9.1")
     implementation("androidx.navigation:navigation-compose:2.8.9")
     implementation(platform("androidx.compose:compose-bom:2025.06.01"))
@@ -99,7 +200,8 @@ dependencies {
     implementation("androidx.work:work-runtime-ktx:2.9.1")
 
     // Haze — hardware blur for tab bar frosted glass
-    implementation("dev.chrisbanes.haze:haze:1.6.7")
+    // 1.6.8 fixes the startup pre-draw invalidation loop (upstream #725).
+    implementation("dev.chrisbanes.haze:haze:1.6.8")
 
     // V1 premium UI
     implementation("com.airbnb.android:lottie-compose:6.7.1")
@@ -134,6 +236,14 @@ dependencies {
     implementation("com.jakewharton.timber:timber:5.0.1")
 
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
+    testImplementation("org.json:json:20240303")
+    androidTestImplementation("androidx.test.ext:junit:1.3.0")
+    androidTestImplementation("androidx.test:runner:1.7.0")
+    androidTestImplementation("androidx.test.espresso:espresso-core:3.7.0")
+    androidTestImplementation(platform("androidx.compose:compose-bom:2025.06.01"))
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
 
     // Later / optional — uncomment when needed
     // implementation("app.rive:rive-android:9.7.2")

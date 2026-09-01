@@ -1,36 +1,46 @@
-IronLog Personal Use License 1.0
+IRONLOG PROPRIETARY LICENSE
 
-Copyright (c) 2026 IronLog
+Effective date: 2 September 2026
 
-Permission is granted to any person obtaining a copy of this software and
-associated documentation files (the "Software") to use, copy, modify, and
-share the Software for personal, educational, research, evaluation, or other
-non-commercial purposes, subject to the conditions below.
+Copyright (c) 2026 Pranav Yannam. All rights reserved.
 
-1. You must keep this license text and the copyright notice in any copy or
-   substantial portion of the Software.
+IronLog, including its original source code, compiled applications,
+documentation, product designs, user interface, logos, names, mascots,
+badges, illustrations, and other original project assets (collectively,
+the "IronLog Materials"), is proprietary.
 
-2. You may not sell, sublicense, rent, host for a fee, bundle into a paid
-   product, use in a commercial service, or otherwise use the Software for
-   commercial advantage or monetary compensation without prior written
-   permission from the copyright holder.
+No permission is granted to copy, modify, adapt, translate, distribute,
+publish, sublicense, sell, rent, lease, host, monetize, rebrand, create
+derivative works from, or otherwise commercially or non-commercially use
+the IronLog Materials, in whole or in part, except under a separate written
+agreement signed by the copyright owner.
 
-3. You may not represent modified versions as the official IronLog project.
+Public availability of this repository does not make IronLog open source
+and does not waive any copyright, trademark, or other proprietary rights.
+GitHub users retain only the limited rights necessary to view and fork public
+repository content through GitHub's service as provided by GitHub's Terms of
+Service. Those platform rights do not permit redistribution, deployment,
+commercialization, or use outside GitHub.
 
-4. Trademark, branding, store listing assets, and project identity remain
-   reserved unless separately permitted in writing.
+An official IronLog build or hosted service may be used only under the
+end-user terms supplied with that build or service. Access to an official
+build or service does not grant rights in its source code, branding, data,
+or artwork.
 
-5. The Software is provided "as is", without warranty of any kind, express or
-   implied, including but not limited to the warranties of merchantability,
-   fitness for a particular purpose, and noninfringement. In no event shall
-   the authors or copyright holders be liable for any claim, damages, or other
-   liability, whether in an action of contract, tort, or otherwise, arising
-   from, out of, or in connection with the Software or the use or other
-   dealings in the Software.
+Third-party software, fonts, and other materials remain governed by their
+respective licenses and notices. This license neither replaces nor limits
+rights that a third-party license independently grants for those materials.
 
-License transition note:
-Versions published before this license change may have been made available
-under different terms. This license applies to the current repository state
-and future releases unless explicitly stated otherwise.
+Versions published before this license took effect remain governed by the
+license terms that accompanied those versions. This change is not
+retroactive.
 
-Support and commercial licensing contact: ironlogsupport@gmail.com
+THE IRONLOG MATERIALS ARE PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE, AND
+NONINFRINGEMENT. TO THE MAXIMUM EXTENT PERMITTED BY LAW, THE COPYRIGHT OWNER
+WILL NOT BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY ARISING FROM OR
+RELATING TO THE IRONLOG MATERIALS.
+
+For commercial licensing, acquisition, or other written permission, contact
+ironlogsupport@gmail.com.

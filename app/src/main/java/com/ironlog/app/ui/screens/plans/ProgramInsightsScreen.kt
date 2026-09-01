@@ -1,5 +1,7 @@
 ﻿package com.ironlog.app.ui.screens.plans
 
+import com.ironlog.app.ui.theme.appPadding
+import com.ironlog.app.ui.theme.appSpacedBy
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -20,9 +22,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.Text
+import com.ironlog.app.ui.theme.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -33,13 +34,16 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ironlog.app.ui.components.ScreenHeader
 import com.ironlog.app.ui.context.useTheme
 import com.ironlog.app.ui.model.HistoryEntry
 import com.ironlog.app.ui.theme.IronLogRadius
 import com.ironlog.app.ui.theme.IronLogType
 import com.ironlog.app.ui.viewmodel.AppDataViewModel
+import com.ironlog.app.domain.gamification.parseHistoryInstant
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 import java.time.temporal.WeekFields
 import kotlin.math.max
@@ -52,7 +56,7 @@ fun ProgramInsightsScreen(
     onOpenPlans: () -> Unit = {},
 ) {
     val c = useTheme()
-    val state by vm.state.collectAsState()
+    val state by vm.state.collectAsStateWithLifecycle()
 
     // GAP-02: use the active plan, not just firstOrNull()
     val activePlan = state.plans.firstOrNull { it.isActive } ?: state.plans.firstOrNull()
@@ -92,7 +96,7 @@ fun ProgramInsightsScreen(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().background(c.bg).statusBarsPadding().padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = com.ironlog.app.ui.theme.appCardSpacedBy(12.dp),
     ) {
         item { ScreenHeader(title = "PROGRAM INSIGHTS", onBack = onBack) }
 
@@ -126,7 +130,7 @@ fun ProgramInsightsScreen(
                     trackColor = c.faint,
                 )
                 Text(
-                    "Based on $weekCount week${if (weekCount != 1) "s" else ""} of data · %.1f sessions/wk average".format(sessionsPerWeek),
+                    java.lang.String.format(java.util.Locale.US, "Based on %d week%s · %.1f sessions/wk", weekCount, if (weekCount != 1) "s" else "", sessionsPerWeek),
                     color = c.muted,
                     fontSize = IronLogType.meta.fontSize.sp,
                 )
@@ -147,7 +151,7 @@ fun ProgramInsightsScreen(
                     trackColor = c.faint,
                 )
                 Text(
-                    "%.1f sessions/wk average over $weekCount week${if (weekCount != 1) "s" else ""}".format(sessionsPerWeek),
+                    java.lang.String.format(java.util.Locale.US, "%.1f sessions/wk average over %d week%s", sessionsPerWeek, weekCount, if (weekCount != 1) "s" else ""),
                     color = c.muted,
                     fontSize = IronLogType.meta.fontSize.sp,
                 )
@@ -165,7 +169,7 @@ fun ProgramInsightsScreen(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Text(dayName, color = c.text, fontSize = IronLogType.body.fontSize.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Row(horizontalArrangement = appSpacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
                                 repeat(count.coerceAtMost(8)) {
                                     Box(Modifier.size(8.dp).background(c.accent, CircleShape))
                                 }
@@ -198,8 +202,8 @@ fun ProgramInsightsScreen(
                     activePlan == null -> "Create or import a plan to receive progression guidance."
                     adherence < 50 -> "Adherence is low. Reduce planned days or shorten sessions to build the habit first."
                     adherence < 85 -> "Stay steady. Focus on showing up consistently before adding volume."
-                    consistency >= 80 -> "Excellent consistency! Consider a progressive overload block or deload week."
-                    else -> "Good work. Increase one key lift by 2.5–5% next week and track the response."
+                    consistency >= 80 -> "Consistency is strong. Progress a key lift only when target reps and technique are repeatable; schedule easier work when fatigue is accumulating."
+                    else -> "Keep the current structure and use rep quality, performance and recovery trends before changing load or weekly volume."
                 }
                 Text(recommendation, color = c.subtext, lineHeight = IronLogType.body.lineHeight.sp)
             }
@@ -209,33 +213,37 @@ fun ProgramInsightsScreen(
 
 // ── Metric computation ────────────────────────────────────────────────────────
 
-private data class InsightsMetrics(
+internal data class InsightsMetrics(
     val sessionsPerWeek: Double,
     val adherencePct: Int,
     val consistencyPct: Int,
     val weekCount: Int,
 )
 
-private fun computeInsightsMetrics(workouts: List<HistoryEntry>, weeklyGoalDays: Int): InsightsMetrics {
+internal fun computeInsightsMetrics(workouts: List<HistoryEntry>, weeklyGoalDays: Int): InsightsMetrics {
     if (workouts.isEmpty()) return InsightsMetrics(0.0, 0, 0, 0)
     val zone = ZoneId.systemDefault()
     val weekFields = WeekFields.ISO
-    // Group sessions by ISO week key
-    val byWeek = workouts.groupBy { entry ->
-        // Use tolerant two-step parse so bare YYYY-MM-DD dates (e.g. from widget
-        // or imported data) don't throw an unchecked DateTimeParseException and
-        // crash the entire composable.
-        val d = runCatching { Instant.parse(entry.date).atZone(zone).toLocalDate() }.getOrNull()
-            ?: runCatching { java.time.LocalDate.parse(entry.date.substringBefore('T')) }.getOrNull()
-            ?: return@groupBy "unknown"
-        "${d.get(weekFields.weekBasedYear())}-W${d.get(weekFields.weekOfWeekBasedYear()).toString().padStart(2, '0')}"
-    }.filter { (k, _) -> k != "unknown" }
-    val weekCount = max(1, byWeek.size)
-    val totalSessions = workouts.size
+    val datedWorkouts = workouts.mapNotNull { entry ->
+        parseHistoryInstant(entry.date)?.atZone(zone)?.toLocalDate()?.let { it to entry }
+    }
+    if (datedWorkouts.isEmpty()) return InsightsMetrics(0.0, 0, 0, 0)
+
+    val currentWeekStart = LocalDate.now().with(weekFields.dayOfWeek(), 1L)
+    val earliestWeekStart = datedWorkouts.minOf { it.first }.with(weekFields.dayOfWeek(), 1L)
+    val rollingWindowStart = currentWeekStart.minusWeeks(11)
+    val startWeek = maxOf(earliestWeekStart, rollingWindowStart)
+    val weekStarts = generateSequence(startWeek) { previous ->
+        previous.plusWeeks(1).takeIf { !it.isAfter(currentWeekStart) }
+    }.toList()
+    val byWeek = datedWorkouts
+        .filter { (date, _) -> !date.isBefore(startWeek) && !date.isAfter(LocalDate.now()) }
+        .groupBy { (date, _) -> date.with(weekFields.dayOfWeek(), 1L) }
+    val weekCount = weekStarts.size.coerceAtLeast(1)
+    val totalSessions = byWeek.values.sumOf { it.size }
     val sessionsPerWeek = totalSessions.toDouble() / weekCount
     val adherence = ((sessionsPerWeek / weeklyGoalDays) * 100.0).toInt().coerceIn(0, 100)
-    // Consistency: % of weeks where user hit their goal
-    val weeksHit = byWeek.values.count { it.size >= weeklyGoalDays }
+    val weeksHit = weekStarts.count { week -> (byWeek[week]?.size ?: 0) >= weeklyGoalDays }
     val consistency = ((weeksHit.toDouble() / weekCount) * 100.0).roundToInt().coerceIn(0, 100)
     return InsightsMetrics(sessionsPerWeek, adherence, consistency, weekCount)
 }
@@ -258,8 +266,8 @@ private fun InsightsCard(title: String, content: @Composable () -> Unit) {
         border = androidx.compose.foundation.BorderStroke(1.dp, c.cardBorder),
     ) {
         Column(
-            Modifier.fillMaxWidth().padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            Modifier.fillMaxWidth().appPadding(14.dp),
+            verticalArrangement = appSpacedBy(8.dp),
         ) {
             Text(title, color = c.text, fontSize = IronLogType.section.fontSize.sp, fontWeight = FontWeight.SemiBold)
             content()

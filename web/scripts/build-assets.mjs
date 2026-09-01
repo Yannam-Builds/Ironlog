@@ -58,8 +58,12 @@ const texts = await Promise.all(
     return `${name} ${pkg.version}\n${await readFile(resolve(folder, license), "utf8")}`;
   }),
 );
+const exerciseDataNotices = await readFile(
+  resolve(web, "../app/src/main/assets/third_party_notices.txt"),
+  "utf8",
+);
 await writeFile(
   resolve(notices, "third-party-notices.txt"),
-  texts.join("\n\n---\n\n"),
+  `${texts.join("\n\n---\n\n")}\n\n---\n\n${exerciseDataNotices}`,
 );
 console.log("Generated public PWA icons and mobile-sized native artwork.");

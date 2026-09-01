@@ -1,10 +1,13 @@
 package com.ironlog.app.ui.screens.onboarding.steps
 
+import com.ironlog.app.ui.theme.appGapDp
+import com.ironlog.app.ui.theme.appPadding
+import com.ironlog.app.ui.theme.appSpacedBy
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Text
+import com.ironlog.app.ui.theme.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -33,16 +36,16 @@ fun Step3Classification(
             .fillMaxSize()
             .background(OnboardingConfig.bgDark)
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 24.dp, vertical = 24.dp),
+            .appPadding(horizontal = 24.dp, vertical = 24.dp),
     ) {
         OnboardingPageHeader(
             step = "Training level",
             title = "How should progression begin?",
             body = "Choose the closest fit. IronLog will replace this estimate with verified training evidence over time.",
         )
-        Spacer(Modifier.height(28.dp))
+        Spacer(Modifier.height(appGapDp(28.dp)))
 
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(verticalArrangement = appSpacedBy(12.dp)) {
             OnboardingConfig.baselineOptions.forEach { option ->
                 val isSelected = option.progressionStyle == selectedProgressionStyle
                 GlowCard(
@@ -55,7 +58,7 @@ fun Step3Classification(
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         SetupBadge(code = option.code, accent = option.accent)
-                        Spacer(Modifier.width(16.dp))
+                        Spacer(Modifier.width(appGapDp(16.dp)))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = option.label,
@@ -63,7 +66,7 @@ fun Step3Classification(
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold,
                             )
-                            Spacer(Modifier.height(3.dp))
+                            Spacer(Modifier.height(appGapDp(3.dp)))
                             Text(
                                 text = option.description,
                                 color = OnboardingConfig.textMuted,
@@ -75,13 +78,13 @@ fun Step3Classification(
                 }
             }
         }
-        Spacer(Modifier.height(22.dp))
+        Spacer(Modifier.height(appGapDp(22.dp)))
         SetupReward(
             text = "This sets your starting difficulty — it does not grant unearned XP",
             modifier = Modifier.fillMaxWidth(),
         )
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(appGapDp(14.dp)))
         GlowButton(text = "Use this progression", onClick = onNext)
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(appGapDp(24.dp)))
     }
 }

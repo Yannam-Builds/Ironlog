@@ -1,5 +1,8 @@
 ﻿// app/src/main/java/com/ironlog/app/ui/screens/StatusWindowScreen.kt
 package com.ironlog.app.ui.screens.gamification
+import com.ironlog.app.ui.theme.appGapDp
+import com.ironlog.app.ui.theme.appPadding
+import com.ironlog.app.ui.theme.appSpacedBy
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -13,6 +16,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -22,8 +26,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Card
@@ -35,7 +41,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
+import com.ironlog.app.ui.theme.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -54,12 +60,16 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import com.ironlog.app.R
 import com.ironlog.app.assets.ForgeFoxExpression
 import com.ironlog.app.domain.badges.BadgeDefinitions
 import com.ironlog.app.domain.gamification.IronGrade
 import com.ironlog.app.domain.gamification.IronGradeGate
 import com.ironlog.app.domain.gamification.IronLedgerStats
 import com.ironlog.app.ui.components.IronGradeBadge
+import com.ironlog.app.ui.components.AchievementBadge
+import com.ironlog.app.ui.components.badgeTierColor
 import com.ironlog.app.ui.components.ironGradeColor
 import com.ironlog.app.ui.context.useTheme
 import com.ironlog.app.ui.viewmodel.GamificationUiState
@@ -71,6 +81,8 @@ fun StatusWindowScreen(
     state: GamificationUiState,
     onBack: () -> Unit,
     onRecoveryCircuitTap: () -> Unit,
+    onDailyProofAction: () -> Unit = onBack,
+    onRetryRefresh: () -> Unit = {},
 ) {
     val rankColor = ironGradeColor(state.rank)
     var showGradeBrowser by remember { mutableStateOf(false) }
@@ -90,10 +102,18 @@ fun StatusWindowScreen(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+                .appPadding(padding)
+                .appPadding(horizontal = 16.dp),
+            verticalArrangement = com.ironlog.app.ui.theme.appCardSpacedBy(16.dp),
         ) {
+            state.refreshError?.let { message ->
+                item {
+                    Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+                        Text(message, color = MaterialTheme.colorScheme.error)
+                        TextButton(onClick = onRetryRefresh) { Text("Retry refresh") }
+                    }
+                }
+            }
             // Rank badge + level
             item {
                 GradeBadgeSection(
@@ -107,7 +127,7 @@ fun StatusWindowScreen(
             }
 
             item {
-                DailyProofSection(state = state)
+                DailyProofSection(state = state, onPrimaryAction = onDailyProofAction)
             }
 
             // XP progress bar
@@ -143,12 +163,13 @@ fun StatusWindowScreen(
 
             item {
                 BadgeShelf(
+                    currentRank = state.rank,
                     unlockedBadges = state.unlockedBadges,
                     onOpenBrowser = { showGradeBrowser = true },
                 )
             }
 
-            item { Spacer(Modifier.height(16.dp).navigationBarsPadding()) }
+            item { Spacer(Modifier.height(appGapDp(16.dp)).navigationBarsPadding()) }
         }
     }
 
@@ -164,6 +185,7 @@ fun StatusWindowScreen(
 @Composable
 private fun DailyProofSection(
     state: GamificationUiState,
+    onPrimaryAction: () -> Unit,
 ) {
     val accent = when (state.dailyProofStatus) {
         com.ironlog.app.domain.gamification.DailyProofStatus.PROOF_LOGGED -> MaterialTheme.colorScheme.primary
@@ -172,19 +194,19 @@ private fun DailyProofSection(
         com.ironlog.app.domain.gamification.DailyProofStatus.RECOVER_SMART -> Color(0xFF7EC8B8)
         com.ironlog.app.domain.gamification.DailyProofStatus.ACTIVE_WORKOUT -> Color(0xFFB39DDB)
         com.ironlog.app.domain.gamification.DailyProofStatus.SETUP -> MaterialTheme.colorScheme.secondary
+        com.ironlog.app.domain.gamification.DailyProofStatus.FIRST_PROOF -> MaterialTheme.colorScheme.primary
     }
 
     Card(modifier = Modifier.fillMaxWidth()) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
-            verticalAlignment = Alignment.CenterVertically,
+                .appPadding(16.dp),
+            verticalArrangement = appSpacedBy(10.dp),
         ) {
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 Surface(
                     shape = RoundedCornerShape(999.dp),
@@ -193,55 +215,54 @@ private fun DailyProofSection(
                 ) {
                     Text(
                         text = "${state.dailyStreakDays} day streak",
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        modifier = Modifier.appPadding(horizontal = 12.dp, vertical = 6.dp),
                         color = accent,
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.ExtraBold,
                     )
                 }
-                Text(
-                    text = state.dailyProofHeadline,
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
+                Spacer(Modifier.weight(1f))
+                Image(
+                    painter = painterResource(ForgeFoxExpression.fromId(state.foxExpressionId).drawableRes),
+                    contentDescription = null,
+                    modifier = Modifier.size(72.dp),
+                    contentScale = ContentScale.Fit,
                 )
+            }
+            Text(
+                text = state.dailyProofHeadline,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                text = state.dailyProofDetail,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = accent.copy(alpha = 0.16f),
+                border = BorderStroke(1.dp, accent.copy(alpha = 0.45f)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onPrimaryAction),
+            ) {
                 Text(
-                    text = state.dailyProofDetail,
-                    style = MaterialTheme.typography.bodyMedium,
+                    text = state.dailyProofPrimaryActionLabel,
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = accent,
+                    fontWeight = FontWeight.ExtraBold,
+                    textAlign = TextAlign.Center,
+                )
+            }
+            if (!state.latestBadgeTitle.isNullOrBlank()) {
+                Text(
+                    text = "Latest milestone · ${state.latestBadgeTitle}",
+                    style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Surface(
-                        shape = RoundedCornerShape(999.dp),
-                        color = MaterialTheme.colorScheme.primaryContainer,
-                    ) {
-                        Text(
-                            text = state.dailyProofPrimaryActionLabel,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.Bold,
-                        )
-                    }
-                    if (!state.latestBadgeTitle.isNullOrBlank()) {
-                        Surface(
-                            shape = RoundedCornerShape(999.dp),
-                            color = MaterialTheme.colorScheme.secondaryContainer,
-                        ) {
-                            Text(
-                                text = state.latestBadgeTitle,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Medium,
-                            )
-                        }
-                    }
-                }
             }
-            Image(
-                painter = painterResource(ForgeFoxExpression.fromId(state.foxExpressionId).drawableRes),
-                contentDescription = state.dailyProofHeadline,
-                modifier = Modifier.size(132.dp),
-                contentScale = ContentScale.Fit,
-            )
         }
     }
 }
@@ -255,41 +276,28 @@ private fun GradeBadgeSection(
     integrityScore: Double,
     onBadgeClick: () -> Unit,
 ) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 24.dp),
-    ) {
-        IronGradeBadge(
-            rank = rank,
-            accent = rankColor,
-            modifier = Modifier
-                .size(108.dp)
-                .clickable(onClick = onBadgeClick),
-        )
-        Spacer(Modifier.height(8.dp))
-        Surface(
-            shape = RoundedCornerShape(999.dp),
-            color = rankColor.copy(alpha = 0.16f),
-            border = BorderStroke(1.dp, rankColor.copy(alpha = 0.52f)),
+    Card(modifier = Modifier.fillMaxWidth().clickable(onClick = onBadgeClick)) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = appSpacedBy(16.dp),
         ) {
-            Text(
-                text = "$rank Grade",
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 5.dp),
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.ExtraBold,
-                color = rankColor,
+            IronGradeBadge(
+                rank = rank,
+                accent = rankColor,
+                modifier = Modifier.size(88.dp),
             )
+            Column(Modifier.weight(1f), verticalArrangement = appSpacedBy(4.dp)) {
+                Text("CURRENT GRADE", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("$rank · Level $level", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.ExtraBold, color = rankColor)
+                Text(title, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    "Integrity ${(integrityScore * 100).toInt()}%  ·  Open achievement atlas",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
         }
-        Spacer(Modifier.height(8.dp))
-        Text("Level $level", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-        Text(title, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(
-            "Integrity ${(integrityScore * 100).toInt()}%",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.primary,
-        )
     }
 }
 
@@ -306,7 +314,7 @@ private fun XpProgressSection(totalXp: Long, xpInLevel: Long, xpForNextLevel: Lo
             Text("XP - $totalXp all-time", style = MaterialTheme.typography.labelMedium)
             Text("$xpInLevel / $xpForNextLevel", style = MaterialTheme.typography.labelMedium)
         }
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(appGapDp(4.dp)))
         LinearProgressIndicator(
             progress = { animatedFraction },
             modifier = Modifier
@@ -326,7 +334,7 @@ private fun XpProgressSection(totalXp: Long, xpInLevel: Long, xpForNextLevel: Lo
 @Composable
 private fun XpLogSection(logs: List<XpLogEntry>) {
     Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(modifier = Modifier.appPadding(16.dp), verticalArrangement = appSpacedBy(10.dp)) {
             Text("Ledger Event Log", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             if (logs.isEmpty()) {
                 Text(
@@ -349,7 +357,7 @@ private fun XpLogRow(log: XpLogEntry) {
     val accent = if (log.kind == "level" || log.kind == "gate") c.gold else MaterialTheme.colorScheme.primary
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalArrangement = appSpacedBy(10.dp),
         verticalAlignment = Alignment.Top,
     ) {
         Box(
@@ -359,7 +367,7 @@ private fun XpLogRow(log: XpLogEntry) {
                 .clip(CircleShape)
                 .background(accent),
         )
-        Column(Modifier.weight(1f)) {
+        Column(Modifier.weight(1f), verticalArrangement = appSpacedBy(3.dp)) {
             Text(log.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
             Text(
                 log.detail,
@@ -383,41 +391,50 @@ private fun StreakSection(
     onRecoveryCircuitTap: () -> Unit,
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
+        Column(
+            modifier = Modifier.fillMaxWidth().appPadding(16.dp),
+            verticalArrangement = appSpacedBy(12.dp),
         ) {
-            Surface(
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.34f)),
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = appSpacedBy(12.dp),
             ) {
-                Box(
-                    modifier = Modifier.size(44.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
+                Image(
+                    painter = painterResource(R.drawable.recovery_circuit_emblem),
+                    contentDescription = null,
+                    modifier = Modifier.size(56.dp),
+                    contentScale = ContentScale.Fit,
+                )
+                Column(Modifier.weight(1f)) {
                     Text(
-                        "FC",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.Black,
+                        "$streakWeeks qualifying weeks",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        "Weeks that met your personal training target",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text(
-                    "$streakWeeks qualifying weeks",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                )
-                Text("Ledger weeks that met your training standard", style = MaterialTheme.typography.bodySmall)
-            }
-            TextButton(
-                onClick = onRecoveryCircuitTap,
-                enabled = !recoveryCompleted,
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.34f)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(enabled = !recoveryCompleted, onClick = onRecoveryCircuitTap),
             ) {
-                Text(if (recoveryCompleted) "Proof saved" else "Recovery circuit")
+                Text(
+                    if (recoveryCompleted) "Recovery proof saved" else "Open Recovery Circuit",
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp),
+                    textAlign = TextAlign.Center,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = if (recoveryCompleted) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.ExtraBold,
+                )
             }
         }
     }
@@ -425,34 +442,41 @@ private fun StreakSection(
 
 @Composable
 private fun TrainingSignalsSection(stats: IronLedgerStats) {
+    val values = listOf(stats.strength, stats.power, stats.hypertrophy, stats.endurance, stats.agility, stats.discipline, stats.recovery)
+    val scale = trainingSignalScale(values)
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.appPadding(16.dp),
+            verticalArrangement = appSpacedBy(12.dp),
         ) {
             Text(
                 "Training Signals",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
             )
-            SignalRow("STR", "Strength", stats.strength, MaterialTheme.colorScheme.primary)
-            SignalRow("PWR", "Power", stats.power, MaterialTheme.colorScheme.tertiary)
-            SignalRow("HYP", "Hypertrophy", stats.hypertrophy, MaterialTheme.colorScheme.secondary)
-            SignalRow("END", "Endurance", stats.endurance, MaterialTheme.colorScheme.primary)
-            SignalRow("AGI", "Agility", stats.agility, MaterialTheme.colorScheme.secondary)
-            SignalRow("DSC", "Discipline", stats.discipline, MaterialTheme.colorScheme.tertiary)
-            SignalRow("REC", "Recovery", stats.recovery, MaterialTheme.colorScheme.primary)
+            Text(
+                "Relative profile · shared scale 0–$scale",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            SignalRow("STR", "Strength", stats.strength, scale, MaterialTheme.colorScheme.primary)
+            SignalRow("PWR", "Power", stats.power, scale, MaterialTheme.colorScheme.tertiary)
+            SignalRow("HYP", "Hypertrophy", stats.hypertrophy, scale, MaterialTheme.colorScheme.secondary)
+            SignalRow("END", "Endurance", stats.endurance, scale, MaterialTheme.colorScheme.primary)
+            SignalRow("AGI", "Agility", stats.agility, scale, MaterialTheme.colorScheme.secondary)
+            SignalRow("DSC", "Discipline", stats.discipline, scale, MaterialTheme.colorScheme.tertiary)
+            SignalRow("REC", "Recovery", stats.recovery, scale, MaterialTheme.colorScheme.primary)
         }
     }
 }
 
 @Composable
-private fun SignalRow(code: String, label: String, value: Int, accent: Color) {
-    val normalized = (value.coerceIn(1, 100) / 100f).coerceAtLeast(0.03f)
+private fun SignalRow(code: String, label: String, value: Int, scale: Int, accent: Color) {
+    val normalized = (value.coerceAtLeast(0).toFloat() / scale.coerceAtLeast(1).toFloat()).coerceIn(0.02f, 1f)
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalArrangement = appSpacedBy(10.dp),
     ) {
         Text(
             code,
@@ -479,13 +503,18 @@ private fun SignalRow(code: String, label: String, value: Int, accent: Color) {
         }
         Text(
             value.toString(),
-            modifier = Modifier.width(32.dp),
+            modifier = Modifier.width(40.dp),
             style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface,
             textAlign = TextAlign.End,
         )
     }
+}
+
+internal fun trainingSignalScale(values: List<Int>): Int {
+    val largest = maxOf(100, values.maxOrNull() ?: 0)
+    return (((largest.toLong() + 24L) / 25L) * 25L).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
 }
 
 @Composable
@@ -496,7 +525,7 @@ private fun NextGradeSection(
 ) {
     val c = useTheme()
     Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(modifier = Modifier.appPadding(16.dp), verticalArrangement = appSpacedBy(8.dp)) {
             Text("Next Grade", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Text(
                 nextGradeLabel ?: if (totalXp <= 0L) "Start with first workout" else "Apex maintained",
@@ -527,54 +556,68 @@ private fun NextGradeSection(
 }
 
 @Composable
-private fun BadgeShelf(unlockedBadges: List<String>, onOpenBrowser: () -> Unit) {
+private fun BadgeShelf(currentRank: String, unlockedBadges: List<String>, onOpenBrowser: () -> Unit) {
+    val current = IronGrade.entries.firstOrNull { it.label.equals(currentRank, ignoreCase = true) } ?: IronGrade.UNCALIBRATED
+    val grades = IronGrade.entries.filter { it != IronGrade.UNCALIBRATED && it.ordinal <= current.ordinal }
+    val achievements = BadgeDefinitions.all.filter { it.id in unlockedBadges }
     Column {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Text("Badges", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             TextButton(onClick = onOpenBrowser) { Text("View all") }
         }
-        Spacer(Modifier.height(8.dp))
-        if (unlockedBadges.isEmpty()) {
+        Spacer(Modifier.height(appGapDp(8.dp)))
+        if (grades.isEmpty() && achievements.isEmpty()) {
             Text(
                 "No badges unlocked yet. Tap View all to inspect locked grades and requirements.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodySmall,
             )
         } else {
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(unlockedBadges) { badge ->
-                    val displayName = BadgeDefinitions.all.firstOrNull { it.id == badge }?.title ?: badge
-                    Surface(
-                        shape = RoundedCornerShape(18.dp),
-                        color = MaterialTheme.colorScheme.primaryContainer,
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)),
-                        modifier = Modifier
-                            .width(132.dp)
-                            .clickable(onClick = onOpenBrowser),
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                            verticalArrangement = Arrangement.spacedBy(2.dp),
-                        ) {
-                            Text(
-                                displayName.take(2).uppercase(),
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Black,
-                                color = MaterialTheme.colorScheme.primary,
-                            )
-                            Text(
-                                displayName.replace('_', ' ')
-                                    .split(' ')
-                                    .joinToString(" ") { token -> token.replaceFirstChar(Char::titlecase) },
-                                style = MaterialTheme.typography.bodySmall,
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 2,
-                            )
-                        }
-                    }
+            if (grades.isNotEmpty()) {
+                Text("Earned grades", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(appGapDp(8.dp)))
+                LazyRow(horizontalArrangement = appSpacedBy(10.dp)) {
+                    items(grades) { grade -> GradeShelfTile(grade, onOpenBrowser) }
+                }
+            }
+            if (achievements.isNotEmpty()) {
+                Spacer(Modifier.height(appGapDp(14.dp)))
+                Text("Achievements", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(appGapDp(8.dp)))
+                LazyRow(horizontalArrangement = appSpacedBy(10.dp)) {
+                    items(achievements) { badge -> AchievementShelfTile(badge, true, onOpenBrowser) }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun GradeShelfTile(grade: IronGrade, onClick: () -> Unit) {
+    val accent = ironGradeColor(grade.label)
+    Column(
+        modifier = Modifier.width(104.dp).clickable(onClick = onClick),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = appSpacedBy(6.dp),
+    ) {
+        IronGradeBadge(rank = grade.label, accent = accent, modifier = Modifier.size(68.dp))
+        Text(grade.label, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, maxLines = 1)
+    }
+}
+
+@Composable
+private fun AchievementShelfTile(
+    badge: com.ironlog.app.domain.badges.BadgeDefinition,
+    unlocked: Boolean,
+    onClick: () -> Unit,
+) {
+    Column(
+        modifier = Modifier.width(104.dp).clickable(onClick = onClick),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = appSpacedBy(6.dp),
+    ) {
+        AchievementBadge(definition = badge, unlocked = unlocked, modifier = Modifier.size(64.dp))
+        Text(badge.title, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, maxLines = 2, textAlign = TextAlign.Center)
     }
 }
 
@@ -586,14 +629,17 @@ private fun GradeBrowserDialog(
 ) {
     val c = useTheme()
     val current = IronGrade.entries.firstOrNull { it.label == currentRank } ?: IronGrade.UNCALIBRATED
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
         Card(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth(0.94f).fillMaxHeight(0.9f),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         ) {
             Column(
-                modifier = Modifier.padding(18.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
+                modifier = Modifier.appPadding(18.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = appSpacedBy(14.dp),
             ) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     Text("Achievement Atlas", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
@@ -604,8 +650,8 @@ private fun GradeBrowserDialog(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodySmall,
                 )
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    items(IronGrade.entries) { grade ->
+                LazyRow(horizontalArrangement = appSpacedBy(12.dp)) {
+                    items(IronGrade.entries.filter { it != IronGrade.UNCALIBRATED }) { grade ->
                         val unlocked = current.ordinal >= grade.ordinal
                         val accent = ironGradeColor(grade.label)
                         Card(
@@ -616,9 +662,9 @@ private fun GradeBrowserDialog(
                             border = BorderStroke(1.dp, if (unlocked) accent.copy(alpha = 0.7f) else MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)),
                         ) {
                             Column(
-                                modifier = Modifier.padding(16.dp),
+                                modifier = Modifier.appPadding(16.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(10.dp),
+                                verticalArrangement = appSpacedBy(10.dp),
                             ) {
                                 IronGradeBadge(
                                     rank = grade.label,
@@ -651,7 +697,7 @@ private fun GradeBrowserDialog(
                     }
                 }
                 Text("App badges", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                LazyRow(horizontalArrangement = appSpacedBy(12.dp)) {
                     items(BadgeDefinitions.all) { badge ->
                         val unlocked = badge.id in unlockedBadges
                         Card(
@@ -667,13 +713,19 @@ private fun GradeBrowserDialog(
                             ),
                         ) {
                             Column(
-                                modifier = Modifier.padding(16.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.appPadding(16.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = appSpacedBy(8.dp),
                             ) {
+                                AchievementBadge(
+                                    definition = badge,
+                                    unlocked = unlocked,
+                                    modifier = Modifier.size(72.dp),
+                                )
                                 Text(
                                     badge.tier.name,
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.primary,
+                                    color = badgeTierColor(badge.tier),
                                     fontWeight = FontWeight.Black,
                                 )
                                 Text(badge.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)

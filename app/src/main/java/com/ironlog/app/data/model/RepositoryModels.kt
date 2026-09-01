@@ -83,6 +83,20 @@ data class PlanDayInput(
     val orderIndex: Int? = null,
 )
 
+/** Portable metadata used to recreate a custom exercise on another IronLog install. */
+data class PlanExerciseDefinition(
+    val isCustom: Boolean? = null,
+    val primaryMuscle: String? = null,
+    val equipment: String? = null,
+    val category: String? = null,
+    val trackingType: String? = null,
+    val isBodyweight: Boolean? = null,
+    val movementPattern: String? = null,
+    val difficulty: String? = null,
+    val notes: String? = null,
+    val secondaryMuscles: List<String> = emptyList(),
+)
+
 data class PlanExerciseInput(
     val exerciseId: String? = null,
     val name: String? = null,
@@ -93,6 +107,7 @@ data class PlanExerciseInput(
     val supersetGroup: String? = null,
     val isWarmup: Boolean? = null,
     val notes: String? = null,
+    val definition: PlanExerciseDefinition? = null,
 )
 
 data class PlanBundle(
@@ -137,12 +152,27 @@ data class FullPlanDay(
 
 // Workout repository
 
+sealed interface EffortUpdate {
+    data object Keep : EffortUpdate
+    data object Clear : EffortUpdate
+    data class Value(val amount: Double) : EffortUpdate
+
+    fun resolve(previous: Double?): Double? = when (this) {
+        Keep -> previous
+        Clear -> null
+        is Value -> amount.also { require(it.isFinite() && it in 0.0..10.0) { "Effort must be between 0 and 10" } }
+    }
+}
+
 data class SetInput(
+    val uid: String? = null,
     val setIndex: Int? = null,
     val weight: Double? = null,
     val reps: Double? = null,
     val rpe: Double? = null,
     val rir: Double? = null,
+    val rpeUpdate: EffortUpdate = EffortUpdate.Keep,
+    val rirUpdate: EffortUpdate = EffortUpdate.Keep,
     val restSeconds: Int? = null,
     val isWarmup: Boolean? = null,
     val isDropset: Boolean? = null,
@@ -152,6 +182,7 @@ data class SetInput(
     val completedAt: Long? = null,
     val type: String? = null,
     val rest: Int? = null,
+    val notes: String? = null,
 )
 
 data class WorkoutMetadataInput(
@@ -168,6 +199,11 @@ data class CompletedExerciseInput(
     val primaryMuscle: String? = null,
     val equipment: String? = null,
     val category: String? = null,
+    val secondaryMuscles: List<String>? = null,
+    val muscleContributions: Map<String, Double>? = null,
+    val trackingType: String? = null,
+    val isBodyweight: Boolean? = null,
+    val requiresExternalLoad: Boolean? = null,
     val supersetGroup: String? = null,
     val note: String? = null,
     val notes: String? = null,
@@ -181,7 +217,16 @@ data class CreateCompletedWorkoutInput(
     val rating: Double? = null,
     val notes: String? = null,
     val exerciseData: List<CompletedExerciseInput> = emptyList(),
+    val imported: Boolean = false,
+    val uid: String? = null,
 )
+
+data class HistoricalWorkoutConflict(val uid: String, val name: String, val startedAt: Long)
+
+sealed interface HistoricalWorkoutSaveResult {
+    data class Saved(val workoutId: String) : HistoricalWorkoutSaveResult
+    data class DateConflict(val workouts: List<HistoricalWorkoutConflict>) : HistoricalWorkoutSaveResult
+}
 
 data class WorkoutDetail(
     val workout: WorkoutEntity,

@@ -1,8 +1,13 @@
 ﻿package com.ironlog.app.ui.screens.workout
 
+import com.ironlog.app.ui.theme.appGapDp
+import com.ironlog.app.ui.theme.appPadding
+import com.ironlog.app.ui.theme.appSpacedBy
 import android.app.Application
 import android.content.Intent
 import android.net.Uri
+import android.provider.Settings
+import android.os.SystemClock
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedContent
@@ -17,7 +22,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,12 +30,14 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -65,23 +71,24 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
+import com.ironlog.app.ui.theme.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
@@ -92,27 +99,45 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ironlog.app.data.model.LegacyExerciseShape
+import com.ironlog.app.data.model.CreateExerciseInput
 import com.ironlog.app.data.model.SetInput
 import com.ironlog.app.data.objectbox.ObjectBox
 import com.ironlog.app.data.objectbox.WorkoutEntity
 import com.ironlog.app.data.objectbox.WorkoutExerciseEntity
 import com.ironlog.app.data.objectbox.WorkoutEntity_
+import com.ironlog.app.data.objectbox.WorkoutSetEntity
 import com.ironlog.app.data.repository.ExerciseRepository
 import com.ironlog.app.data.repository.SettingsRepository
+import com.ironlog.app.data.repository.ProgressionPolicySnapshot
+import com.ironlog.app.data.repository.ProgressionPolicyStore
+import com.ironlog.app.data.repository.observePlanExerciseNotesVisible
+import com.ironlog.app.data.repository.setPlanExerciseNotesVisible
 import com.ironlog.app.data.repository.WorkoutRepository
+import com.ironlog.app.data.repository.LastExerciseSession
+import com.ironlog.app.data.repository.historicalPrBaselines
+import com.ironlog.app.data.repository.PR_RESET_AT_KEY
 import com.ironlog.app.domain.intelligence.CloudAiEngine
 import com.ironlog.app.domain.intelligence.CloudAiKeyStore
 import com.ironlog.app.domain.intelligence.TrainingIntelligenceEngine
+import com.ironlog.app.domain.intelligence.ResolvedProgressionPolicy
 import com.ironlog.app.ui.viewmodel.AppDataViewModel
 import com.valentinilk.shimmer.shimmer
 import com.ironlog.app.services.WorkoutForegroundService
 import com.ironlog.app.services.WorkoutNotificationBridge
+import com.ironlog.app.services.WorkoutClockSnapshot
+import com.ironlog.app.services.WorkoutTimerClock
+import com.ironlog.app.services.WorkoutTimerSettingKeys
 import com.ironlog.app.services.ShareService
+import com.ironlog.app.ui.components.IronLogDropdownMenu
 import com.ironlog.app.ui.components.SetRow
+import com.ironlog.app.ui.components.NextSessionNoteControl
+import com.ironlog.app.ui.components.ExerciseNotesSettingsDialog
 import com.ironlog.app.ui.context.useTheme
 import com.ironlog.app.ui.model.UiPlan
 import com.ironlog.app.ui.model.UiPlanDay
@@ -120,15 +145,26 @@ import com.ironlog.app.ui.model.UiPlanExercise
 import timber.log.Timber
 import com.ironlog.app.ui.state.AddedExerciseEntry
 import com.ironlog.app.ui.state.LoggedSet
+import com.ironlog.app.ui.state.GhostLoadTarget
+import com.ironlog.app.ui.state.WorkoutGhostLoader
+import com.ironlog.app.ui.state.PendingWarmup
 import com.ironlog.app.ui.state.WorkoutAction
 import com.ironlog.app.ui.state.WorkoutState
 import com.ironlog.app.ui.state.workoutReducer
+import com.ironlog.app.ui.state.WorkoutMutationCoordinator
+import com.ironlog.app.ui.state.WorkoutDraftWriteGate
+import com.ironlog.app.ui.state.afterWorkoutCommit
+import com.ironlog.app.ui.state.commitWorkoutTerminalMutation
+import com.ironlog.app.ui.state.canonicalSetLoad
+import com.ironlog.app.ui.state.canonicalSetType
+import com.ironlog.app.ui.state.loadOrCreateWorkout
 import com.ironlog.app.ui.theme.IronLogRadius
 import com.ironlog.app.ui.theme.IronLogType
 import com.ironlog.app.ui.theme.IronLogThemeTokens
 import com.ironlog.app.ui.viewmodel.PlansViewModel
 import com.ironlog.app.util.formatDurationShort
 import com.ironlog.app.util.formatWeightFromKg
+import com.ironlog.app.util.convertUnitToKg
 import com.ironlog.app.util.HapticsEngine
 import com.ironlog.app.util.calculatePlates
 import com.ironlog.app.ui.screens.settings.GymProfileDto
@@ -136,12 +172,17 @@ import com.ironlog.app.ui.screens.settings.DEFAULT_PLATES
 import com.ironlog.app.ui.screens.settings.PlateDto
 import com.ironlog.app.ui.screens.stats.estimateOneRM
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -195,7 +236,48 @@ data class NormalizedSessionExercise(
     val trackingType: String,
     val isWarmup: Boolean,
     val equipment: String? = null,
+    val isBodyweight: Boolean = false,
 )
+
+private data class PendingExerciseSwap(
+    val exIndex: Int,
+    val from: NormalizedSessionExercise,
+    val to: LegacyExerciseShape,
+)
+
+private fun LastExerciseSession.toGhostData() = com.ironlog.app.ui.state.GhostData(
+    date = date,
+    previousNote = notes,
+    sets = sets.map { set ->
+        com.ironlog.app.ui.state.GhostSet(
+            weight = set.weight,
+            reps = set.reps,
+            rpe = set.rpe,
+            rir = set.rir,
+            type = when {
+                set.isWarmup -> "warmup"
+                set.toFailure -> "failure"
+                set.isDropset -> "dropset"
+                set.isAmrap -> "amrap"
+                else -> "normal"
+            },
+        )
+    },
+)
+
+internal fun shouldReconcileWorkoutForegroundService(
+    currentWorkoutId: String?,
+    timerStarted: Boolean,
+    currentStartMs: Long?,
+    durableWorkoutId: String?,
+    durableStartMs: Long?,
+): Boolean =
+    timerStarted &&
+        !currentWorkoutId.isNullOrBlank() &&
+        currentWorkoutId == durableWorkoutId &&
+        currentStartMs != null &&
+        currentStartMs > 0L &&
+        currentStartMs == durableStartMs
 
 class ActiveWorkoutViewModel(application: Application) : AndroidViewModel(application) {
     private val workoutRepo = WorkoutRepository()
@@ -223,11 +305,37 @@ class ActiveWorkoutViewModel(application: Application) : AndroidViewModel(applic
     // ObjectBox workout tracking
     private var activeWorkoutId: String? = null
     private var timerStartEpochMs: Long? = null
+    private var timerStartElapsedMs: Long? = null
+    private var timerStartBootCount: Int = -1
+    private val processBootCount: Int = WorkoutTimerClock.now(application).bootCount
     // UI rows can repeat the same exercise id, so persistence must bind by row index.
     private var workoutExerciseIdByIndex: Map<Int, String> = emptyMap()
+    private var exerciseIdByIndex: Map<Int, String> = emptyMap()
+    private val ghostLoader = WorkoutGhostLoader(
+        scope = viewModelScope,
+        loadOne = { exerciseId -> workoutRepo.getLastExerciseSession(exerciseId)?.toGhostData() },
+        isCurrent = { targets ->
+            targets.withIndex().all { (index, target) ->
+                workoutExerciseIdByIndex[index] == target.rowUid &&
+                    exerciseIdByIndex[index] == target.exerciseId
+            }
+        },
+        publish = { dispatch(WorkoutAction.LoadGhost(it)) },
+        onFailure = { Timber.w(it, "Previous-session data could not load") },
+    )
     // Historical best 1RM per exerciseId
     private var historicalBest1rm: MutableMap<String, Double> = mutableMapOf()
+    private var sessionBest1rm: MutableMap<String, Double> = mutableMapOf()
     private var hadPrThisSession: Boolean = false
+    /** Sets, rest controls, finish, and discard share one ordering boundary. */
+    private val mutationMutex = Mutex()
+    private val mutations = WorkoutMutationCoordinator(viewModelScope, mutationMutex)
+    private val draftWrites = WorkoutDraftWriteGate()
+    val initialization = mutations.initialization
+    private val _mutationError = MutableStateFlow<String?>(null)
+    val mutationError: StateFlow<String?> = _mutationError.asStateFlow()
+    private val _restControlPending = MutableStateFlow(false)
+    val restControlPending: StateFlow<Boolean> = _restControlPending.asStateFlow()
     private val json = Json { ignoreUnknownKeys = true }
     // Ordered indices from the composable — persisted in draft so minimize/resume restores order.
     private var persistedOrderedIndices: List<Int> = emptyList()
@@ -235,7 +343,22 @@ class ActiveWorkoutViewModel(application: Application) : AndroidViewModel(applic
     val restoredOrderedIndices: StateFlow<List<Int>> = _restoredOrderedIndices.asStateFlow()
 
     fun updateOrderedIndices(indices: List<Int>) {
-        persistedOrderedIndices = indices
+        val rowIds = indices.mapNotNull(workoutExerciseIdByIndex::get)
+        if (rowIds.size == indices.size && rowIds.isNotEmpty()) {
+            launchMutation {
+                mutations.commit<List<Int>>(
+                    write = {
+                        val currentIndices = rowIds.map { uid -> currentExerciseIndex(-1, uid) }
+                        workoutRepo.persistExerciseOrder(rowIds)
+                        currentIndices
+                    },
+                    publish = { committed ->
+                        persistedOrderedIndices = committed
+                        persistDraft(_workoutState.value)
+                    },
+                )
+            }
+        }
     }
 
     init {
@@ -245,6 +368,14 @@ class ActiveWorkoutViewModel(application: Application) : AndroidViewModel(applic
             val json = runCatching { org.json.JSONObject(raw ?: "{}") }.getOrDefault(org.json.JSONObject())
             vmWeightUnit = json.optString("weightUnit", "kg").ifBlank { "kg" }
         }
+        // A reset can happen while this workout is minimized. Rebase immediately so resuming the
+        // same ViewModel cannot keep comparing new sets against records the user cleared.
+        viewModelScope.launch {
+            settingsRepo.observeStrings(setOf(PR_RESET_AT_KEY)).collect {
+                historicalBest1rm = withContext(Dispatchers.IO) { loadHistoricalPrBaselines() }
+                hadPrThisSession = recomputeHadPrFromRetainedSets()
+            }
+        }
         // Tick elapsed timer from a stable epoch so minimize/background/screen-off
         // never drifts or resets the counter.
         viewModelScope.launch {
@@ -252,7 +383,12 @@ class ActiveWorkoutViewModel(application: Application) : AndroidViewModel(applic
                 delay(1000)
                 val start = timerStartEpochMs
                 if (_timerStarted.value && start != null) {
-                    _elapsedSeconds.value = ((System.currentTimeMillis() - start) / 1000L).coerceAtLeast(0L).toInt()
+                    _elapsedSeconds.value = (WorkoutTimerClock.elapsedSinceStartMs(
+                        startWallMs = start,
+                        startElapsedMs = timerStartElapsedMs ?: 0L,
+                        startBootCount = timerStartBootCount,
+                        now = currentClockSnapshot(),
+                    ) / 1_000L).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
                 }
             }
         }
@@ -262,242 +398,464 @@ class ActiveWorkoutViewModel(application: Application) : AndroidViewModel(applic
      * Called when the very first set of a session is logged.
      * Idempotent — safe to call multiple times (noop after first call).
      */
-    private fun startTimerOnFirstSet() {
+    private suspend fun startTimerOnFirstSet() {
         if (_timerStarted.value) return
-        _timerStarted.value = true
-        val nowMs = System.currentTimeMillis()
+        val workoutId = activeWorkoutId ?: return
+        val now = currentClockSnapshot()
+        val nowMs = now.wallTimeMs
+        val persisted = settingsRepo.setLongSettingsIfStringMatches(
+            matchKey = "active_workout_id",
+            expectedValue = workoutId,
+            values = mapOf(
+                WorkoutTimerSettingKeys.START_WALL_MS to nowMs,
+                WorkoutTimerSettingKeys.START_ELAPSED_MS to now.elapsedRealtimeMs,
+                WorkoutTimerSettingKeys.START_BOOT_COUNT to now.bootCount.toLong(),
+            ),
+        )
+        if (!persisted) return
+        // The start belongs to the same serialized mutation as the first set. Re-check the
+        // durable identity so a terminal mutation can never be followed by a delayed restart.
+        if (activeWorkoutId != workoutId || settingsRepo.getActiveWorkoutId() != workoutId) {
+            return
+        }
         timerStartEpochMs = nowMs
-        _elapsedSeconds.value = ((System.currentTimeMillis() - nowMs) / 1000L).coerceAtLeast(0L).toInt()
-        viewModelScope.launch {
-            settingsRepo.setString("active_workout_start_ms", nowMs.toString())
-            WorkoutForegroundService.start(
-                getApplication(),
-                activeWorkoutName ?: "Workout",
-                nowMs,
-            )
+        timerStartElapsedMs = now.elapsedRealtimeMs
+        timerStartBootCount = now.bootCount
+        _elapsedSeconds.value = 0
+        _timerStarted.value = true
+        requestForegroundService(workoutId, nowMs)
+    }
+
+    private fun syncForegroundNotification() {
+        val workoutId = activeWorkoutId ?: return
+        val startMs = timerStartEpochMs ?: return
+        requestForegroundService(workoutId, startMs)
+    }
+
+    private fun requestForegroundService(workoutId: String, startMs: Long): Boolean {
+        val started = WorkoutForegroundService.start(
+            getApplication(),
+            workoutId,
+            activeWorkoutName ?: "Workout",
+            startMs,
+        )
+        if (!started) {
+            _mutationError.value =
+                "Workout saved, but Android blocked the status notification. Re-open IronLog to retry."
+        }
+        return started
+    }
+
+    fun reconcileForegroundNotificationOnResume() {
+        if (!_timerStarted.value) return
+        viewModelScope.launch(Dispatchers.IO) {
+            mutationMutex.withLock {
+                val workoutId = activeWorkoutId?.takeIf { it.isNotBlank() } ?: return@withLock
+                val startMs = timerStartEpochMs?.takeIf { it > 0L } ?: return@withLock
+                val durableWorkoutId = settingsRepo.getActiveWorkoutId()
+                val durableStartMs = settingsRepo.getString(WorkoutTimerSettingKeys.START_WALL_MS)
+                    ?.toLongOrNull()
+                if (!shouldReconcileWorkoutForegroundService(
+                        currentWorkoutId = workoutId,
+                        timerStarted = _timerStarted.value,
+                        currentStartMs = startMs,
+                        durableWorkoutId = durableWorkoutId,
+                        durableStartMs = durableStartMs,
+                    )
+                ) {
+                    return@withLock
+                }
+                requestForegroundService(workoutId, startMs)
+            }
         }
     }
 
     /** The name shown in the foreground-service notification. Derived lazily once [initWorkout] runs. */
     private var activeWorkoutName: String? = null
 
-    fun initWorkout(dayId: String) {
-        if (activeWorkoutId != null) return
-        viewModelScope.launch {
-            // Resume existing active workout first (survives process/background recreation).
-            val persistedActiveId = runCatching { settingsRepo.getActiveWorkoutId() }.getOrNull()
-            if (!persistedActiveId.isNullOrBlank()) {
-                val resumed = runCatching { workoutRepo.getWorkoutDetailSnapshot(persistedActiveId) }.getOrNull()
-                if (resumed != null) {
-                    activeWorkoutId = resumed.workout.uid
-                    activeWorkoutName = resumed.workout.name.ifBlank { "Workout in progress" }
-                    _activeWorkoutIdSignal.value = resumed.workout.uid
-                    bindWorkoutExerciseRows(resumed.exercises)
-                    val persistedStart = settingsRepo.getString("active_workout_start_ms")?.toLongOrNull()
+    fun initWorkout(dayId: String, startEmpty: Boolean = false) {
+        mutations.initialize {
+            historicalBest1rm = withContext(Dispatchers.IO) { loadHistoricalPrBaselines() }
+            sessionBest1rm.clear()
+            val loaded = loadOrCreateWorkout(
+                readActiveId = { activeWorkoutId ?: settingsRepo.getActiveWorkoutId() },
+                resume = { id -> workoutRepo.getWorkoutDetailSnapshot(id).also {
+                    check(it.workout.status == "active") { "The saved workout has already ended." }
+                } },
+                create = {
+                    val workout = if (startEmpty) {
+                        workoutRepo.startEmptyWorkout("Open Workout")
+                    } else {
+                        check(dayId.isNotBlank()) { "No active workout was found. Return to Plans to start one." }
+                        workoutRepo.startWorkoutFromPlanDay(dayId)
+                    }
+                    // Preserve the committed identity even if a subsequent read fails; Retry resumes it.
+                    activeWorkoutId = workout.uid
+                    workoutRepo.getWorkoutDetailSnapshot(workout.uid)
+                },
+                restore = { detail ->
+                    activeWorkoutId = detail.workout.uid
+                    activeWorkoutName = detail.workout.name.ifBlank { "Workout in progress" }
+                    bindWorkoutExerciseRows(detail.exercises)
+                    val persistedStart = settingsRepo.getString(WorkoutTimerSettingKeys.START_WALL_MS)?.toLongOrNull()
+                    val persistedStartElapsed = settingsRepo.getString(WorkoutTimerSettingKeys.START_ELAPSED_MS)?.toLongOrNull()
+                    val persistedStartBoot = settingsRepo.getString(WorkoutTimerSettingKeys.START_BOOT_COUNT)?.toIntOrNull() ?: -1
                     if (persistedStart != null && persistedStart > 0L) {
                         timerStartEpochMs = persistedStart
+                        timerStartElapsedMs = persistedStartElapsed
+                        timerStartBootCount = persistedStartBoot
                         _timerStarted.value = true
-                        _elapsedSeconds.value = ((System.currentTimeMillis() - persistedStart) / 1000L).coerceAtLeast(0L).toInt()
+                        _elapsedSeconds.value = (WorkoutTimerClock.elapsedSinceStartMs(
+                            startWallMs = persistedStart,
+                            startElapsedMs = persistedStartElapsed ?: 0L,
+                            startBootCount = persistedStartBoot,
+                            now = currentClockSnapshot(),
+                        ) / 1_000L).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
                     }
                     if (persistedStart != null && persistedStart > 0L) {
-                        WorkoutForegroundService.start(
-                            getApplication(),
-                            activeWorkoutName ?: "Workout",
-                            persistedStart,
-                        )
+                        requestForegroundService(detail.workout.uid, persistedStart)
                     }
                     restoreDraftIfAny()
-                    return@launch
-                }
-            }
-            if (dayId.isBlank()) {
-                // Re-open path without a day id should resume only.
-                // If there is no persisted active workout, avoid creating a new one implicitly.
-                return@launch
-            }
-            try {
-                val workout = workoutRepo.startWorkoutFromPlanDay(dayId)
-                activeWorkoutId = workout.uid
-                activeWorkoutName = workout.name.ifBlank { "Workout in progress" }
-                _activeWorkoutIdSignal.value = workout.uid
-                // Note: foreground service shows the live notification (with rest timer inline).
-                // Do NOT call WorkoutNotificationBridge.showActiveWorkout — it creates a duplicate loud notification.
-                val detail = workoutRepo.getWorkoutDetailSnapshot(workout.uid)
-                bindWorkoutExerciseRows(detail.exercises)
-                persistDraft(_workoutState.value)
-                restoreDraftIfAny()
-            } catch (_: Exception) {
-                // If day not in ObjectBox yet, start empty workout
-                try {
-                    val workout = workoutRepo.startEmptyWorkout("Quick Workout")
-                    activeWorkoutId = workout.uid
-                    activeWorkoutName = workout.name
-                    _activeWorkoutIdSignal.value = workout.uid
-                    // Foreground service handles the live notification — no duplicate from WorkoutNotificationBridge.
-                    persistDraft(_workoutState.value)
-                    restoreDraftIfAny()
-                } catch (_: Exception) { /* silent — UI still works in-memory */ }
-            }
+                },
+            )
+            _activeWorkoutIdSignal.value = loaded.workout.uid
         }
     }
 
-    /** Loads last-session ghost data for a list of exercise IDs, dispatching UpdateGhost actions. */
+    private fun currentClockSnapshot(): WorkoutClockSnapshot = WorkoutClockSnapshot(
+        wallTimeMs = System.currentTimeMillis(),
+        elapsedRealtimeMs = SystemClock.elapsedRealtime(),
+        bootCount = processBootCount,
+    )
+
+    /** Replaces ghost data from one stable row/exercise generation. */
     fun loadGhostData(exerciseIds: List<String>) {
-        if (exerciseIds.isEmpty()) return
-        viewModelScope.launch {
-            exerciseIds.forEachIndexed { idx, exerciseId ->
-                runCatching {
-                    val sets = workoutRepo.getLastSessionSetsForExercise(exerciseId)
-                    if (sets.isNotEmpty()) {
-                        val ghost = com.ironlog.app.ui.state.GhostData(
-                            sets = sets.map { s ->
-                                com.ironlog.app.ui.state.GhostSet(
-                                    weight = s.weight,
-                                    reps = s.reps,
-                                    rpe = s.rpe,
-                                )
-                            },
-                        )
-                        dispatch(WorkoutAction.UpdateGhost(idx, ghost))
-                    }
-                }
-            }
+        val targets = exerciseIds.mapIndexed { index, exerciseId ->
+            GhostLoadTarget(workoutExerciseIdByIndex[index].orEmpty(), exerciseId)
         }
+        ghostLoader.load(targets)
     }
 
     fun dispatch(action: WorkoutAction) {
-        // Clean up DB row when an exercise is removed mid-workout, then re-index the binding map.
-        if (action is WorkoutAction.RemoveExercise && activeWorkoutId != null) {
-            val uid = workoutExerciseIdByIndex[action.exIndex]
-            if (!uid.isNullOrBlank()) {
-                viewModelScope.launch {
-                    runCatching { workoutRepo.deleteWorkoutExercise(uid) }
-                }
-            }
-            // Re-index: remove the entry for exIndex and shift all higher indices down by 1.
-            workoutExerciseIdByIndex = workoutExerciseIdByIndex
-                .filterKeys { it != action.exIndex }
-                .mapKeys { (k, _) -> if (k > action.exIndex) k - 1 else k }
+        if (action is WorkoutAction.RemoveExercise) {
+            removeExercise(action)
+            return
         }
+        if (action is WorkoutAction.Add30s || action is WorkoutAction.SkipRest ||
+            action is WorkoutAction.PauseRest || action is WorkoutAction.ResumeRest
+        ) {
+            applyRestControl(action)
+            return
+        }
+        publishAction(action)
+    }
+
+    private fun publishAction(action: WorkoutAction) {
         val next = workoutReducer(_workoutState.value, action)
         _workoutState.value = next
         // Persist immediately so minimize/background cannot drop the latest typed input.
         if (activeWorkoutId != null) persistDraft(next)
     }
 
-    fun logSet(exIndex: Int, exerciseId: String, weightText: String, repsText: String, trackingType: String, restSeconds: Int) {
-        val weight = weightText.toDoubleOrNull() ?: 0.0
-        val reps = repsText.toDoubleOrNull() ?: 0.0
-        if (weight <= 0.0 && reps <= 0.0) return
-
-        // Start the workout timer the first time any set is logged.
-        val totalSetsBefore = _workoutState.value.setLog.values.sumOf { it.size }
-        if (totalSetsBefore == 0) startTimerOnFirstSet()
-
-        dispatch(WorkoutAction.LogSet(exIndex, LoggedSet(weight = weight, reps = reps, trackingType = trackingType, durationSec = if (trackingType.startsWith("duration")) reps else null)))
-        val endTime = System.currentTimeMillis() + restSeconds * 1000L
-        dispatch(WorkoutAction.StartRest(endTime = endTime, total = restSeconds, triggerExIndex = exIndex))
-        val setCountForExercise = _workoutState.value.setLog[exIndex]?.size ?: 0
-        viewModelScope.launch {
-            settingsRepo.setString("active_workout_set_label", "Set $setCountForExercise")
-            settingsRepo.setString("active_workout_rest_end_ms", endTime.toString())
-        }
-        // No separate rest timer notification — the foreground service notification shows rest seconds inline
-        // (see WorkoutForegroundService.buildNotification which reads active_workout_rest_end_ms).
-
-        viewModelScope.launch {
-            val workoutExId = resolveWorkoutExerciseId(exIndex, exerciseId)
-            if (workoutExId != null) {
-                try {
-                    workoutRepo.addSet(workoutExId, SetInput(weight = weight, reps = reps, restSeconds = restSeconds))
-                    checkForPr(exerciseId, weight, reps.roundToInt())
-                } catch (_: Exception) { /* persist failure is non-fatal */ }
+    private fun applyRestControl(action: WorkoutAction) {
+        val workoutId = activeWorkoutId ?: return
+        if (_restControlPending.value) return
+        _restControlPending.value = true
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                mutationMutex.withLock {
+                    val appliedAction: WorkoutAction? = when (action) {
+                    WorkoutAction.Add30s -> {
+                        val result = com.ironlog.app.services.WorkoutNotificationActionInbox
+                            .commitRestControl(
+                                sessionId = workoutId,
+                                actionId = com.ironlog.app.services.NotificationActionRouter.Actions.ADD_30S,
+                                now = com.ironlog.app.services.WorkoutTimerClock.now(getApplication()),
+                                enqueueUiSync = false,
+                            )
+                        if (result.applied) {
+                            runCatching {
+                                WorkoutNotificationBridge.clearRestTimer(getApplication())
+                                WorkoutForegroundService.onExternalRestStateChanged(getApplication(), workoutId)
+                            }.onFailure { Timber.w(it, "Rest deadline committed; notification refresh will retry") }
+                            if (result.pausedRemainingMs > 0L) {
+                                WorkoutAction.SyncPausedRest(
+                                    remainingMs = result.pausedRemainingMs,
+                                    addedSeconds = 30,
+                                )
+                            } else {
+                                WorkoutAction.SyncRestDeadline(
+                                    endTime = result.wallEndMs,
+                                    endElapsedTime = result.elapsedEndMs,
+                                    bootCount = result.bootCount,
+                                    addedSeconds = 30,
+                                )
+                            }
+                        } else {
+                            WorkoutAction.RestExpired
+                        }
+                    }
+                    WorkoutAction.SkipRest, is WorkoutAction.PauseRest -> {
+                        val controlAction = if (action is WorkoutAction.PauseRest) {
+                            com.ironlog.app.services.NotificationActionRouter.Actions.PAUSE_REST
+                        } else {
+                            com.ironlog.app.services.NotificationActionRouter.Actions.SKIP_REST
+                        }
+                        val result = com.ironlog.app.services.WorkoutNotificationActionInbox
+                            .commitRestControl(
+                                sessionId = workoutId,
+                                actionId = controlAction,
+                                now = com.ironlog.app.services.WorkoutTimerClock.now(getApplication()),
+                                enqueueUiSync = false,
+                            )
+                        if (result.applied) {
+                            runCatching {
+                                WorkoutNotificationBridge.clearRestTimer(getApplication())
+                                WorkoutForegroundService.onExternalRestStateChanged(getApplication(), workoutId)
+                            }.onFailure { Timber.w(it, "Rest deadline cleared; notification refresh will retry") }
+                            if (action is WorkoutAction.PauseRest) {
+                                WorkoutAction.SyncPausedRest(result.pausedRemainingMs)
+                            } else {
+                                WorkoutAction.SkipRest
+                            }
+                        } else if (action is WorkoutAction.SkipRest) {
+                            WorkoutAction.SkipRest
+                        } else {
+                            WorkoutAction.RestExpired
+                        }
+                    }
+                    is WorkoutAction.ResumeRest -> {
+                        val deadline = com.ironlog.app.services.WorkoutTimerDeadline(
+                            wallEndMs = action.newEndTime,
+                            elapsedEndMs = action.newEndElapsedTime ?: 0L,
+                            bootCount = action.bootCount,
+                        )
+                        if (WorkoutForegroundService.setRestDeadline(
+                                getApplication(), workoutId, deadline
+                            )
+                        ) action else WorkoutAction.RestExpired
+                    }
+                    else -> null
+                }
+                    if (appliedAction != null) {
+                        withContext(Dispatchers.Main.immediate) { publishAction(appliedAction) }
+                    }
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                Timber.e(error, "Could not apply rest control")
+                _mutationError.value = "The rest timer could not be updated. Try again."
+            } finally {
+                _restControlPending.value = false
             }
-            persistDraft(_workoutState.value)
         }
     }
 
-    fun persistSetRpe(exIndex: Int, exerciseId: String, setIndexZeroBased: Int, rpe: Double?) {
-        persistSetUpdate(exIndex, exerciseId, setIndexZeroBased, SetInput(rpe = rpe))
+    fun syncRestFromPersistence() {
+        val workoutId = activeWorkoutId ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                mutationMutex.withLock {
+                    val persisted = WorkoutForegroundService.readRestStateSnapshot(getApplication(), workoutId)
+                    withContext(Dispatchers.Main.immediate) {
+                        if ((persisted?.pausedRemainingMs ?: 0L) > 0L) {
+                            publishAction(WorkoutAction.SyncPausedRest(persisted!!.pausedRemainingMs))
+                        } else {
+                            publishAction(WorkoutAction.SyncRestDeadline(
+                                endTime = persisted?.deadline?.wallEndMs,
+                                endElapsedTime = persisted?.deadline?.elapsedEndMs,
+                                bootCount = persisted?.deadline?.bootCount ?: -1,
+                            ))
+                        }
+                    }
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                Timber.e(error, "Could not synchronize the rest timer")
+                _mutationError.value = "The rest timer state could not be refreshed."
+            }
+        }
     }
 
-    fun persistSetRir(exIndex: Int, exerciseId: String, setIndexZeroBased: Int, rir: Int?) {
-        persistSetUpdate(exIndex, exerciseId, setIndexZeroBased, SetInput(rir = rir?.toDouble()))
+    fun logSet(exIndex: Int, exerciseId: String, weightText: String, repsText: String, trackingType: String, restSeconds: Int, weightUnit: String) {
+        val requestedRow = workoutExerciseIdByIndex[exIndex]
+        val displayWeight = weightText.toDoubleOrNull() ?: 0.0
+        val weight = canonicalSetLoad(displayWeight, trackingType, weightUnit)
+        val reps = repsText.toDoubleOrNull() ?: 0.0
+        if (!weight.isFinite() || weight < 0.0 || !reps.isFinite() || reps <= 0.0) {
+            _mutationError.value = "Enter a valid load and positive reps or duration."
+            return
+        }
+        val stableSet = LoggedSet(weight = weight, reps = reps, trackingType = trackingType, durationSec = if (trackingType.startsWith("duration")) reps else null)
+        launchMutation {
+            mutationMutex.withLock {
+                val exIndex = currentExerciseIndex(exIndex, requestedRow)
+                val workoutExId = resolveWorkoutExerciseId(exIndex, exerciseId) ?: return@withLock
+                try {
+                    workoutRepo.addSet(workoutExId, SetInput(uid = stableSet.id, weight = weight, reps = reps, restSeconds = restSeconds))
+                    val totalSetsBefore = _workoutState.value.setLog.values.sumOf { it.size }
+                    dispatch(WorkoutAction.LogSet(exIndex, stableSet))
+                    if (restSeconds > 0) {
+                        val deadline = WorkoutTimerClock.deadlineAfter(
+                            currentClockSnapshot(),
+                            restSeconds * 1_000L,
+                        )
+                        if (WorkoutForegroundService.setRestDeadline(
+                                getApplication(),
+                                workoutId = activeWorkoutId.orEmpty(),
+                                deadline = deadline,
+                            )
+                        ) {
+                            dispatch(WorkoutAction.StartRest(
+                                endTime = deadline.wallEndMs,
+                                endElapsedTime = deadline.elapsedEndMs,
+                                bootCount = deadline.bootCount,
+                                total = restSeconds,
+                                triggerExIndex = exIndex,
+                            ))
+                            settingsRepo.setBoolean("gamification_rest_timer_used", true)
+                        }
+                    }
+                    val setCountForExercise = _workoutState.value.setLog[exIndex]?.size ?: 0
+                    settingsRepo.setString("active_workout_set_label", "Set $setCountForExercise")
+                    if (totalSetsBefore == 0) startTimerOnFirstSet() else syncForegroundNotification()
+                    checkForPr(exerciseId, stableSet)
+                    persistDraftNow(_workoutState.value)
+                } catch (error: Exception) {
+                    if (error is CancellationException) throw error
+                    Timber.e(error, "Failed to log set")
+                    _mutationError.value = error.message ?: "The set was not saved. Try again."
+                }
+            }
+        }
     }
 
-    fun persistSetType(exIndex: Int, exerciseId: String, setIndexZeroBased: Int, type: String) {
-        val key = type.lowercase()
+    fun persistSetRpe(exIndex: Int, exerciseId: String, setId: String, rpe: Double?) {
+        persistSetUpdate(exIndex, exerciseId, setId, SetInput(rpeUpdate = rpe?.let { com.ironlog.app.data.model.EffortUpdate.Value(it) } ?: com.ironlog.app.data.model.EffortUpdate.Clear))
+    }
+
+    fun persistSetRir(exIndex: Int, exerciseId: String, setId: String, rir: Int?) {
+        persistSetUpdate(exIndex, exerciseId, setId, SetInput(rirUpdate = rir?.let { com.ironlog.app.data.model.EffortUpdate.Value(it.toDouble()) } ?: com.ironlog.app.data.model.EffortUpdate.Clear))
+    }
+
+    fun persistSetType(exIndex: Int, exerciseId: String, setId: String, type: String) {
+        val key = canonicalSetType(type)
         val input = SetInput(
             isWarmup = key == "warmup",
             isDropset = key == "drop",
             isAmrap = key == "amrap",
             toFailure = key == "failure",
         )
-        persistSetUpdate(exIndex, exerciseId, setIndexZeroBased, input)
+        persistSetUpdate(exIndex, exerciseId, setId, input)
     }
 
-    fun persistSetValues(exIndex: Int, exerciseId: String, setIndexZeroBased: Int, weight: Double?, reps: Double?) {
-        persistSetUpdate(exIndex, exerciseId, setIndexZeroBased, SetInput(weight = weight, reps = reps))
+    fun persistSetValues(exIndex: Int, exerciseId: String, setId: String, weight: Double?, reps: Double?, weightUnit: String) {
+        val tracking = _workoutState.value.setLog.values.flatten().firstOrNull { it.id == setId }?.trackingType ?: "weight_reps"
+        persistSetUpdate(exIndex, exerciseId, setId, SetInput(weight = weight?.let { canonicalSetLoad(it, tracking, weightUnit) }, reps = reps))
     }
 
-    fun persistWarmupSets(exIndex: Int, exerciseId: String, warmups: List<LoggedSet>, restSeconds: Int = 45) {
-        if (warmups.isEmpty()) return
-        viewModelScope.launch {
-            val workoutExId = resolveWorkoutExerciseId(exIndex, exerciseId) ?: return@launch
-            warmups.forEach { ws ->
-                runCatching {
-                    workoutRepo.addSet(
-                        workoutExId,
-                        SetInput(
-                            weight = ws.weight,
-                            reps = ws.reps,
-                            restSeconds = restSeconds,
-                            isWarmup = true,
-                            rpe = ws.rpe,
-                            rir = ws.rir?.toDouble(),
-                        ),
-                    )
+    fun persistSetNote(exIndex: Int, exerciseId: String, setId: String, note: String?) {
+        persistSetUpdate(exIndex, exerciseId, setId, SetInput(notes = note.orEmpty()))
+    }
+
+    fun deleteSet(exIndex: Int, exerciseId: String, setId: String) {
+        val requestedRow = workoutExerciseIdByIndex[exIndex]
+        launchMutation {
+            mutationMutex.withLock {
+                val exIndex = currentExerciseIndex(exIndex, requestedRow)
+                val workoutExId = resolveWorkoutExerciseId(exIndex, exerciseId) ?: return@withLock
+                try {
+                    workoutRepo.deleteSetAndCompact(workoutExId, setId)
+                    val setIndex = _workoutState.value.setLog[exIndex].orEmpty().indexOfFirst { it.id == setId }
+                    if (setIndex >= 0) dispatch(WorkoutAction.DeleteSet(exIndex, setIndex))
+                    hadPrThisSession = recomputeHadPrFromRetainedSets()
+                    persistDraftNow(_workoutState.value)
+                } catch (error: Exception) {
+                    if (error is CancellationException) throw error
+                    Timber.e(error, "Failed to delete set")
+                    _mutationError.value = error.message ?: "The set was not deleted. Try again."
                 }
             }
         }
     }
 
-    private fun persistSetUpdate(exIndex: Int, exerciseId: String, setIndexZeroBased: Int, input: SetInput) {
-        val setOrder = setIndexZeroBased + 1
-        viewModelScope.launch {
-            val workoutExId = resolveWorkoutExerciseId(exIndex, exerciseId) ?: return@launch
-            runCatching {
-                workoutRepo.updateSetByWorkoutExerciseAndOrder(workoutExId, setOrder, input)
+    fun logPendingWarmup(exIndex: Int, exerciseId: String, pending: PendingWarmup, restSeconds: Int = 45) {
+        val requestedRow = workoutExerciseIdByIndex[exIndex]
+        launchMutation {
+            mutationMutex.withLock {
+                val exIndex = currentExerciseIndex(exIndex, requestedRow)
+                val workoutExId = resolveWorkoutExerciseId(exIndex, exerciseId) ?: return@withLock
+                try {
+                    val warmupCount = _workoutState.value.setLog[exIndex].orEmpty().count { it.type == "warmup" }
+                    workoutRepo.insertSetAt(
+                        workoutExId,
+                        warmupCount + 1,
+                        SetInput(uid = pending.id, weight = pending.weightKg, reps = pending.reps.toDouble(), restSeconds = restSeconds, isWarmup = true),
+                    )
+                    dispatch(WorkoutAction.LogPendingWarmup(exIndex, pending.id))
+                    persistDraftNow(_workoutState.value)
+                } catch (error: Exception) {
+                    if (error is CancellationException) throw error
+                    Timber.e(error, "Failed to log warmup")
+                    _mutationError.value = error.message ?: "The warmup was not saved. Try again."
+                }
             }
         }
     }
 
-    private suspend fun resolveWorkoutExerciseId(exIndex: Int, exerciseId: String): String? {
-        workoutExerciseIdByIndex[exIndex]?.let { return it }
-        val workoutId = waitForActiveWorkoutId() ?: return null
-        val existing = runCatching {
-            val detail = workoutRepo.getWorkoutDetailSnapshot(workoutId)
-            bindWorkoutExerciseRows(detail.exercises)
-            workoutExerciseIdByIndex[exIndex]
-        }.getOrNull()
-        if (!existing.isNullOrBlank()) {
-            return existing
+    private fun persistSetUpdate(exIndex: Int, exerciseId: String, setId: String, input: SetInput) {
+        launchMutation {
+            mutations.commit<WorkoutSetEntity>(
+                write = {
+                    check(_workoutState.value.setLog.values.any { sets -> sets.any { it.id == setId } }) {
+                        "This set was removed before the edit could be saved."
+                    }
+                    workoutRepo.updateSet(setId, input)
+                },
+                publish = { saved ->
+                    val current = _workoutState.value
+                    _workoutState.value = current.copy(setLog = current.setLog.mapValues { (_, sets) ->
+                        sets.map { old -> if (old.id != saved.uid) old else old.copy(
+                            weight = saved.weight, reps = saved.reps, rpe = saved.rpe, rir = saved.rir?.toInt(),
+                            note = saved.notes?.takeIf { it.isNotBlank() },
+                            type = when { saved.isWarmup -> "warmup"; saved.isDropset -> "drop"; saved.isAmrap -> "amrap"; saved.toFailure -> "failure"; else -> "normal" },
+                            durationSec = if (old.trackingType.startsWith("duration")) saved.reps else old.durationSec,
+                        ).let { it.copy(orm = com.ironlog.app.ui.state.loggedSetEstimatedOneRm(it)) } }
+                    })
+                    hadPrThisSession = recomputeHadPrFromRetainedSets()
+                    persistDraft(_workoutState.value)
+                },
+            )
         }
-        val created = runCatching { workoutRepo.addExerciseToWorkout(workoutId, exerciseId) }.getOrNull()
-        if (created != null) {
-            workoutExerciseIdByIndex = workoutExerciseIdByIndex + (exIndex to created.uid)
-            return created.uid
-        }
-        return null
     }
 
-    private suspend fun waitForActiveWorkoutId(): String? {
-        activeWorkoutId?.let { return it }
-        repeat(20) {
-            delay(50)
-            activeWorkoutId?.let { return it }
+    fun clearMutationError() { _mutationError.value = null }
+
+    private fun launchMutation(block: suspend () -> Unit) = viewModelScope.launch {
+        try {
+            mutations.awaitReady()
+            block()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            Timber.e(error, "Workout mutation failed")
+            _mutationError.value = error.message ?: "The change was not saved. Try again."
         }
-        return null
+    }
+
+    private suspend fun resolveWorkoutExerciseId(exIndex: Int, exerciseId: String): String? {
+        check(activeWorkoutId != null) { "This workout has already ended." }
+        check(exerciseIdByIndex[exIndex] == exerciseId) { "This exercise changed. Retry from its current card." }
+        return checkNotNull(workoutExerciseIdByIndex[exIndex]) { "This exercise is not saved yet. Retry after it loads." }
+    }
+
+    private fun currentExerciseIndex(fallback: Int, rowUid: String?): Int {
+        if (rowUid == null) return fallback
+        return checkNotNull(workoutExerciseIdByIndex.entries.firstOrNull { it.value == rowUid }?.key) {
+            "This exercise was removed before the change could be saved."
+        }
     }
 
     private fun bindWorkoutExerciseRows(rows: List<WorkoutExerciseEntity>, exerciseIdsInUiOrder: List<String>? = null) {
@@ -513,27 +871,89 @@ class ActiveWorkoutViewModel(application: Application) : AndroidViewModel(applic
                 )
             },
         )
+        exerciseIdByIndex = workoutExerciseIdByIndex.mapNotNull { (index, rowUid) ->
+            orderedRows.firstOrNull { it.uid == rowUid }?.exerciseUid?.let { index to it }
+        }.toMap()
+        val rowsByUid = orderedRows.associateBy { it.uid }
+        val current = _workoutState.value
+        val defaultNotes = workoutExerciseIdByIndex.mapNotNull { (index, uid) ->
+            rowsByUid[uid]?.notes?.takeIf { it.isNotBlank() }?.let { index to it }
+        }.toMap()
+        val defaultSupersets = workoutExerciseIdByIndex.mapNotNull { (index, uid) ->
+            rowsByUid[uid]?.supersetGroup?.takeIf { it.isNotBlank() }?.let { index to it }
+        }.toMap()
+        _workoutState.value = current.copy(
+            exerciseNotes = defaultNotes + current.exerciseNotes,
+            supersetGroups = defaultSupersets + current.supersetGroups,
+        )
+        // Binding may complete after the first Compose exercise emission. It owns the initial
+        // load so an early unbound request cannot permanently suppress previous-session data.
+        loadGhostData(ids)
     }
 
-    private fun checkForPr(exerciseId: String, weight: Double, reps: Int) {
-        val oneRm = estimateOneRM(weight, reps).toDouble()
-        val prev = historicalBest1rm[exerciseId]
-        if (prev == null || oneRm > prev) {
-            historicalBest1rm[exerciseId] = oneRm
-            hadPrThisSession = true
-            if (prev != null) {
-                val oneRmDisplay = com.ironlog.app.util.formatWeightFromKg(oneRm, vmWeightUnit)
-                _prBanner.value = "🏆 New PR! ~$oneRmDisplay 1RM"
-                viewModelScope.launch {
-                    delay(4000)
-                    _prBanner.value = null
-                }
+    private fun checkForPr(exerciseId: String, set: LoggedSet) {
+        val oneRm = com.ironlog.app.ui.state.loggedSetEstimatedOneRm(set)
+        if (oneRm <= 0.0) return
+        val historical = historicalBest1rm[exerciseId]
+        val sessionBest = _workoutState.value.setLog.flatMap { (index, sets) ->
+            if (exerciseIdByIndex[index] == exerciseId) sets else emptyList()
+        }.filterNot { it.id == set.id }.maxOfOrNull { com.ironlog.app.ui.state.loggedSetEstimatedOneRm(it) }
+        val threshold = maxOf(historical ?: Double.NEGATIVE_INFINITY, sessionBest ?: Double.NEGATIVE_INFINITY)
+        sessionBest1rm[exerciseId] = maxOf(sessionBest ?: Double.NEGATIVE_INFINITY, oneRm)
+        hadPrThisSession = recomputeHadPrFromRetainedSets()
+        if (historical != null && oneRm > threshold) {
+            val oneRmDisplay = com.ironlog.app.util.formatWeightFromKg(oneRm, vmWeightUnit)
+            _prBanner.value = "🏆 New PR! ~$oneRmDisplay 1RM"
+            viewModelScope.launch {
+                delay(4000)
+                _prBanner.value = null
             }
         }
     }
 
+    private fun loadHistoricalPrBaselines(): MutableMap<String, Double> {
+        val now = Instant.now()
+        return historicalPrBaselines(
+            history = com.ironlog.app.data.repository.HistoryRepository().completedSnapshotBlocking(),
+            prResetAt = settingsRepo.getPersonalBestResetAtBlocking(),
+            now = now,
+            zoneId = ZoneId.systemDefault(),
+        ).toMutableMap()
+    }
+
+    private fun recomputeHadPrFromRetainedSets(): Boolean = _workoutState.value.setLog.any { (index, sets) ->
+        val exerciseId = exerciseIdByIndex[index] ?: return@any false
+        val baseline = historicalBest1rm[exerciseId] ?: return@any false
+        sets.any { set -> com.ironlog.app.ui.state.loggedSetEstimatedOneRm(set) > baseline }
+    }
+
     fun finishWorkout() {
         _showCompletionSheet.value = true
+    }
+
+    /**
+     * Durably clears exercise-level notes for this active session without touching set notes,
+     * session notes, previous-session reminders, the source plan, or completed workouts.
+     */
+    suspend fun clearExerciseNotesNow() {
+        mutations.awaitReady()
+        mutationMutex.withLock {
+            val workoutId = checkNotNull(activeWorkoutId) { "No active workout was found." }
+            val clearedState = workoutReducer(_workoutState.value, WorkoutAction.ClearExerciseNotes)
+            val sanitizedDraft = json.encodeToString(draftPayload(clearedState))
+
+            // Invalidate any queued draft captured before this destructive edit. pause() also
+            // waits for an in-flight gated write, so it cannot overwrite the sanitized draft.
+            draftWrites.pause()
+            try {
+                withContext(NonCancellable) {
+                    workoutRepo.clearActiveWorkoutExerciseNotes(workoutId, sanitizedDraft)
+                    _workoutState.value = clearedState
+                }
+            } finally {
+                draftWrites.resume()
+            }
+        }
     }
 
     /**
@@ -552,6 +972,16 @@ class ActiveWorkoutViewModel(application: Application) : AndroidViewModel(applic
         onDone: (WorkoutCompletionCelebration) -> Unit = {},
     ) {
         viewModelScope.launch {
+            try {
+                mutations.awaitReady()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                _showCompletionSheet.value = false
+                onError(error.message ?: "The workout is not ready.")
+                return@launch
+            }
+            mutationMutex.withLock {
             val id = activeWorkoutId
             if (id.isNullOrBlank()) {
                 _showCompletionSheet.value = false
@@ -559,18 +989,37 @@ class ActiveWorkoutViewModel(application: Application) : AndroidViewModel(applic
                 return@launch
             }
             var streakDays = 0
-            val hadPr = hadPrThisSession
+            val hadPr = recomputeHadPrFromRetainedSets()
+            draftWrites.pause()
             try {
-                workoutRepo.completeWorkout(
-                    workoutId = id,
-                    durationStartEpochMs = timerStartEpochMs,
-                    metadata = com.ironlog.app.data.model.WorkoutMetadataInput(
-                        rating = if (rating in 1..5) rating.toDouble() else null,
-                        notes = notes.ifBlank { null },
-                    ),
-                )
+                commitWorkoutTerminalMutation {
+                    workoutRepo.completeWorkout(
+                        workoutId = id,
+                        durationStartEpochMs = timerStartEpochMs,
+                        durationSecondsOverride = timerStartEpochMs?.let { startWall ->
+                            (WorkoutTimerClock.elapsedSinceStartMs(
+                                startWallMs = startWall,
+                                startElapsedMs = timerStartElapsedMs ?: 0L,
+                                startBootCount = timerStartBootCount,
+                                now = currentClockSnapshot(),
+                            ) / 1_000L).coerceIn(0L, 86_400L).toInt()
+                        },
+                        metadata = com.ironlog.app.data.model.WorkoutMetadataInput(
+                            rating = if (rating in 1..5) rating.toDouble() else null,
+                            notes = notes.ifBlank { null },
+                        ),
+                        exerciseNotesByUid = _workoutState.value.exerciseNotes.map { (index, note) ->
+                            checkNotNull(workoutExerciseIdByIndex[index]) {
+                                "An exercise note is not bound to a saved row. Reopen this session and retry."
+                            } to note
+                        }.toMap(),
+                    )
+                }
             } catch (e: Exception) {
+                draftWrites.resume()
+                if (e is CancellationException) throw e
                 Timber.e(e, "Failed to complete workout %s", id)
+                persistDraft(_workoutState.value)
                 _showCompletionSheet.value = false
                 onError(e.message ?: "The workout could not be completed. Your active session was preserved.")
                 return@launch
@@ -580,25 +1029,34 @@ class ActiveWorkoutViewModel(application: Application) : AndroidViewModel(applic
             // in-memory ID immediately so screen disposal cannot recreate the deleted draft.
             activeWorkoutId = null
             _activeWorkoutIdSignal.value = null
-            streakDays = computeDailyWorkoutStreakDays()
-
-            runCatching {
-                workoutRepo.recordPostWorkoutMetrics(id, totalVolumeKg, hadPr)
-            }.onFailure { Timber.e(it, "Failed to record post-workout metrics for %s", id) }
-            runCatching { WorkoutNotificationBridge.clearWorkout(getApplication()) }
-            runCatching { WorkoutForegroundService.stop(getApplication()) }
-            runCatching { com.ironlog.app.widget.WidgetUpdateWorker.enqueueOneTime(getApplication()) }
+            mutations.close()
             timerStartEpochMs = null
+            timerStartElapsedMs = null
+            timerStartBootCount = -1
             _elapsedSeconds.value = 0
             _timerStarted.value = false
             _showCompletionSheet.value = false
-            val milestoneAlertsEnabled = settingsRepo.getBoolean("milestone_alerts_enabled", true)
-            onDone(
-                WorkoutCompletionCelebration(
-                    hasPrCelebration = milestoneAlertsEnabled && hadPr,
-                    hasStreak30Celebration = milestoneAlertsEnabled && streakDays >= 30,
+            var milestoneAlertsEnabled = false
+            afterWorkoutCommit(
+                cleanup = listOf(
+                    { WorkoutForegroundService.stop(getApplication(), id) },
+                    { com.ironlog.app.services.WorkoutNotificationActionInbox.clearSession(id) },
+                    { WorkoutNotificationBridge.clearWorkout(getApplication()) },
+                    { WorkoutNotificationBridge.cancelReminderAfterDataMutation(getApplication()) },
+                    { streakDays = withContext(Dispatchers.IO) { computeDailyWorkoutStreakDays() } },
+                    { workoutRepo.recordPostWorkoutMetrics(id, totalVolumeKg, hadPr); Unit },
+                    { com.ironlog.app.widget.WidgetUpdateWorker.enqueueOneTime(getApplication()); Unit },
+                    { milestoneAlertsEnabled = settingsRepo.getBoolean("milestone_alerts_enabled", true) },
                 ),
+                onCleanupFailure = { Timber.e(it, "Post-completion cleanup failed for %s", id) },
+                onDone = {
+                    onDone(WorkoutCompletionCelebration(
+                        hasPrCelebration = milestoneAlertsEnabled && hadPr,
+                        hasStreak30Celebration = milestoneAlertsEnabled && streakDays >= 30,
+                    ))
+                },
             )
+            }
         }
     }
 
@@ -627,34 +1085,50 @@ class ActiveWorkoutViewModel(application: Application) : AndroidViewModel(applic
      */
     fun discardWorkout(onError: (String) -> Unit = {}, onDone: () -> Unit = {}) {
         viewModelScope.launch {
+            try {
+                mutations.awaitReady()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                onError(error.message ?: "The workout is not ready.")
+                return@launch
+            }
+            mutationMutex.withLock {
             val id = activeWorkoutId
+            draftWrites.pause()
             if (!id.isNullOrBlank()) {
                 try {
-                    workoutRepo.abandonWorkout(id)
+                    commitWorkoutTerminalMutation { workoutRepo.abandonWorkout(id) }
                 } catch (e: Exception) {
+                    draftWrites.resume()
+                    if (e is CancellationException) throw e
                     Timber.e(e, "Failed to abandon workout %s", id)
+                    persistDraft(_workoutState.value)
                     onError(e.message ?: "The workout could not be discarded. Your session was preserved.")
                     return@launch
                 }
             }
             activeWorkoutId = null
             _activeWorkoutIdSignal.value = null
-            WorkoutNotificationBridge.clearWorkout(getApplication())
-            WorkoutForegroundService.stop(getApplication())
-            settingsRepo.removeSetting("active_workout_set_label")
-            settingsRepo.removeSetting("active_workout_rest_end_ms")
-            settingsRepo.removeSetting("active_workout_start_ms")
+            mutations.close()
             timerStartEpochMs = null
+            timerStartElapsedMs = null
+            timerStartBootCount = -1
             _elapsedSeconds.value = 0
             _timerStarted.value = false
             dispatch(WorkoutAction.HydrateState(WorkoutState()))
-            onDone()
+            afterWorkoutCommit(
+                cleanup = listOf(
+                    { if (!id.isNullOrBlank()) WorkoutForegroundService.stop(getApplication(), id) },
+                    { if (!id.isNullOrBlank()) com.ironlog.app.services.WorkoutNotificationActionInbox.clearSession(id) },
+                    { WorkoutNotificationBridge.clearWorkout(getApplication()) },
+                    { WorkoutNotificationBridge.cancelReminderAfterDataMutation(getApplication()) },
+                ),
+                onCleanupFailure = { Timber.e(it, "Post-discard cleanup failed for %s", id) },
+                onDone = onDone,
+            )
+            }
         }
-    }
-
-    fun onRestCleared() {
-        WorkoutNotificationBridge.clearRestTimer(getApplication())
-        viewModelScope.launch { settingsRepo.setString("active_workout_rest_end_ms", "0") }
     }
 
     private fun draftPayload(state: WorkoutState): WorkoutDraftDto = WorkoutDraftDto(
@@ -680,9 +1154,12 @@ class ActiveWorkoutViewModel(application: Application) : AndroidViewModel(applic
         restTimer = RestTimerDto(
             active = state.restTimer.active,
             endTime = state.restTimer.endTime,
+            endElapsedTime = state.restTimer.endElapsedTime,
+            bootCount = state.restTimer.bootCount,
             total = state.restTimer.total,
             paused = state.restTimer.paused,
             pausedAt = state.restTimer.pausedAt,
+            pausedRemainingMs = state.restTimer.pausedRemainingMs,
             triggerExIndex = state.restTimer.triggerExIndex,
         ),
         addedExercises = state.addedExercises.map {
@@ -696,6 +1173,12 @@ class ActiveWorkoutViewModel(application: Application) : AndroidViewModel(applic
             )
         },
         removedBaseExerciseIndices = state.removedBaseExerciseIndices.toList().sorted(),
+        targetOverrides = state.targetOverrides.mapKeys { it.key.toString() }.mapValues { (_, target) ->
+            TargetOverrideDto(target.sets, target.reps)
+        },
+        pendingWarmups = state.pendingWarmups.mapKeys { it.key.toString() }.mapValues { (_, warmups) ->
+            warmups.map { PendingWarmupDto(it.id, it.weightKg, it.reps) }
+        },
         orderedIndices = persistedOrderedIndices,
         swappedExercises = state.swappedExercises.mapNotNull { (k, v) ->
             val ex = v as? com.ironlog.app.data.model.LegacyExerciseShape ?: return@mapNotNull null
@@ -708,28 +1191,60 @@ class ActiveWorkoutViewModel(application: Application) : AndroidViewModel(applic
         }.toMap(),
     )
 
+    private data class DraftWrite(val workoutId: String, val revision: Long, val payload: String)
+
+    private fun captureDraftWrite(): DraftWrite? {
+        // Never overwrite a saved draft while its initialization/restoration is in flight.
+        if (!initialization.value.ready) return null
+        val id = activeWorkoutId ?: return null
+        val revision = draftWrites.capture() ?: return null
+        return DraftWrite(id, revision, json.encodeToString(draftPayload(_workoutState.value)))
+    }
+
+    private fun writeDraft(write: DraftWrite) {
+        draftWrites.writeIfCurrent(write.revision) {
+            // A terminal transaction may have committed immediately before coroutine cancellation.
+            // Check its durable active identity in the same transaction as the draft write.
+            ObjectBox.store.runInTx {
+                if (settingsRepo.getStringBlocking("active_workout_id") == write.workoutId) {
+                    settingsRepo.setStringBlocking("active_workout_draft_${write.workoutId}", write.payload, "json")
+                }
+            }
+        }
+    }
+
+    @Suppress("UNUSED_PARAMETER") // Preserve callers; the authoritative VM snapshot may be newer than composition.
     fun persistDraft(state: WorkoutState) {
+        val write = captureDraftWrite() ?: return
         viewModelScope.launch {
-            val id = activeWorkoutId ?: return@launch
-            val payload = draftPayload(state)
-            settingsRepo.setString("active_workout_draft_$id", json.encodeToString(payload), "json")
+            try {
+                withContext(Dispatchers.IO) { writeDraft(write) }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                _mutationError.value = error.message ?: "The workout draft was not saved. Try again."
+            }
         }
     }
 
+    @Suppress("UNUSED_PARAMETER")
+    private suspend fun persistDraftNow(state: WorkoutState) {
+        val write = captureDraftWrite() ?: return
+        withContext(Dispatchers.IO) { writeDraft(write) }
+    }
+
+    @Suppress("UNUSED_PARAMETER")
     fun persistDraftBlocking(state: WorkoutState) {
-        val id = activeWorkoutId ?: return
-        val payload = draftPayload(state)
-        runCatching {
-            settingsRepo.setStringBlocking("active_workout_draft_$id", json.encodeToString(payload), "json")
-        }
+        val write = captureDraftWrite() ?: return
+        runCatching { writeDraft(write) }
+            .onFailure { _mutationError.value = it.message ?: "The workout draft was not saved. Try again." }
     }
 
-    private fun restoreDraftIfAny() {
-        viewModelScope.launch {
-            val id = activeWorkoutId ?: return@launch
+    private suspend fun restoreDraftIfAny() {
+            val id = activeWorkoutId ?: return
             val raw = settingsRepo.getString("active_workout_draft_$id").orEmpty()
-            if (raw.isBlank()) return@launch
-            val dto = runCatching { json.decodeFromString(WorkoutDraftDto.serializer(), raw) }.getOrNull() ?: return@launch
+            if (raw.isBlank()) return
+            val dto = json.decodeFromString(WorkoutDraftDto.serializer(), raw)
             val restored = WorkoutState(
                 inputs = dto.inputs.mapNotNull { (k, v) -> k.toIntOrNull()?.let { it to com.ironlog.app.ui.state.WorkoutInput(v.weight, v.reps) } }.toMap(),
                 setLog = dto.setLog.mapNotNull { (k, sets) ->
@@ -755,9 +1270,12 @@ class ActiveWorkoutViewModel(application: Application) : AndroidViewModel(applic
                 restTimer = com.ironlog.app.ui.state.RestTimerState(
                     active = dto.restTimer.active,
                     endTime = dto.restTimer.endTime,
+                    endElapsedTime = dto.restTimer.endElapsedTime,
+                    bootCount = dto.restTimer.bootCount,
                     total = dto.restTimer.total,
                     paused = dto.restTimer.paused,
                     pausedAt = dto.restTimer.pausedAt,
+                    pausedRemainingMs = dto.restTimer.pausedRemainingMs,
                     triggerExIndex = dto.restTimer.triggerExIndex,
                 ),
                 addedExercises = dto.addedExercises.map {
@@ -771,6 +1289,14 @@ class ActiveWorkoutViewModel(application: Application) : AndroidViewModel(applic
                     )
                 },
                 removedBaseExerciseIndices = dto.removedBaseExerciseIndices.toSet(),
+                targetOverrides = dto.targetOverrides.mapNotNull { (key, value) ->
+                    key.toIntOrNull()?.let { it to com.ironlog.app.ui.state.TargetOverride(value.sets, value.reps) }
+                }.toMap(),
+                pendingWarmups = dto.pendingWarmups.mapNotNull { (key, warmups) ->
+                    key.toIntOrNull()?.let { index ->
+                        index to warmups.map { PendingWarmup(it.id, it.weightKg, it.reps) }
+                    }
+                }.toMap(),
             )
             // Restore swapped-exercise overlays. Reconstruct a minimal LegacyExerciseShape so the UI
             // shows the swapped exercise name/trackingType immediately on resume.
@@ -798,7 +1324,7 @@ class ActiveWorkoutViewModel(application: Application) : AndroidViewModel(applic
                 )
             }.toMap()
 
-            dispatch(WorkoutAction.HydrateState(restored.copy(swappedExercises = restoredSwaps)))
+            _workoutState.value = restored.copy(swappedExercises = restoredSwaps)
 
             // Restore exercise display order if persisted.
             if (dto.orderedIndices.isNotEmpty()) {
@@ -810,88 +1336,132 @@ class ActiveWorkoutViewModel(application: Application) : AndroidViewModel(applic
             // (the user logged sets before backgrounding the app).
             val hasExistingSets = restored.setLog.values.any { it.isNotEmpty() }
             if (hasExistingSets) startTimerOnFirstSet()
-        }
     }
 
     fun dismissCompletionSheet() {
         _showCompletionSheet.value = false
     }
 
-    fun swapExercise(exIndex: Int, activeExerciseId: String, newExerciseId: String) {
-        viewModelScope.launch {
-            val workoutExId = resolveWorkoutExerciseId(exIndex, activeExerciseId) ?: return@launch
-            runCatching { workoutRepo.swapWorkoutExercise(workoutExId, newExerciseId) }
-            workoutExerciseIdByIndex = workoutExerciseIdByIndex + (exIndex to workoutExId)
+    fun swapExercise(exIndex: Int, activeExerciseId: String, newExercise: LegacyExerciseShape) {
+        val requestedRow = workoutExerciseIdByIndex[exIndex]
+        launchMutation {
+            mutationMutex.withLock {
+                val exIndex = currentExerciseIndex(exIndex, requestedRow)
+                if (_workoutState.value.setLog[exIndex].orEmpty().isNotEmpty()) {
+                    _mutationError.value = "Remove this exercise's logged sets before swapping it."
+                    return@withLock
+                }
+                val workoutExId = resolveWorkoutExerciseId(exIndex, activeExerciseId) ?: return@withLock
+                val newExerciseId = newExercise.id.ifBlank { newExercise.exerciseId }
+                runCatching { workoutRepo.swapWorkoutExercise(workoutExId, newExerciseId) }
+                    .onSuccess {
+                        workoutExerciseIdByIndex = workoutExerciseIdByIndex + (exIndex to workoutExId)
+                        exerciseIdByIndex = exerciseIdByIndex + (exIndex to newExerciseId)
+                        dispatch(WorkoutAction.SwapExercise(exIndex, newExercise))
+                        persistDraftNow(_workoutState.value)
+                    }
+                    .onFailure { if (it is CancellationException) throw it; _mutationError.value = it.message ?: "Exercise swap was not saved." }
+            }
         }
     }
 
-    fun addExerciseToWorkout(exIndex: Int, exerciseId: String) {
-        viewModelScope.launch {
-            val wId = waitForActiveWorkoutId() ?: return@launch
-            runCatching {
-                val we = workoutRepo.addExerciseToWorkout(wId, exerciseId)
-                workoutExerciseIdByIndex = workoutExerciseIdByIndex + (exIndex to we.uid)
-            }
+    fun addExerciseToWorkout(entry: AddedExerciseEntry, onCommitted: () -> Unit = {}) {
+        launchMutation {
+            mutations.commit<WorkoutExerciseEntity>(
+                write = { workoutRepo.addExerciseToWorkout(checkNotNull(activeWorkoutId), entry.exerciseId) },
+                publish = { row ->
+                    val index = (workoutExerciseIdByIndex.keys.maxOrNull() ?: -1) + 1
+                    workoutExerciseIdByIndex = workoutExerciseIdByIndex + (index to row.uid)
+                    exerciseIdByIndex = exerciseIdByIndex + (index to entry.exerciseId)
+                    dispatch(WorkoutAction.AddExercise(entry))
+                    onCommitted()
+                },
+            )
         }
     }
 
     fun persistSuperset(exIndex: Int, exerciseId: String, group: String?) {
-        viewModelScope.launch {
-            val workoutExId = resolveWorkoutExerciseId(exIndex, exerciseId) ?: return@launch
-            runCatching { workoutRepo.updateWorkoutExerciseSuperset(workoutExId, group) }
+        val rowUid = workoutExerciseIdByIndex[exIndex]
+        launchMutation {
+            mutations.commit<Pair<Int, WorkoutExerciseEntity>>(
+                write = {
+                    val index = currentExerciseIndex(exIndex, rowUid)
+                    val uid = checkNotNull(resolveWorkoutExerciseId(index, exerciseId))
+                    index to workoutRepo.updateWorkoutExerciseSuperset(uid, group)
+                },
+                publish = { (index, saved) -> dispatch(WorkoutAction.AssignSuperset(index, saved.supersetGroup.takeIf { it.isNotBlank() })) },
+            )
         }
     }
 
-    fun rehydrateSetLogFromDatabase(exerciseIdsInUiOrder: List<String>) {
-        val workoutId = activeWorkoutId ?: return
-        if (exerciseIdsInUiOrder.isEmpty()) return
-        viewModelScope.launch {
-            val detail = runCatching { workoutRepo.getWorkoutDetailSnapshot(workoutId) }.getOrNull() ?: return@launch
-            bindWorkoutExerciseRows(detail.exercises, exerciseIdsInUiOrder)
-            if (detail.sets.isEmpty()) return@launch
+    fun removeExercise(action: WorkoutAction.RemoveExercise, onCommitted: (Int) -> Unit = {}) {
+        val rowUid = workoutExerciseIdByIndex[action.exIndex]
+        launchMutation {
+            mutations.commit<Int>(
+                write = {
+                    val uid = checkNotNull(rowUid) { "This exercise is still loading. Retry." }
+                    val index = currentExerciseIndex(action.exIndex, uid)
+                    workoutRepo.deleteWorkoutExercise(uid)
+                    index
+                },
+                publish = { index ->
+                    val currentBaseCount = workoutExerciseIdByIndex.size - _workoutState.value.addedExercises.size
+                    onCommitted(index)
+                    workoutExerciseIdByIndex = workoutExerciseIdByIndex.filterKeys { it != index }
+                        .mapKeys { (key, _) -> if (key > index) key - 1 else key }
+                    exerciseIdByIndex = exerciseIdByIndex.filterKeys { it != index }
+                        .mapKeys { (key, _) -> if (key > index) key - 1 else key }
+                    persistedOrderedIndices = persistedOrderedIndices.filter { it != index }.map { if (it > index) it - 1 else it }
+                    _workoutState.value = workoutReducer(_workoutState.value, action.copy(exIndex = index, baseExercisesCount = currentBaseCount))
+                    hadPrThisSession = recomputeHadPrFromRetainedSets()
+                    persistDraft(_workoutState.value)
+                },
+            )
+        }
+    }
 
-            val grouped = detail.sets
-                .filter { !it.isWarmup || it.weight > 0.0 || it.reps > 0.0 }
-                .groupBy { it.workoutExerciseUid }
-            if (grouped.isEmpty()) return@launch
-
-            val mergedSetLog = _workoutState.value.setLog.toMutableMap()
-            workoutExerciseIdByIndex.forEach { (uiIndex, workoutExerciseId) ->
-                val dbSets = grouped[workoutExerciseId]
-                    .orEmpty()
-                    .sortedBy { it.setIndex }
-                    .map { row ->
-                        LoggedSet(
-                            id = row.uid.ifBlank { UUID.randomUUID().toString().replace("-", "").take(12) },
-                            weight = row.weight,
-                            reps = row.reps,
-                            type = when {
-                                row.isWarmup -> "warmup"
-                                row.isDropset -> "drop"
-                                row.isAmrap -> "amrap"
-                                row.toFailure -> "failure"
-                                else -> "normal"
-                            },
-                            rpe = row.rpe,
-                            rir = row.rir?.roundToInt(),
-                            trackingType = "weight_reps",
-                            durationSec = null,
-                            orm = if (row.weight > 0.0 && row.reps > 0.0) row.weight * (1.0 + (row.reps / 30.0)) else 0.0,
-                        )
+    suspend fun rehydrateSetLogFromDatabase(exerciseIdsInUiOrder: List<String>): Boolean {
+        mutations.awaitReady()
+        val workoutId = activeWorkoutId ?: return false
+        if (exerciseIdsInUiOrder.isEmpty()) return false
+        return mutationMutex.withLock {
+                if (activeWorkoutId != workoutId) return@withLock false
+                try {
+                    val detail = workoutRepo.getWorkoutDetailSnapshot(workoutId) ?: return@withLock false
+                    val catalog = withContext(Dispatchers.IO) {
+                        ObjectBox.store.boxFor(com.ironlog.app.data.objectbox.ExerciseEntity::class.java).all.associateBy { it.uid }
                     }
-                if (dbSets.isEmpty()) return@forEach
-
-                val current = mergedSetLog[uiIndex].orEmpty()
-                if (dbSets.size >= current.size) {
-                    mergedSetLog[uiIndex] = dbSets
+                    bindWorkoutExerciseRows(detail.exercises, exerciseIdsInUiOrder)
+                    val tracking = exerciseIdsInUiOrder.mapIndexed { index, id ->
+                        val row = catalog[id]
+                        val metadata = com.ironlog.app.ui.model.HistoryExercise(
+                            name = row?.name.orEmpty(), trackingType = row?.trackingType,
+                            category = row?.category, equipment = row?.equipment,
+                            isBodyweight = row?.isBodyweight ?: false,
+                        )
+                        index to when (com.ironlog.app.domain.training.TrainingSetPolicy.tracking(metadata)) {
+                            com.ironlog.app.domain.training.TrackingMode.BODYWEIGHT_REPS -> "bodyweight_reps"
+                            com.ironlog.app.domain.training.TrackingMode.ADDED_LOAD_REPS -> "bodyweight_plus_weight_reps"
+                            com.ironlog.app.domain.training.TrackingMode.ASSISTED_REPS -> "assisted_bodyweight"
+                            com.ironlog.app.domain.training.TrackingMode.DURATION -> "duration"
+                            com.ironlog.app.domain.training.TrackingMode.WEIGHTED_DURATION -> "duration_weight"
+                            com.ironlog.app.domain.training.TrackingMode.DURATION_DISTANCE -> "duration_distance"
+                            else -> row?.trackingType ?: "weight_reps"
+                        }
+                    }.toMap()
+                    _workoutState.value = com.ironlog.app.ui.state.restorePersistedSetLog(
+                        _workoutState.value, detail.sets, workoutExerciseIdByIndex, tracking,
+                    )
+                    hadPrThisSession = recomputeHadPrFromRetainedSets()
+                    persistDraftNow(_workoutState.value)
+                    true
+                } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                    throw cancelled
+                } catch (error: Exception) {
+                    _mutationError.value = error.message ?: "Saved sets could not be restored. Try again."
+                    false
                 }
             }
-
-            val currentState = _workoutState.value
-            if (mergedSetLog != currentState.setLog) {
-                _workoutState.value = currentState.copy(setLog = mergedSetLog)
-            }
-        }
     }
 }
 
@@ -899,9 +1469,10 @@ class ActiveWorkoutViewModel(application: Application) : AndroidViewModel(applic
 @Composable
 fun ActiveWorkoutScreen(
     dayId: String = "",
-    weightUnit: String = "kg",
-    effortTracking: String = "off",
-    hapticFeedback: Boolean = true,
+    startEmpty: Boolean = false,
+    weightUnitOverride: String? = null,
+    effortTrackingOverride: String? = null,
+    hapticFeedbackOverride: Boolean? = null,
     onFinish: (() -> Unit)? = null,
     onMinimize: (() -> Unit)? = null,
     vm: ActiveWorkoutViewModel = viewModel(),
@@ -909,25 +1480,46 @@ fun ActiveWorkoutScreen(
 ) {
     val c = useTheme()
     val context = LocalContext.current
+    val initialization by vm.initialization.collectAsStateWithLifecycle()
     val appVm: AppDataViewModel = viewModel()
-    val appState by appVm.state.collectAsState()
+    val appState by appVm.state.collectAsStateWithLifecycle()
     val appSettings = appState.settings
-    val cloudApiKey = remember(appSettings.cloudAiProviderPreset) {
+    val weightUnit = weightUnitOverride ?: appSettings.weightUnit
+    val effortTracking = effortTrackingOverride ?: appSettings.effortTracking
+    val hapticFeedback = hapticFeedbackOverride ?: appSettings.hapticFeedback
+    val credentialRevision by CloudAiKeyStore.revision.collectAsStateWithLifecycle()
+    val cloudApiKey = remember(credentialRevision, appSettings.cloudAiProviderPreset) {
         CloudAiKeyStore.load(context, appSettings.cloudAiProviderPreset)
     }
     val view = LocalView.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val settingsRepo = remember { SettingsRepository() }
-    val state by vm.workoutState.collectAsState()
-    val timerStarted by vm.timerStarted.collectAsState()
-    val prBanner by vm.prBanner.collectAsState()
-    val showCompletionSheet by vm.showCompletionSheet.collectAsState()
-    val activeWorkoutId by vm.activeWorkoutIdSignal.collectAsState()
-    val plans by plansVm.plans.collectAsState()
-    val restoredOrderedIndices by vm.restoredOrderedIndices.collectAsState()
+    val planNotesVisible by remember(settingsRepo) {
+        settingsRepo.observePlanExerciseNotesVisible()
+    }.collectAsStateWithLifecycle(initialValue = true)
+    val workoutDtoJson = remember { Json { ignoreUnknownKeys = true } }
+    val state by vm.workoutState.collectAsStateWithLifecycle()
+    val timerStarted by vm.timerStarted.collectAsStateWithLifecycle()
+    val prBanner by vm.prBanner.collectAsStateWithLifecycle()
+    val showCompletionSheet by vm.showCompletionSheet.collectAsStateWithLifecycle()
+    val activeWorkoutId by vm.activeWorkoutIdSignal.collectAsStateWithLifecycle()
+    val plans by plansVm.plans.collectAsStateWithLifecycle()
+    val restoredOrderedIndices by vm.restoredOrderedIndices.collectAsStateWithLifecycle()
+    val mutationError by vm.mutationError.collectAsStateWithLifecycle()
+    val restControlPending by vm.restControlPending.collectAsStateWithLifecycle()
+    var workoutStatusNotificationsAvailable by remember {
+        mutableStateOf(WorkoutForegroundService.isWorkoutNotificationAvailable(context))
+    }
+    var restCompletionNotificationsAvailable by remember {
+        mutableStateOf(WorkoutForegroundService.isRestCompletionNotificationAvailable(context))
+    }
     val exerciseRepo = remember { ExerciseRepository(context.applicationContext) }
     var swapTargetIndex by remember { mutableStateOf<Int?>(null) }
     var swapQuery by remember { mutableStateOf("") }
+    var isCreatingSwapExercise by remember { mutableStateOf(false) }
+    var swapCreateError by remember { mutableStateOf<String?>(null) }
+    var pendingExerciseSwap by remember { mutableStateOf<PendingExerciseSwap?>(null) }
+    var isApplyingPlanSwap by remember { mutableStateOf(false) }
     var showSaveToPlanPrompt by remember { mutableStateOf(false) }
     var pendingOnFinish by remember { mutableStateOf<(() -> Unit)?>(null) }
     var pendingCelebration by remember { mutableStateOf<WorkoutCompletionCelebration?>(null) }
@@ -936,6 +1528,9 @@ fun ActiveWorkoutScreen(
     var workoutActionError by remember { mutableStateOf<String?>(null) }
     var showCompletionConfetti by remember { mutableStateOf(false) }
     var confettiBurstId by remember { mutableStateOf(0) }
+    var showNotesSettings by remember { mutableStateOf(false) }
+    var deletingWorkoutNotes by remember { mutableStateOf(false) }
+    var notesSettingsError by remember { mutableStateOf<String?>(null) }
     val planRepo = remember { com.ironlog.app.data.repository.PlanRepository() }
     val scope = rememberCoroutineScope()
     var exercisePool by remember { mutableStateOf<List<LegacyExerciseShape>>(emptyList()) }
@@ -955,10 +1550,19 @@ fun ActiveWorkoutScreen(
     var orderedIndices by remember { mutableStateOf<List<Int>>(emptyList()) }
     val lazyListState = rememberLazyListState()
     var scrollToNextSupersetIndex by remember { mutableStateOf<Int?>(null) }
+    LaunchedEffect(mutationError) {
+        mutationError?.let {
+            workoutActionError = it
+            vm.clearMutationError()
+        }
+    }
     LaunchedEffect(scrollToNextSupersetIndex) {
         scrollToNextSupersetIndex?.let { pos ->
-            lazyListState.animateScrollToItem(pos)
-            scrollToNextSupersetIndex = null
+            try {
+                lazyListState.animateScrollToItem(pos)
+            } finally {
+                if (scrollToNextSupersetIndex == pos) scrollToNextSupersetIndex = null
+            }
         }
     }
     val reorderState = rememberReorderableLazyListState(lazyListState) { from, to ->
@@ -989,13 +1593,40 @@ fun ActiveWorkoutScreen(
     }
     val resolvedDay = resolvedPair.first
     val resolvedPlan = resolvedPair.second
+    val progressionPolicyStore = remember(settingsRepo) { ProgressionPolicyStore(settingsRepo) }
+    val progressionPlanExerciseIds = remember(resolvedDay) {
+        resolvedDay?.exercises.orEmpty().map { it.id }.filter(String::isNotBlank).toSet()
+    }
+    val conservativeProgressionSnapshot = remember {
+        val fallback = ResolvedProgressionPolicy.conservativeDefault()
+        ProgressionPolicySnapshot(fallback = fallback, byPlanExerciseId = emptyMap())
+    }
+    val progressionPolicySnapshot by produceState(
+        initialValue = conservativeProgressionSnapshot,
+        resolvedPlan?.id,
+        progressionPlanExerciseIds,
+        appSettings.progressionStyle,
+    ) {
+        value = try {
+            progressionPolicyStore.load(resolvedPlan?.id, progressionPlanExerciseIds)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            Timber.w(error, "Progression policy settings could not be loaded")
+            conservativeProgressionSnapshot
+        }
+    }
 
-    val baseExerciseEntries = remember(resolvedDay, state.removedBaseExerciseIndices) {
+    val baseExerciseEntries = remember(resolvedDay, state.removedBaseExerciseIndices, exercisePool) {
         (resolvedDay?.exercises.orEmpty()).mapIndexedNotNull { originalIndex, planEx ->
             if (originalIndex in state.removedBaseExerciseIndices) {
                 null
             } else {
-                originalIndex to normalizeSessionExercise(planEx, null)
+                val libraryExercise = exercisePool.firstOrNull { candidate ->
+                    candidate.id == planEx.exerciseId || candidate.exerciseId == planEx.exerciseId ||
+                        candidate.name.equals(planEx.name, ignoreCase = true)
+                }
+                originalIndex to normalizeSessionExercise(planEx, libraryExercise)
             }
         }
     }
@@ -1011,6 +1642,7 @@ fun ActiveWorkoutScreen(
                 trackingType = entry.trackingType,
                 isWarmup = false,
                 equipment = entry.equipment,
+                isBodyweight = entry.trackingType.contains("bodyweight") || entry.equipment.orEmpty().contains("bodyweight", ignoreCase = true),
             )
         }
     }
@@ -1022,13 +1654,19 @@ fun ActiveWorkoutScreen(
                 exerciseId = sw.id.ifBlank { sw.exerciseId },
                 trackingType = sw.trackingType.ifBlank { base.trackingType },
                 equipment = sw.equipment ?: base.equipment,
+                isBodyweight = isBodyweightExercise(sw),
             )
         }
         swapped + addedAsNormalized
     }
 
-    LaunchedEffect(dayId) {
-        vm.initWorkout(dayId)
+    LaunchedEffect(dayId, startEmpty) {
+        vm.initWorkout(dayId, startEmpty)
+    }
+    LaunchedEffect(timerStarted) {
+        workoutStatusNotificationsAvailable = WorkoutForegroundService.isWorkoutNotificationAvailable(context)
+        restCompletionNotificationsAvailable =
+            WorkoutForegroundService.isRestCompletionNotificationAvailable(context)
     }
     // Sync orderedIndices from the ViewModel when a draft is restored after minimize/resume.
     LaunchedEffect(restoredOrderedIndices) {
@@ -1038,9 +1676,7 @@ fun ActiveWorkoutScreen(
     }
     LaunchedEffect(exercises) {
         // Load ghost (last-session) data whenever the exercise list changes
-        if (exercises.isNotEmpty()) {
-            vm.loadGhostData(exercises.map { it.exerciseId })
-        }
+        vm.loadGhostData(exercises.map { it.exerciseId })
         when {
             // Initial setup: exercises just appeared for the first time.
             orderedIndices.isEmpty() && exercises.isNotEmpty() -> {
@@ -1062,15 +1698,11 @@ fun ActiveWorkoutScreen(
     // Removals are handled exclusively by the reducer+dispatch path — re-running rehydrate
     // on removal races with the async DB delete and can re-insert stale workout exercise
     // bindings, making the exercise appear to "not delete".
-    var lastHydratedExerciseIds by remember { mutableStateOf<Set<String>>(emptySet()) }
-    LaunchedEffect(activeWorkoutId, exercises) {
-        val currentIds = exercises.map { it.exerciseId }.toSet()
-        val hasNewIds = currentIds.any { it !in lastHydratedExerciseIds }
-        val isFirstLoad = lastHydratedExerciseIds.isEmpty()
-        if (!activeWorkoutId.isNullOrBlank() && exercises.isNotEmpty() && (isFirstLoad || hasNewIds)) {
-            vm.rehydrateSetLogFromDatabase(exercises.map { it.exerciseId })
+    val hydrationGate = remember(vm) { com.ironlog.app.ui.state.WorkoutHydrationGate() }
+    LaunchedEffect(activeWorkoutId, exercises.map { it.exerciseId }) {
+        hydrationGate.reconcile(activeWorkoutId, exercises.map { it.exerciseId }) { ids ->
+            vm.rehydrateSetLogFromDatabase(ids)
         }
-        lastHydratedExerciseIds = currentIds
     }
     LaunchedEffect(Unit) {
         exercisePool = runCatching { exerciseRepo.getExercisesSnapshot() }.getOrElse { emptyList() }
@@ -1083,7 +1715,7 @@ fun ActiveWorkoutScreen(
             settingsBarWeightKg = json.optDouble("barWeightKg", 20.0).coerceIn(0.0, 100.0)
         }
         val raw = settingsRepo.getString("gym_profiles_json").orEmpty()
-        val profiles = runCatching { Json { ignoreUnknownKeys = true }.decodeFromString<List<GymProfileDto>>(raw) }.getOrDefault(emptyList())
+        val profiles = runCatching { workoutDtoJson.decodeFromString<List<GymProfileDto>>(raw) }.getOrDefault(emptyList())
         val activeId = settingsRepo.getString("active_gym_profile_id")
         activeGymProfile = profiles.firstOrNull { it.id == activeId } ?: profiles.firstOrNull()
     }
@@ -1106,11 +1738,22 @@ fun ActiveWorkoutScreen(
         restOverride.forEach { (k, v) -> obj.put(k.toString(), v) }
         settingsRepo.setString("active_workout_rest_override_$id", obj.toString(), "json")
     }
+    LaunchedEffect(activeWorkoutId) {
+        if (!activeWorkoutId.isNullOrBlank()) vm.syncRestFromPersistence()
+    }
     val latestState by rememberUpdatedState(state)
     DisposableEffect(lifecycleOwner, activeWorkoutId) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_STOP && !activeWorkoutId.isNullOrBlank()) {
                 vm.persistDraftBlocking(latestState)
+            }
+            if (event == Lifecycle.Event.ON_RESUME) {
+                workoutStatusNotificationsAvailable =
+                    WorkoutForegroundService.isWorkoutNotificationAvailable(context)
+                restCompletionNotificationsAvailable =
+                    WorkoutForegroundService.isRestCompletionNotificationAvailable(context)
+                vm.syncRestFromPersistence()
+                vm.reconcileForegroundNotificationOnResume()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -1122,28 +1765,35 @@ fun ActiveWorkoutScreen(
             if (!idForEffect.isNullOrBlank()) vm.persistDraftBlocking(latestState)
         }
     }
-    LaunchedEffect(Unit) {
-        while (true) {
-            val action = withContext(Dispatchers.IO) {
-                val a = settingsRepo.getString("pending_workout_action").orEmpty()
-                if (a.isNotBlank()) settingsRepo.removeSetting("pending_workout_action")
-                a
-            }
-            if (action.isNotBlank()) {
-                when (action) {
-                    com.ironlog.app.services.NotificationActionRouter.Actions.ADD_30S -> {
-                        vm.dispatch(WorkoutAction.Add30s)
-                    }
-                    com.ironlog.app.services.NotificationActionRouter.Actions.SKIP_REST -> {
-                        vm.dispatch(WorkoutAction.SkipRest)
-                        vm.onRestCleared()
-                    }
-                    com.ironlog.app.services.NotificationActionRouter.Actions.FINISH_WORKOUT -> {
-                        vm.finishWorkout()
+    LaunchedEffect(activeWorkoutId) {
+        val sessionId = activeWorkoutId ?: return@LaunchedEffect
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            com.ironlog.app.services.WorkoutNotificationActionInbox
+                .signalsForSession(sessionId)
+                .collect {
+                    while (true) {
+                        val action = withContext(Dispatchers.IO) {
+                            com.ironlog.app.services.WorkoutNotificationActionInbox
+                                .consumeForSession(sessionId)
+                                .orEmpty()
+                        }
+                        if (action.isBlank()) break
+                        when (action) {
+                            com.ironlog.app.services.NotificationActionRouter.Actions.ADD_30S -> {
+                                vm.dispatch(WorkoutAction.Add30s)
+                            }
+                            com.ironlog.app.services.NotificationActionRouter.Actions.SKIP_REST -> {
+                                vm.dispatch(WorkoutAction.SkipRest)
+                            }
+                            com.ironlog.app.services.NotificationActionRouter.Actions.REST_STATE_CHANGED -> {
+                                vm.syncRestFromPersistence()
+                            }
+                            com.ironlog.app.services.NotificationActionRouter.Actions.FINISH_WORKOUT -> {
+                                vm.finishWorkout()
+                            }
+                        }
                     }
                 }
-            }
-            delay(900)
         }
     }
     BackHandler(enabled = true) {
@@ -1155,28 +1805,97 @@ fun ActiveWorkoutScreen(
         onDispose { view.keepScreenOn = prev }
     }
 
-    Box(Modifier.fillMaxSize().background(c.bg).statusBarsPadding()) {
-        // FIXED: 14 — contentPadding bottom expands when rest timer is active so it doesn't cover FINISH WORKOUT
+    if (initialization.loading || initialization.error != null) {
+        Column(
+            Modifier.fillMaxSize().navigationBarsPadding().padding(24.dp),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            if (initialization.loading) {
+                CircularProgressIndicator(color = c.accent)
+                Text("Loading saved workout…", color = c.text, modifier = Modifier.padding(top = 12.dp))
+            } else {
+                Text(initialization.error.orEmpty(), color = c.text)
+                Button(onClick = { vm.initWorkout(dayId, startEmpty) }, modifier = Modifier.padding(top = 12.dp)) { Text("RETRY") }
+            }
+        }
+        return
+    }
+
+    ActiveWorkoutViewport(
+        bottomBar = {
+            RestTimerPanel(
+                restTimer = state.restTimer,
+                modifier = Modifier.navigationBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp),
+                dispatch = vm::dispatch,
+                controlsEnabled = !restControlPending,
+                hapticFeedback = hapticFeedback,
+            )
+        },
+    ) { inputViewport ->
+        // Rest controls have their own measured footer; retain ordinary end spacing.
         LazyColumn(
             state = lazyListState,
-            modifier = Modifier.fillMaxSize().padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = if (state.restTimer.active) 130.dp else 80.dp),
+            modifier = Modifier.fillMaxSize().padding(16.dp)
+                .onGloballyPositioned(inputViewport::capture),
+            verticalArrangement = com.ironlog.app.ui.theme.appCardSpacedBy(12.dp),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 80.dp),
         ) {
+            if (timerStarted && (!workoutStatusNotificationsAvailable || !restCompletionNotificationsAvailable)) {
+                item {
+                    val bothUnavailable = !workoutStatusNotificationsAvailable && !restCompletionNotificationsAvailable
+                    val warningCopy = when {
+                        bothUnavailable -> "Workout shade controls and rest-complete alerts are off. Tap to review Android notifications."
+                        !workoutStatusNotificationsAvailable -> "Workout shade controls are off. Rest-complete alerts remain separate. Tap to enable the workout channel."
+                        else -> "Rest-complete alerts are off. Workout shade controls remain available. Tap to enable rest alerts."
+                    }
+                    Surface(
+                        color = c.warning.copy(alpha = 0.12f),
+                        shape = RoundedCornerShape(IronLogRadius.md.dp),
+                        modifier = Modifier.fillMaxWidth().clickable {
+                            val channelId = when {
+                                bothUnavailable -> null
+                                !workoutStatusNotificationsAvailable -> WorkoutForegroundService.CHANNEL_ID
+                                else -> WorkoutNotificationBridge.REST_COMPLETE_CHANNEL_ID
+                            }
+                            context.startActivity(Intent(
+                                if (channelId != null && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                                    Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS
+                                } else {
+                                    Settings.ACTION_APP_NOTIFICATION_SETTINGS
+                                }
+                            ).apply {
+                                putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                                if (channelId != null && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                                    putExtra(Settings.EXTRA_CHANNEL_ID, channelId)
+                                }
+                            })
+                        },
+                    ) {
+                        Text(
+                            warningCopy,
+                            color = c.warning,
+                            fontSize = IronLogType.meta.fontSize.sp,
+                            lineHeight = 18.sp,
+                            modifier = Modifier.appPadding(horizontal = 14.dp, vertical = 12.dp),
+                        )
+                    }
+                }
+            }
             item {
                 Card(
                     colors = CardDefaults.cardColors(containerColor = c.card),
                     border = androidx.compose.foundation.BorderStroke(1.dp, c.cardBorder),
                     shape = RoundedCornerShape(IronLogRadius.xl.dp),
                 ) {
-                    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Column(Modifier.fillMaxWidth().appPadding(horizontal = 16.dp, vertical = 14.dp), verticalArrangement = appSpacedBy(10.dp)) {
                         // ── Row 1: name + close/menu ──────────────────────────
                         Row(
                             Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.Top,
                         ) {
-                            Column(Modifier.weight(1f).padding(end = 8.dp)) {
+                            Column(Modifier.weight(1f).appPadding(end = 8.dp)) {
                                 Text(
                                     resolvedDay?.name ?: resolvedPlan?.name ?: "Workout",
                                     color = c.text,
@@ -1197,10 +1916,34 @@ fun ActiveWorkoutScreen(
                                     androidx.compose.material3.IconButton(onClick = { showHeaderMenu = true }) {
                                         Icon(Icons.Filled.MoreVert, contentDescription = "Menu", tint = c.muted)
                                     }
-                                    androidx.compose.material3.DropdownMenu(showHeaderMenu, onDismissRequest = { showHeaderMenu = false }) {
+                                    IronLogDropdownMenu(showHeaderMenu, onDismissRequest = { showHeaderMenu = false }) {
                                         androidx.compose.material3.DropdownMenuItem(
                                             text = { Text("Minimize", color = c.text) },
                                             onClick = { showHeaderMenu = false; onMinimize?.invoke() },
+                                        )
+                                        androidx.compose.material3.DropdownMenuItem(
+                                            text = {
+                                                Column {
+                                                    Text("Exercise notes", color = c.text)
+                                                    Text(
+                                                        if (planNotesVisible) "Shown" else "Hidden",
+                                                        color = c.muted,
+                                                        fontSize = IronLogType.meta.fontSize.sp,
+                                                    )
+                                                }
+                                            },
+                                            onClick = {
+                                                showHeaderMenu = false
+                                                notesSettingsError = null
+                                                showNotesSettings = true
+                                            },
+                                            trailingIcon = {
+                                                Icon(
+                                                    Icons.Outlined.NoteAlt,
+                                                    contentDescription = null,
+                                                    tint = if (planNotesVisible) c.accent else c.muted,
+                                                )
+                                            },
                                         )
                                         androidx.compose.material3.DropdownMenuItem(
                                             text = { Text("Discard Workout", color = c.danger) },
@@ -1223,11 +1966,11 @@ fun ActiveWorkoutScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = appSpacedBy(8.dp)) {
                                 Box(
                                     Modifier
                                         .background(c.faint, RoundedCornerShape(IronLogRadius.full.dp))
-                                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                                        .appPadding(horizontal = 12.dp, vertical = 6.dp),
                                 ) {
                                     ActiveWorkoutRollingTimerText(vm, c)
                                 }
@@ -1279,7 +2022,7 @@ fun ActiveWorkoutScreen(
                                 .border(1.dp, c.gold.copy(alpha = 0.4f), RoundedCornerShape(IronLogRadius.lg.dp))
                                 .padding(horizontal = 14.dp, vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            horizontalArrangement = appSpacedBy(8.dp),
                         ) {
                             Icon(Icons.Outlined.EmojiEvents, contentDescription = null, tint = c.gold, modifier = Modifier.size(20.dp))
                             Text(
@@ -1299,6 +2042,8 @@ fun ActiveWorkoutScreen(
             }) { exIndex ->
                 val ex = exercises.getOrNull(exIndex) ?: return@items
                 val baseOriginalIndex = baseOriginalIndices.getOrNull(exIndex)
+                val planExerciseId = baseOriginalIndex?.let { resolvedDay?.exercises?.getOrNull(it)?.id }
+                val progressionPolicy = progressionPolicySnapshot.forPlanExercise(planExerciseId)
                 val defaultRestSec = baseOriginalIndex?.let { resolvedDay?.exercises?.getOrNull(it)?.restSeconds }
                     ?: if (isHeavyCompoundExercise(ex.name)) defaultRestHeavySec else defaultRestNormalSec
                 val effectiveRest = restOverride[exIndex] ?: defaultRestSec.coerceIn(15, 900)
@@ -1318,28 +2063,28 @@ fun ActiveWorkoutScreen(
                         exercise = ex,
                         loggedSets = state.setLog[exIndex].orEmpty(),
                         input = state.inputs[exIndex]?.weight.orEmpty() to state.inputs[exIndex]?.reps.orEmpty(),
+                        listState = lazyListState,
+                        inputViewport = inputViewport,
+                        inputStructuralKey = state.setLog[exIndex].orEmpty().map { it.id } to prBanner,
+                        preserveInputAnchor = scrollToNextSupersetIndex == null,
                         dispatch = vm::dispatch,
                         baseExercisesCount = baseExercises.size,
                         onRemoveExercise = {
-                            // Update orderedIndices before dispatching so the LazyColumn
-                            // key map stays consistent: drop the removed index and shift the rest.
-                            orderedIndices = orderedIndices
-                                .filter { it != exIndex }
-                                .map { if (it > exIndex) it - 1 else it }
-                            // Also re-index the rest-override map.
-                            restOverride = restOverride
-                                .filterKeys { it != exIndex }
-                                .mapKeys { (k, _) -> if (k > exIndex) k - 1 else k }
-                            vm.dispatch(
+                            vm.removeExercise(
                                 WorkoutAction.RemoveExercise(
                                     exIndex = exIndex,
                                     baseExercisesCount = baseExercises.size,
                                     removedBaseIndex = baseOriginalIndex,
                                 )
-                            )
+                            ) { removedIndex ->
+                                orderedIndices = orderedIndices.filter { it != removedIndex }
+                                    .map { if (it > removedIndex) it - 1 else it }
+                                restOverride = restOverride.filterKeys { it != removedIndex }
+                                    .mapKeys { (key, _) -> if (key > removedIndex) key - 1 else key }
+                            }
                         },
                         onLogSet = { weight, reps ->
-                            vm.logSet(exIndex, ex.exerciseId, weight, reps, ex.trackingType, restForLogSet)
+                            vm.logSet(exIndex, ex.exerciseId, weight, reps, ex.trackingType, restForLogSet, weightUnit)
                             // GAP-01: superset auto-rotation — scroll to next exercise in group
                             if (!isLastInSuperset && !supersetGroup.isNullOrBlank()) {
                                 val currentPosInDisplay = displayIndices.indexOf(exIndex)
@@ -1355,11 +2100,14 @@ fun ActiveWorkoutScreen(
                         weightUnit = weightUnit,
                         effortTracking = effortTracking,
                         hapticFeedback = hapticFeedback,
-                        onSetRpeChanged = { setIndex, rpe -> vm.persistSetRpe(exIndex, ex.exerciseId, setIndex, rpe) },
-                        onSetRirChanged = { setIndex, rir -> vm.persistSetRir(exIndex, ex.exerciseId, setIndex, rir) },
-                        onSetTypeChanged = { setIndex, type -> vm.persistSetType(exIndex, ex.exerciseId, setIndex, type) },
-                        onSetValuesChanged = { setIndex, w, r -> vm.persistSetValues(exIndex, ex.exerciseId, setIndex, w, r) },
-                        onInsertWarmups = { warmups -> vm.persistWarmupSets(exIndex, ex.exerciseId, warmups) },
+                        onSetRpeChanged = { setId, rpe -> vm.persistSetRpe(exIndex, ex.exerciseId, setId, rpe) },
+                        onSetRirChanged = { setId, rir -> vm.persistSetRir(exIndex, ex.exerciseId, setId, rir) },
+                        onSetTypeChanged = { setId, type -> vm.persistSetType(exIndex, ex.exerciseId, setId, type) },
+                        onSetValuesChanged = { setId, w, r -> vm.persistSetValues(exIndex, ex.exerciseId, setId, w, r, weightUnit) },
+                        onSetNoteChanged = { setId, note -> vm.persistSetNote(exIndex, ex.exerciseId, setId, note) },
+                        onDeleteSet = { setId -> vm.deleteSet(exIndex, ex.exerciseId, setId) },
+                        pendingWarmups = state.pendingWarmups[exIndex].orEmpty(),
+                        onLogWarmup = { pending -> vm.logPendingWarmup(exIndex, ex.exerciseId, pending) },
                         onSwapRequest = { swapTargetIndex = exIndex; swapQuery = "" },
                         restSec = effectiveRest,
                         onEditRest = {
@@ -1376,9 +2124,9 @@ fun ActiveWorkoutScreen(
                         },
                         ghost = ghost,
                         exerciseNote = exerciseNote,
+                        showExerciseNotes = planNotesVisible,
                         supersetGroup = supersetGroup,
                         onSupersetChange = { group ->
-                            vm.dispatch(WorkoutAction.AssignSuperset(exIndex, group))
                             vm.persistSuperset(exIndex, ex.exerciseId, group)
                         },
                         isDragging = isDragging,
@@ -1386,6 +2134,7 @@ fun ActiveWorkoutScreen(
                         activeProfile = activeGymProfile,
                         settingsBarWeightKg = settingsBarWeightKg,
                         targetOverride = state.targetOverrides[exIndex],
+                        progressionPolicy = progressionPolicy,
                     )
                 }
             }
@@ -1409,7 +2158,7 @@ fun ActiveWorkoutScreen(
                         fontSize = IronLogType.meta.fontSize.sp,
                     )
                 }
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(appGapDp(12.dp)))
                 val totalVolume = state.setLog.values.flatten().filter { it.type != "warmup" }.sumOf { it.weight * it.reps }
                 val comparison = getFunComparison(totalVolume)
                 Card(
@@ -1417,7 +2166,7 @@ fun ActiveWorkoutScreen(
                     border = androidx.compose.foundation.BorderStroke(1.dp, c.cardBorder),
                     shape = RoundedCornerShape(IronLogRadius.lg.dp),
                 ) {
-                    Column(Modifier.padding(14.dp)) {
+                    Column(Modifier.appPadding(14.dp)) {
                         Text(
                             "Volume: ${formatWeightFromKg(totalVolume, weightUnit)}",
                             color = c.text,
@@ -1431,7 +2180,7 @@ fun ActiveWorkoutScreen(
                         )
                     }
                 }
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(appGapDp(16.dp)))
                 Button(
                     onClick = {
                         if (hapticFeedback) HapticsEngine.lightConfirm(context)
@@ -1448,20 +2197,44 @@ fun ActiveWorkoutScreen(
                         fontSize = IronLogType.section.fontSize.sp,
                     )
                 }
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(appGapDp(8.dp)))
             }
         }
-        RestTimerPanel(
-            restTimer = state.restTimer,
-            modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp),
-            dispatch = vm::dispatch,
-            onRestCleared = vm::onRestCleared,
-            hapticFeedback = hapticFeedback,
+    }
+
+    if (showNotesSettings) {
+        ExerciseNotesSettingsDialog(
+            title = "Workout exercise notes",
+            deleteLabel = "DELETE NOTES FROM THIS SESSION",
+            deleteWarning = "This removes every exercise-level note from the active workout. The source plan is unchanged.",
+            notesVisible = planNotesVisible,
+            isDeleting = deletingWorkoutNotes,
+            error = notesSettingsError,
+            onNotesVisibleChange = { visible ->
+                notesSettingsError = null
+                scope.launch {
+                    runCatching { settingsRepo.setPlanExerciseNotesVisible(visible) }
+                        .onFailure { notesSettingsError = it.message ?: "Could not update note visibility." }
+                }
+            },
+            onDeleteConfirmed = {
+                if (!deletingWorkoutNotes) {
+                    deletingWorkoutNotes = true
+                    notesSettingsError = null
+                    scope.launch {
+                        runCatching { vm.clearExerciseNotesNow() }
+                            .onSuccess { showNotesSettings = false }
+                            .onFailure { notesSettingsError = it.message ?: "Could not delete the workout notes." }
+                        deletingWorkoutNotes = false
+                    }
+                }
+            },
+            onDismiss = { if (!deletingWorkoutNotes) showNotesSettings = false },
         )
     }
 
     if (showCompletionSheet) {
-        val elapsedSecondsForCompletion by vm.elapsedSeconds.collectAsState()
+        val elapsedSecondsForCompletion by vm.elapsedSeconds.collectAsStateWithLifecycle()
         WorkoutCompletionSheet(
             totalSets = state.setLog.values.sumOf { it.size },
             totalVolume = state.setLog.values.flatten().filter { it.type != "warmup" }.sumOf { it.weight * it.reps },
@@ -1470,6 +2243,7 @@ fun ActiveWorkoutScreen(
             exerciseNames  = exercises.map { it.name },
             planDayName    = resolvedDay?.name ?: "Free Session",
             goalMode       = appSettings.goalMode,
+            intelligenceMode = appSettings.intelligenceMode,
             cloudBaseUrl   = appSettings.cloudAiBaseUrl,
             cloudApiKey    = cloudApiKey,
             cloudModelName = appSettings.cloudAiModelName,
@@ -1618,19 +2392,19 @@ fun ActiveWorkoutScreen(
             color = c.bg.copy(alpha = 0.92f),
         ) {
             Column(
-                modifier = Modifier.fillMaxSize().padding(24.dp),
+                modifier = Modifier.fillMaxSize().appPadding(24.dp),
                 verticalArrangement = Arrangement.Center,
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 CircularProgressIndicator(color = c.accent)
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(appGapDp(16.dp)))
                 Text(
                     "Finalizing workout...",
                     color = c.text,
                     fontWeight = FontWeight.Bold,
                     fontSize = IronLogType.section.fontSize.sp,
                 )
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(appGapDp(8.dp)))
                 Text(
                     "Logging history and refreshing all insights.",
                     color = c.subtext,
@@ -1644,16 +2418,21 @@ fun ActiveWorkoutScreen(
     val targetIndex = swapTargetIndex
     if (targetIndex != null) {
         val targetExercise = exercises.getOrNull(targetIndex)
+        val trimmedSwapName = swapQuery.trim()
         val filtered = exercisePool.filter {
-            val q = swapQuery.trim().lowercase()
+            val q = trimmedSwapName.lowercase()
             q.isBlank() || it.name.lowercase().contains(q) || it.primaryMuscle.orEmpty().lowercase().contains(q)
         }.take(40)
+        val hasExactMatch = exercisePool.any { it.name.equals(trimmedSwapName, ignoreCase = true) }
+        val targetLibraryExercise = targetExercise?.let { target ->
+            exercisePool.firstOrNull { it.id == target.exerciseId || it.exerciseId == target.exerciseId }
+        }
         ModalBottomSheet(
-            onDismissRequest = { swapTargetIndex = null },
+            onDismissRequest = { if (!isCreatingSwapExercise) swapTargetIndex = null },
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
             containerColor = c.card,
         ) {
-            Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = appSpacedBy(10.dp)) {
                 Text("Swap Exercise", color = c.text, fontWeight = FontWeight(IronLogType.title.fontWeight), fontSize = IronLogType.title.fontSize.sp)
                 Text(targetExercise?.name ?: "", color = c.muted, fontSize = IronLogType.body.fontSize.sp)
                 OutlinedTextField(
@@ -1662,7 +2441,62 @@ fun ActiveWorkoutScreen(
                     label = { Text("Search exercise") },
                     modifier = Modifier.fillMaxWidth(),
                 )
-                LazyColumn(Modifier.fillMaxWidth().height(360.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (trimmedSwapName.isNotBlank() && !hasExactMatch) {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = c.accent.copy(alpha = 0.10f)),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, c.accent.copy(alpha = 0.45f)),
+                        modifier = Modifier.fillMaxWidth().clickable(
+                            enabled = !isCreatingSwapExercise && state.setLog[targetIndex].orEmpty().isEmpty(),
+                        ) {
+                            isCreatingSwapExercise = true
+                            swapCreateError = null
+                            scope.launch {
+                                runCatching {
+                                    val created = exerciseRepo.createCustomExercise(
+                                        CreateExerciseInput(
+                                            name = trimmedSwapName,
+                                            primaryMuscle = targetLibraryExercise?.primaryMuscle ?: "Other",
+                                            equipment = targetLibraryExercise?.equipment ?: targetExercise?.equipment ?: "Other",
+                                            category = targetLibraryExercise?.category ?: "strength",
+                                            trackingType = targetExercise?.trackingType ?: "weight_reps",
+                                            notes = "Created during an active-workout swap.",
+                                        ),
+                                    )
+                                    val refreshed = exerciseRepo.getExercisesSnapshot()
+                                    val custom = refreshed.first { it.id == created.uid || it.exerciseId == created.uid }
+                                    exercisePool = refreshed
+                                    if (targetExercise != null) {
+                                        pendingExerciseSwap = PendingExerciseSwap(targetIndex, targetExercise, custom)
+                                    }
+                                }.onSuccess {
+                                    swapTargetIndex = null
+                                    swapQuery = ""
+                                }.onFailure { error ->
+                                    swapCreateError = error.message ?: "Could not create this exercise."
+                                }
+                                isCreatingSwapExercise = false
+                            }
+                        },
+                    ) {
+                        Column(Modifier.fillMaxWidth().appPadding(14.dp), verticalArrangement = appSpacedBy(4.dp)) {
+                            Text(
+                                if (isCreatingSwapExercise) "CREATING…" else "CREATE ‘$trimmedSwapName’",
+                                color = c.accent,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp,
+                            )
+                            Text(
+                                if (state.setLog[targetIndex].orEmpty().isNotEmpty())
+                                    "Delete this exercise's logged sets before swapping."
+                                else "Saved as a custom exercise using this movement's tracking profile.",
+                                color = c.subtext,
+                                fontSize = 12.sp,
+                            )
+                        }
+                    }
+                }
+                swapCreateError?.let { Text(it, color = c.danger, fontSize = 12.sp) }
+                LazyColumn(Modifier.fillMaxWidth().height(360.dp), verticalArrangement = appSpacedBy(6.dp)) {
                     if (filtered.isEmpty()) {
                         item {
                             Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
@@ -1676,13 +2510,12 @@ fun ActiveWorkoutScreen(
                             border = androidx.compose.foundation.BorderStroke(1.dp, c.cardBorder),
                             modifier = Modifier.fillMaxWidth().clickable {
                                 if (targetExercise != null) {
-                                    vm.dispatch(WorkoutAction.SwapExercise(targetIndex, item))
-                                    vm.swapExercise(targetIndex, targetExercise.exerciseId, item.id.ifBlank { item.exerciseId })
+                                    pendingExerciseSwap = PendingExerciseSwap(targetIndex, targetExercise, item)
                                 }
                                 swapTargetIndex = null
                             },
                         ) {
-                            Column(Modifier.fillMaxWidth().padding(12.dp)) {
+                            Column(Modifier.fillMaxWidth().appPadding(12.dp)) {
                                 Text(item.name, color = c.text, fontWeight = FontWeight(IronLogType.section.fontWeight), fontSize = IronLogType.section.fontSize.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 Text("${item.primaryMuscle ?: "Other"} · ${item.equipment}", color = c.muted, fontSize = IronLogType.meta.fontSize.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             }
@@ -1691,6 +2524,62 @@ fun ActiveWorkoutScreen(
                 }
             }
         }
+    }
+
+    pendingExerciseSwap?.let { pending ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { if (!isApplyingPlanSwap) pendingExerciseSwap = null },
+            containerColor = c.card,
+            title = { Text("Apply this swap", color = c.text, fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = appSpacedBy(8.dp)) {
+                    Text("${pending.from.name}  →  ${pending.to.name}", color = c.text)
+                    Text("Choose whether this change is only for today or also updates the plan for future sessions.", color = c.subtext)
+                }
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(
+                    enabled = !isApplyingPlanSwap,
+                    onClick = {
+                        isApplyingPlanSwap = true
+                        scope.launch {
+                            runCatching {
+                                require(dayId.isNotBlank()) { "This workout is not linked to a plan day." }
+                                val planRows = planRepo.getPlanExercisesSnapshot(dayId)
+                                val row = planRows.firstOrNull { it.orderIndex == pending.exIndex }
+                                    ?: planRows.firstOrNull { it.exerciseUid == pending.from.exerciseId }
+                                    ?: error("The original exercise is no longer in this plan day.")
+                                planRepo.updatePlanExercise(
+                                    row.uid,
+                                    com.ironlog.app.data.model.PlanExerciseInput(
+                                        exerciseId = pending.to.id.ifBlank { pending.to.exerciseId },
+                                    ),
+                                )
+                            }.onSuccess {
+                                vm.swapExercise(pending.exIndex, pending.from.exerciseId, pending.to)
+                                pendingExerciseSwap = null
+                            }.onFailure { error ->
+                                workoutActionError = error.message ?: "The plan was not updated."
+                            }
+                            isApplyingPlanSwap = false
+                        }
+                    },
+                ) {
+                    Text(if (isApplyingPlanSwap) "UPDATING…" else "SESSION + PLAN", color = c.accent, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(
+                    enabled = !isApplyingPlanSwap,
+                    onClick = {
+                        vm.swapExercise(pending.exIndex, pending.from.exerciseId, pending.to)
+                        pendingExerciseSwap = null
+                    },
+                ) {
+                    Text("THIS SESSION", color = c.text, fontWeight = FontWeight.Bold)
+                }
+            },
+        )
     }
 
     val restExIdx = editingRestExIndex
@@ -1704,7 +2593,7 @@ fun ActiveWorkoutScreen(
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
             containerColor = c.card,
         ) {
-            Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(Modifier.fillMaxWidth().appPadding(16.dp), verticalArrangement = appSpacedBy(12.dp)) {
                 Text(
                     "Rest Timer",
                     color = c.text,
@@ -1717,7 +2606,7 @@ fun ActiveWorkoutScreen(
                     fontSize = IronLogType.meta.fontSize.sp,
                 )
                 androidx.compose.foundation.lazy.LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = appSpacedBy(8.dp),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     itemsIndexed(presets) { _, sec ->
@@ -1747,7 +2636,7 @@ fun ActiveWorkoutScreen(
                 }
                 Row(
                     Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalArrangement = appSpacedBy(12.dp),
                 ) {
                     Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("MIN", color = c.muted, fontSize = IronLogType.meta.fontSize.sp)
@@ -1755,7 +2644,7 @@ fun ActiveWorkoutScreen(
                             state = minState,
                             flingBehavior = rememberSnapFlingBehavior(minState),
                             modifier = Modifier.height(120.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = appSpacedBy(8.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
                         ) {
                             items(11) { m ->
@@ -1776,7 +2665,7 @@ fun ActiveWorkoutScreen(
                             state = secState,
                             flingBehavior = rememberSnapFlingBehavior(secState),
                             modifier = Modifier.height(120.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = appSpacedBy(8.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
                         ) {
                             items(secOptions.size) { i ->
@@ -1819,7 +2708,7 @@ fun ActiveWorkoutScreen(
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
             containerColor = c.card,
         ) {
-            Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = appSpacedBy(10.dp)) {
                 Text("Add Exercise", color = c.text, fontWeight = FontWeight(IronLogType.title.fontWeight), fontSize = IronLogType.title.fontSize.sp)
                 Text("${exercises.size} exercises in session", color = c.muted, fontSize = IronLogType.meta.fontSize.sp)
                 OutlinedTextField(
@@ -1828,7 +2717,7 @@ fun ActiveWorkoutScreen(
                     label = { Text("Search exercise") },
                     modifier = Modifier.fillMaxWidth(),
                 )
-                LazyColumn(Modifier.fillMaxWidth().height(400.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                LazyColumn(Modifier.fillMaxWidth().height(400.dp), verticalArrangement = appSpacedBy(6.dp)) {
                     itemsIndexed(filteredAdd) { _, item ->
                         Card(
                             colors = CardDefaults.cardColors(containerColor = c.surface),
@@ -1840,12 +2729,10 @@ fun ActiveWorkoutScreen(
                                     trackingType = item.trackingType.ifBlank { "weight_reps" },
                                     equipment = item.equipment,
                                 )
-                                vm.dispatch(WorkoutAction.AddExercise(entry))
-                                vm.addExerciseToWorkout(exercises.size, entry.exerciseId)
-                                showAddExerciseSheet = false
+                                vm.addExerciseToWorkout(entry) { showAddExerciseSheet = false }
                             },
                         ) {
-                            Column(Modifier.fillMaxWidth().padding(12.dp)) {
+                            Column(Modifier.fillMaxWidth().appPadding(12.dp)) {
                                 Text(item.name, color = c.text, fontWeight = FontWeight(IronLogType.section.fontWeight), fontSize = IronLogType.section.fontSize.sp)
                                 Text("${item.primaryMuscle ?: "Other"} · ${item.equipment}", color = c.muted, fontSize = IronLogType.meta.fontSize.sp)
                             }
@@ -1867,6 +2754,7 @@ private fun WorkoutCompletionSheet(
     exerciseNames: List<String> = emptyList(),
     planDayName: String = "Free Session",
     goalMode: String = "hypertrophy",
+    intelligenceMode: String = "training_intelligence",
     cloudBaseUrl: String = "",
     cloudApiKey: String = "",
     cloudModelName: String = "",
@@ -1880,23 +2768,6 @@ private fun WorkoutCompletionSheet(
     var selectedRating by remember { mutableStateOf(0) }
     var workoutNotes by remember { mutableStateOf("") }
     val cloudConfigured = cloudApiKey.isNotBlank() && cloudBaseUrl.isNotBlank() && cloudModelName.isNotBlank()
-    var debriefText by remember { mutableStateOf<String?>(null) }
-    var debriefLoading by remember { mutableStateOf(cloudConfigured) }
-
-    LaunchedEffect(Unit) {
-        if (!cloudConfigured) return@LaunchedEffect
-        debriefLoading = true
-        debriefText = CloudAiEngine.askDayEvaluation(
-            baseUrl       = cloudBaseUrl,
-            apiKey        = cloudApiKey,
-            modelName     = cloudModelName,
-            apiFormat     = cloudApiFormat,
-            dayName       = planDayName,
-            exerciseNames = exerciseNames,
-            goalMode      = goalMode,
-        )
-        debriefLoading = false
-    }
 
     // Fun comparison — pick highest threshold that doesn't exceed totalVolume (in kg)
     val funComparison = remember(totalVolume) {
@@ -1914,7 +2785,7 @@ private fun WorkoutCompletionSheet(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 24.dp, vertical = 20.dp)
                 .navigationBarsPadding(),
-            verticalArrangement = Arrangement.spacedBy(20.dp),
+            verticalArrangement = appSpacedBy(20.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             // ── Trophy icon in accent circle ────────────────────────────────
@@ -1934,7 +2805,7 @@ private fun WorkoutCompletionSheet(
             }
 
             // ── Eyebrow + title ─────────────────────────────────────────────
-            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = appSpacedBy(4.dp)) {
                 Text(
                     "SESSION COMPLETE",
                     color = c.accent,
@@ -1977,51 +2848,22 @@ private fun WorkoutCompletionSheet(
             }
 
             // ── AI Session Debrief ──────────────────────────────────────────
-            if (cloudConfigured) {
-                Column(
-                    Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(IronLogRadius.lg.dp))
-                        .background(c.accent.copy(alpha = 0.07f))
-                        .border(1.dp, c.accent.copy(alpha = 0.25f), RoundedCornerShape(IronLogRadius.lg.dp))
-                        .padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    Text(
-                        "AI SESSION DEBRIEF",
-                        color = c.accent,
-                        fontSize = IronLogType.eyebrow.fontSize.sp,
-                        fontWeight = FontWeight(IronLogType.eyebrow.fontWeight),
-                        letterSpacing = IronLogType.eyebrow.letterSpacing.sp,
-                    )
-                    if (debriefLoading) {
-                        Column(Modifier.shimmer(), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                            repeat(2) { idx ->
-                                Box(
-                                    Modifier
-                                        .fillMaxWidth(if (idx == 1) 0.7f else 1f)
-                                        .height(13.dp)
-                                        .clip(RoundedCornerShape(4.dp))
-                                        .background(c.faint)
-                                )
-                            }
-                        }
-                    } else {
-                        Text(
-                            debriefText ?: "No evaluation available.",
-                            color = c.text,
-                            fontSize = IronLogType.body.fontSize.sp,
-                            lineHeight = IronLogType.body.lineHeight.sp,
-                        )
-                    }
-                }
-            }
+            WorkoutCloudDebrief(
+                intelligenceMode = intelligenceMode,
+                configured = cloudConfigured,
+                requestKey = listOf(cloudBaseUrl, cloudApiKey, cloudModelName, cloudApiFormat,
+                    planDayName, exerciseNames, goalMode),
+                load = {
+                    CloudAiEngine.askDayEvaluation(cloudBaseUrl, cloudApiKey, cloudModelName,
+                        cloudApiFormat, planDayName, exerciseNames, goalMode)
+                },
+            )
 
             // ── Star rating ─────────────────────────────────────────────────
             Column(
                 Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = appSpacedBy(8.dp),
             ) {
                 Text(
                     "RATE THIS SESSION",
@@ -2030,7 +2872,7 @@ private fun WorkoutCompletionSheet(
                     fontWeight = FontWeight(IronLogType.eyebrow.fontWeight),
                     letterSpacing = IronLogType.eyebrow.letterSpacing.sp,
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                Row(horizontalArrangement = appSpacedBy(16.dp)) {
                     (1..5).forEach { star ->
                         Box(
                             Modifier
@@ -2097,7 +2939,7 @@ private fun WorkoutCompletionSheet(
                     )
                 },
             )
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(appGapDp(12.dp)))
         }
     }
 }
@@ -2105,7 +2947,7 @@ private fun WorkoutCompletionSheet(
 @Composable
 private fun CompletionStat(label: String, value: String) {
     val c = useTheme()
-    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = appSpacedBy(4.dp)) {
         Text(
             value,
             color = c.text,
@@ -2127,6 +2969,10 @@ private fun ExerciseCard(
     exercise: NormalizedSessionExercise,
     loggedSets: List<LoggedSet>,
     input: Pair<String, String>,
+    listState: LazyListState,
+    inputViewport: WorkoutInputViewport,
+    inputStructuralKey: Any,
+    preserveInputAnchor: Boolean,
     dispatch: (WorkoutAction) -> Unit,
     baseExercisesCount: Int = 0,
     onRemoveExercise: (() -> Unit)? = null,
@@ -2134,16 +2980,20 @@ private fun ExerciseCard(
     weightUnit: String,
     effortTracking: String,
     hapticFeedback: Boolean,
-    onSetRpeChanged: (setIndex: Int, rpe: Double?) -> Unit,
-    onSetRirChanged: (setIndex: Int, rir: Int?) -> Unit,
-    onSetTypeChanged: (setIndex: Int, type: String) -> Unit,
-    onSetValuesChanged: (setIndex: Int, weight: Double?, reps: Double?) -> Unit,
-    onInsertWarmups: (warmups: List<LoggedSet>) -> Unit,
+    onSetRpeChanged: (setId: String, rpe: Double?) -> Unit,
+    onSetRirChanged: (setId: String, rir: Int?) -> Unit,
+    onSetTypeChanged: (setId: String, type: String) -> Unit,
+    onSetValuesChanged: (setId: String, weight: Double?, reps: Double?) -> Unit,
+    onSetNoteChanged: (setId: String, note: String?) -> Unit,
+    onDeleteSet: (setId: String) -> Unit,
+    pendingWarmups: List<PendingWarmup>,
+    onLogWarmup: (PendingWarmup) -> Unit,
     onSwapRequest: () -> Unit,
     restSec: Int = 90,
     onEditRest: () -> Unit = {},
     ghost: com.ironlog.app.ui.state.GhostData? = null,
     exerciseNote: String = "",
+    showExerciseNotes: Boolean = true,
     supersetGroup: String? = null,
     onSupersetChange: (String?) -> Unit = {},
     isDragging: Boolean = false,
@@ -2151,6 +3001,7 @@ private fun ExerciseCard(
     activeProfile: GymProfileDto? = null,
     settingsBarWeightKg: Double = 20.0,
     targetOverride: com.ironlog.app.ui.state.TargetOverride? = null,  // GAP-23
+    progressionPolicy: ResolvedProgressionPolicy = ResolvedProgressionPolicy.conservativeDefault(),
 ) {
     val c = useTheme()
     val context = LocalContext.current
@@ -2164,6 +3015,7 @@ private fun ExerciseCard(
     var plateTarget by remember { mutableStateOf(0.0) }
     var showCopyModal by remember { mutableStateOf(false) }
     var showSupersetModal by remember { mutableStateOf(false) }
+    var showProgressionDetails by remember { mutableStateOf(false) }
     // GAP-23: target override dialog state
     var showTargetOverrideDialog by remember { mutableStateOf(false) }
     var overrideSetsInput by remember(targetOverride) { mutableStateOf(targetOverride?.sets?.toString() ?: exercise.sets.toString()) }
@@ -2176,7 +3028,7 @@ private fun ExerciseCard(
     }
 
     val plateText = remember(weight, weightUnit, activeProfile) {
-        val w = weight.toDoubleOrNull() ?: 0.0
+        val w = convertUnitToKg(weight.toDoubleOrNull() ?: 0.0, weightUnit)
         val barWeight = activeProfile?.barWeightKg ?: settingsBarWeightKg
         if (w > barWeight && supportsPlateBreakdown(exercise)) getPlateText(w, barWeight, activeProfile, weightUnit = weightUnit) else null
     }
@@ -2194,7 +3046,7 @@ private fun ExerciseCard(
                     .clip(RoundedCornerShape(2.dp))
                     .background(supColor),
             )
-            Spacer(Modifier.width(6.dp))
+            Spacer(Modifier.width(appGapDp(6.dp)))
         }
         Card(
             colors = CardDefaults.cardColors(containerColor = c.card),
@@ -2203,7 +3055,7 @@ private fun ExerciseCard(
             elevation = CardDefaults.cardElevation(defaultElevation = cardElevation),
             modifier = Modifier.weight(1f),
         ) {
-            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(Modifier.padding(14.dp), verticalArrangement = appSpacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
                     Icons.Outlined.DragHandle,
@@ -2211,7 +3063,7 @@ private fun ExerciseCard(
                     tint = c.muted,
                     modifier = dragHandleModifier.size(20.dp).padding(end = 0.dp),
                 )
-                Spacer(Modifier.width(8.dp))
+                Spacer(Modifier.width(appGapDp(8.dp)))
                 Column(
                     Modifier
                         .weight(1f)
@@ -2230,7 +3082,7 @@ private fun ExerciseCard(
                     )
                     // GAP-23: show override badge or normal target
                     if (targetOverride != null) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = appSpacedBy(4.dp)) {
                             Text(
                                 "${targetOverride.sets} × ${targetOverride.reps} · ${formatTrackingType(exercise.trackingType)}",
                                 color = c.warning,
@@ -2238,7 +3090,7 @@ private fun ExerciseCard(
                                 fontWeight = FontWeight.Medium,
                             )
                             Box(
-                                Modifier.clip(RoundedCornerShape(IronLogRadius.full.dp)).background(c.warning.copy(alpha = 0.15f)).padding(horizontal = 4.dp, vertical = 1.dp)
+                                Modifier.clip(RoundedCornerShape(IronLogRadius.full.dp)).background(c.warning.copy(alpha = 0.15f)).appPadding(horizontal = 4.dp, vertical = 1.dp)
                             ) {
                                 Text("CUSTOM", color = c.warning, fontSize = (IronLogType.meta.fontSize - 2).sp, fontWeight = FontWeight.Bold)
                             }
@@ -2253,11 +3105,11 @@ private fun ExerciseCard(
                     if (!supersetGroup.isNullOrBlank()) {
                         Box(
                             Modifier
-                                .padding(top = 4.dp)
+                                .appPadding(top = 4.dp)
                                 .clip(RoundedCornerShape(IronLogRadius.full.dp))
                                 .background(supColor.copy(alpha = 0.2f))
                                 .border(1.dp, supColor, RoundedCornerShape(IronLogRadius.full.dp))
-                                .padding(horizontal = 8.dp, vertical = 3.dp),
+                                .appPadding(horizontal = 8.dp, vertical = 3.dp),
                         ) {
                             Text(
                                 "SUPERSET $supersetGroup",
@@ -2274,7 +3126,7 @@ private fun ExerciseCard(
                     androidx.compose.material3.IconButton(onClick = { showExerciseMenu = true }) {
                         Icon(androidx.compose.material.icons.Icons.Filled.MoreVert, contentDescription = "Menu", tint = c.muted)
                     }
-                    androidx.compose.material3.DropdownMenu(showExerciseMenu, onDismissRequest = { showExerciseMenu = false }) {
+                    IronLogDropdownMenu(showExerciseMenu, onDismissRequest = { showExerciseMenu = false }) {
                         androidx.compose.material3.DropdownMenuItem(
                             text = { Text("Swap Exercise", color = c.text) },
                             onClick = { showExerciseMenu = false; onSwapRequest() }
@@ -2315,13 +3167,14 @@ private fun ExerciseCard(
                     setIndex = setIndex,
                     exIndex = exIndex,
                     dispatch = { action ->
-                        dispatch(action)
                         when (action) {
-                            is WorkoutAction.SetRpe -> onSetRpeChanged(setIndex, action.rpe)
-                            is WorkoutAction.SetRir -> onSetRirChanged(setIndex, action.rir)
-                            is WorkoutAction.SetType -> onSetTypeChanged(setIndex, action.type)
-                            is WorkoutAction.UpdateSet -> onSetValuesChanged(setIndex, action.weight, action.reps)
-                            else -> Unit
+                            is WorkoutAction.DeleteSet -> onDeleteSet(set.id)
+                            is WorkoutAction.SetRpe -> onSetRpeChanged(set.id, action.rpe)
+                            is WorkoutAction.SetRir -> onSetRirChanged(set.id, action.rir)
+                            is WorkoutAction.SetType -> onSetTypeChanged(set.id, action.type)
+                            is WorkoutAction.SetNote -> onSetNoteChanged(set.id, action.note)
+                            is WorkoutAction.UpdateSet -> onSetValuesChanged(set.id, action.weight, action.reps)
+                            else -> dispatch(action)
                         }
                     },
                     effortTracking = effortTracking,
@@ -2330,46 +3183,98 @@ private fun ExerciseCard(
                     trackingType = exercise.trackingType,
                 )
             }
-            if (!exercise.trackingType.startsWith("duration")) {
+            val supportsWarmups = exercise.trackingType == "weight_reps" && !exercise.isBodyweight
+            if (supportsWarmups) {
                 val hasWarmups = loggedSets.any { it.type == "warmup" }
-                val topWorking = (weight.toDoubleOrNull()
+                val displayTarget = weight.toDoubleOrNull()
+                val topWorkingKg = displayTarget?.let { convertUnitToKg(it, weightUnit) }
                     ?: loggedSets.lastOrNull { it.type != "warmup" }?.weight
-                    ?: 0.0)
+                    ?: 0.0
+                val generatedWarmups = remember(topWorkingKg, activeProfile?.barWeightKg, settingsBarWeightKg) {
+                    buildWarmupSets(topWorkingKg, activeProfile?.barWeightKg ?: settingsBarWeightKg)
+                }
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    horizontalArrangement = appSpacedBy(4.dp),
                     modifier = Modifier
-                        .clickable(enabled = !hasWarmups && topWorking > 40.0) {
-                            val warmups = buildWarmupSets(topWorking, activeProfile?.barWeightKg ?: settingsBarWeightKg)
-                            if (warmups.isNotEmpty()) {
-                                dispatch(WorkoutAction.InsertWarmups(exIndex, warmups))
-                                onInsertWarmups(warmups)
-                            }
+                        .clickable(enabled = !hasWarmups && pendingWarmups.isEmpty() && generatedWarmups.isNotEmpty()) {
+                            dispatch(
+                                WorkoutAction.QueueWarmups(
+                                    exIndex,
+                                    generatedWarmups.map { PendingWarmup(id = it.id, weightKg = it.weight, reps = it.reps.roundToInt()) },
+                                ),
+                            )
                         }
-                        .padding(vertical = 2.dp),
+                        .heightIn(min = 48.dp)
+                        .padding(vertical = 8.dp),
                 ) {
-                    Icon(Icons.Outlined.AddCircleOutline, contentDescription = null, tint = c.muted, modifier = Modifier.size(14.dp))
+                    Icon(Icons.Outlined.AddCircleOutline, contentDescription = "Warmup options", tint = if (generatedWarmups.isNotEmpty()) c.accent else c.subtext, modifier = Modifier.size(20.dp))
                     Text(
-                        if (hasWarmups) "Warmups inserted" else "+ Insert warmups",
-                        color = if (hasWarmups || topWorking <= 40.0) c.faint else c.muted,
-                        fontSize = IronLogType.meta.fontSize.sp,
+                        when {
+                            hasWarmups -> "Warmups logged"
+                            pendingWarmups.isNotEmpty() -> "Warmups ready to log"
+                            generatedWarmups.isEmpty() && topWorkingKg <= 0.0 -> "Enter a working weight for warmups"
+                            generatedWarmups.isEmpty() -> "No warmups needed for this load"
+                            else -> "+ Queue warmups"
+                        },
+                        color = if (generatedWarmups.isNotEmpty() && !hasWarmups) c.accent else c.subtext,
+                        fontSize = 12.sp,
                     )
                 }
+                pendingWarmups.firstOrNull()?.let { pending ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(c.info.copy(alpha = 0.10f), RoundedCornerShape(IronLogRadius.md.dp))
+                            .border(1.dp, c.info.copy(alpha = 0.35f), RoundedCornerShape(IronLogRadius.md.dp))
+                            .appPadding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = appSpacedBy(10.dp),
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text("NEXT WARMUP", color = c.info, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Text("${formatWeightFromKg(pending.weightKg, weightUnit)} × ${pending.reps}", color = c.text, fontWeight = FontWeight.Bold)
+                        }
+                        androidx.compose.material3.TextButton(onClick = { dispatch(WorkoutAction.SkipPendingWarmup(exIndex, pending.id)) }) {
+                            Text("SKIP", color = c.muted)
+                        }
+                        Button(onClick = { onLogWarmup(pending) }, colors = ButtonDefaults.buttonColors(containerColor = c.info)) {
+                            Text("LOG WARMUP", color = c.bg, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    androidx.compose.material3.TextButton(
+                        onClick = { dispatch(WorkoutAction.DismissPendingWarmups(exIndex)) },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                    ) {
+                        Text("DISMISS WARMUP QUEUE", color = c.subtext, fontSize = 12.sp)
+                    }
+                }
+            } else if (!exercise.trackingType.startsWith("duration")) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = appSpacedBy(6.dp),
+                ) {
+                    Icon(Icons.Outlined.AddCircleOutline, contentDescription = null, tint = c.subtext, modifier = Modifier.size(20.dp))
+                    Text("Warmup loading is not used for bodyweight movements", color = c.subtext, fontSize = 12.sp)
+                }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(horizontalArrangement = appSpacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 OutlinedTextField(
                     weight,
                     { weight = it; dispatch(WorkoutAction.SetInput(exIndex, weight = it)) },
-                    label = { Text(weightUnit.uppercase()) },
+                    label = { Text(if (exercise.isBodyweight) "ADDED ${weightUnit.uppercase()}" else weightUnit.uppercase()) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f)
+                        .preserveWorkoutInputAnchor(listState, inputStructuralKey, inputViewport, preserveInputAnchor),
                 )
                 OutlinedTextField(
                     reps,
                     { reps = it; dispatch(WorkoutAction.SetInput(exIndex, reps = it)) },
                     label = { Text(if (exercise.trackingType.startsWith("duration")) "SECONDS" else "REPS") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f)
+                        .preserveWorkoutInputAnchor(listState, inputStructuralKey, inputViewport, preserveInputAnchor),
                 )
                 Button(
                     onClick = {
@@ -2385,7 +3290,7 @@ private fun ExerciseCard(
                     color = c.muted,
                     fontSize = IronLogType.meta.fontSize.sp,
                     modifier = Modifier.clickable { 
-                        plateTarget = weight.toDoubleOrNull() ?: 0.0
+                        plateTarget = convertUnitToKg(weight.toDoubleOrNull() ?: 0.0, weightUnit)
                         showPlateModal = true 
                     }
                 )
@@ -2397,7 +3302,7 @@ private fun ExerciseCard(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        horizontalArrangement = appSpacedBy(6.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.weight(1f),
                     ) {
@@ -2410,7 +3315,7 @@ private fun ExerciseCard(
                         )
                         Text(
                             ghost.sets.take(3).joinToString("  ") { s ->
-                                if (s.weight > 0) "${s.weight.toInt()} × ${s.reps.toInt()}"
+                                if (s.weight > 0) "${formatWeightFromKg(s.weight, weightUnit)} × ${s.reps.toInt()}"
                                 else "BW × ${s.reps.toInt()}"
                             },
                             color = c.muted,
@@ -2429,46 +3334,107 @@ private fun ExerciseCard(
                     )
                 }
                 // Progression suggestion based on last session
-                val suggestion = buildProgressionSuggestion(ghost, weightUnit)
+                val progressionStep = if (supportsPlateBreakdown(exercise)) {
+                    com.ironlog.app.domain.intelligence.progressionBarbellStep(
+                        ghost.sets.firstOrNull { !it.type.equals("warmup", true) }?.weight ?: 0.0,
+                        activeProfile?.barWeightKg ?: settingsBarWeightKg,
+                        activeProfile?.plates ?: DEFAULT_PLATES,
+                    )
+                } else null
+                val suggestion = buildProgressionSuggestion(ghost, weightUnit, exercise.trackingType,
+                    targetOverride?.sets ?: exercise.sets, targetOverride?.reps ?: exercise.reps, progressionStep,
+                    progressionPolicy)
                 if (suggestion != null) {
                     Text(
-                        "↑ $suggestion",
-                        color = c.success.copy(alpha = 0.85f),
-                        fontSize = IronLogType.micro.fontSize.sp,
+                        suggestion,
+                        color = c.subtext,
+                        fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(top = 2.dp),
+                        modifier = Modifier.appPadding(top = 2.dp),
                     )
+                    Text(
+                        "${progressionPolicy.label} · ${progressionPolicy.source.label}",
+                        color = c.muted,
+                        fontSize = 12.sp,
+                    )
+                    androidx.compose.material3.TextButton(onClick = { showProgressionDetails = true }, modifier = Modifier.heightIn(min = 48.dp)) {
+                        Text("Why this suggestion?", fontSize = 12.sp)
+                    }
+                    if (showProgressionDetails) {
+                        val advice = com.ironlog.app.domain.intelligence.ProgressionRecommendationEngine.recommend(
+                            ghost.sets, exercise.trackingType, targetOverride?.sets ?: exercise.sets,
+                            targetOverride?.reps ?: exercise.reps,
+                            loadStepKg = progressionStep ?: if (weightUnit.lowercase().startsWith("lb")) 5.0 / 2.20462262185 else 2.5,
+                            sourceDate = ghost.date,
+                            policy = progressionPolicy,
+                        )
+                        androidx.compose.material3.AlertDialog(
+                            onDismissRequest = { showProgressionDetails = false }, containerColor = c.card,
+                            title = { Text("Progression evidence") },
+                            text = {
+                                Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = appSpacedBy(12.dp)) {
+                                    Text(advice?.reason.orEmpty())
+                                    Text("Evidence session: ${ghost.date?.let { com.ironlog.app.domain.gamification.parseHistoryLocalDate(it)?.toString() } ?: "last recorded session; date unavailable"}")
+                                    Text("Effort recorded: ${advice?.effortRecordedSets ?: 0} of ${advice?.workingSets ?: 0} working sets.")
+                                    if (progressionStep != null) Text(if (progressionStep > 0) "Smallest plate-pair increase: ${formatWeightFromKg(progressionStep, weightUnit)}." else "The current plate inventory cannot load a small increase; use rep progression or review the inventory.")
+                                    else Text("Suggested increment assumes standard equipment. Check the available load before using it.")
+                                    Text("Policy: ${progressionPolicy.label}.")
+                                    Text("Policy source: ${progressionPolicy.source.label}. ${progressionPolicy.source.description}")
+                                    val effortMargin = progressionPolicy.minimumEffortMargin.let { value ->
+                                        if (value % 1.0 == 0.0) value.toInt().toString() else value.toString()
+                                    }
+                                    val loadCapPercent = (progressionPolicy.maximumLoadIncreaseRatio * 100).let { value ->
+                                        if (value % 1.0 == 0.0) value.toInt().toString() else value.toString()
+                                    }
+                                    Text("Guardrails: at least $effortMargin reps in reserve (or RPE equivalent) across all working sets; one load increase is capped at $loadCapPercent%.")
+                                    Text(advice?.provenance.orEmpty(), fontSize = 12.sp, color = c.subtext)
+                                }
+                            },
+                            confirmButton = { androidx.compose.material3.TextButton(onClick = { showProgressionDetails = false }) { Text("Done") } },
+                        )
+                    }
                 }
             }
-            // Exercise note — tap to expand/add
-            if (noteExpanded) {
-                OutlinedTextField(
-                    value = localNote,
-                    onValueChange = { localNote = it; dispatch(WorkoutAction.SetExerciseNote(exIndex, it)) },
-                    label = { Text("Exercise note") },
-                    modifier = Modifier.fillMaxWidth(),
-                    maxLines = 3,
-                )
-            } else {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    modifier = Modifier.clickable { noteExpanded = true }.padding(top = 2.dp),
-                ) {
-                    Icon(Icons.Outlined.NoteAlt, contentDescription = null, tint = c.muted, modifier = Modifier.size(14.dp))
-                    Text(
-                        if (localNote.isBlank()) "Add note" else localNote,
-                        color = c.muted,
-                        fontSize = IronLogType.meta.fontSize.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
+            if (showExerciseNotes) {
+                ghost?.previousNote?.takeIf { it.isNotBlank() }?.let { previousNote ->
+                    Text("Previous session note", color = c.muted, fontSize = IronLogType.meta.fontSize.sp)
+                    Text(previousNote, color = c.text, fontSize = IronLogType.meta.fontSize.sp)
+                }
+                // Exercise note — tap to expand/add
+                if (noteExpanded) {
+                    OutlinedTextField(
+                        value = localNote,
+                        onValueChange = { localNote = it; dispatch(WorkoutAction.SetExerciseNote(exIndex, it)) },
+                        label = { Text("Exercise note") },
+                        modifier = Modifier.fillMaxWidth(),
+                        maxLines = 3,
                     )
+                } else {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = appSpacedBy(4.dp),
+                        modifier = Modifier.clickable { noteExpanded = true }.padding(top = 2.dp),
+                    ) {
+                        Icon(Icons.Outlined.NoteAlt, contentDescription = null, tint = c.muted, modifier = Modifier.size(14.dp))
+                        Text(
+                            if (localNote.isBlank()) "Add note" else localNote,
+                            color = c.muted,
+                            fontSize = IronLogType.meta.fontSize.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+                NextSessionNoteControl(exercise.exerciseId, localNote) {
+                    localNote = it
+                    dispatch(WorkoutAction.SetExerciseNote(exIndex, it))
+                    noteExpanded = true
                 }
             }
             // Rest timer display — tappable to override
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                horizontalArrangement = appSpacedBy(4.dp),
                 modifier = Modifier.clickable { onEditRest() }.padding(top = 2.dp),
             ) {
                 Icon(Icons.Outlined.Timer, contentDescription = null, tint = c.muted, modifier = Modifier.size(14.dp))
@@ -2521,9 +3487,9 @@ private fun ExerciseCard(
             onDismissRequest = { showTargetOverrideDialog = false },
             title = { Text("Change Target", color = c.text) },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(verticalArrangement = appSpacedBy(12.dp)) {
                     Text("Override sets × reps for this session only.", color = c.muted, fontSize = IronLogType.body.fontSize.sp)
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(horizontalArrangement = appSpacedBy(12.dp)) {
                         OutlinedTextField(
                             value = overrideSetsInput,
                             onValueChange = { overrideSetsInput = it.filter { ch -> ch.isDigit() } },
@@ -2589,7 +3555,7 @@ private fun CopyPreviousModal(
     val c = useTheme()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState, containerColor = c.card) {
-        Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Column(Modifier.appPadding(horizontal = 20.dp).appPadding(bottom = 24.dp), verticalArrangement = appSpacedBy(16.dp)) {
             Text(
                 "Copy Previous",
                 color = c.text,
@@ -2635,7 +3601,7 @@ private fun SupersetModal(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val options = listOf("" to "No superset", "A" to "Group A", "B" to "Group B", "C" to "Group C")
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState, containerColor = c.card) {
-        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(Modifier.appPadding(20.dp), verticalArrangement = appSpacedBy(12.dp)) {
             Text("Superset", color = c.text, fontWeight = FontWeight.Bold, fontSize = IronLogType.title.fontSize.sp)
             options.forEach { (value, label) ->
                 val isActive = (selected ?: "") == value
@@ -2660,7 +3626,7 @@ private fun SupersetModal(
                     if (isActive) Text("✓", color = color, fontWeight = FontWeight.Bold)
                 }
             }
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(appGapDp(12.dp)))
         }
     }
 }
@@ -2670,36 +3636,49 @@ private fun RestTimerPanel(
     restTimer: com.ironlog.app.ui.state.RestTimerState,
     modifier: Modifier,
     dispatch: (WorkoutAction) -> Unit,
-    onRestCleared: () -> Unit,
+    controlsEnabled: Boolean,
     hapticFeedback: Boolean,
 ) {
     val c = useTheme()
     val context = LocalContext.current
     if (!restTimer.active || restTimer.endTime == null) return
-    var remaining by remember(restTimer.endTime, restTimer.paused) { mutableStateOf(((restTimer.endTime - System.currentTimeMillis()) / 1000).coerceAtLeast(0).toInt()) }
-    var lastHapticSecond by remember(restTimer.endTime) { mutableStateOf(Int.MIN_VALUE) }
-    LaunchedEffect(restTimer.endTime, restTimer.paused) {
+    val currentBootCount = remember { WorkoutTimerClock.now(context).bootCount }
+    fun remainingMs(): Long {
+        if (restTimer.paused) return restTimer.pausedRemainingMs?.coerceAtLeast(0L) ?: 0L
+        return com.ironlog.app.services.WorkoutTimerDeadline(
+            wallEndMs = restTimer.endTime,
+            elapsedEndMs = restTimer.endElapsedTime ?: 0L,
+            bootCount = restTimer.bootCount,
+        ).remainingMs(WorkoutClockSnapshot(
+            wallTimeMs = System.currentTimeMillis(),
+            elapsedRealtimeMs = SystemClock.elapsedRealtime(),
+            bootCount = currentBootCount,
+        )).coerceAtLeast(0L)
+    }
+    var remaining by remember(
+        restTimer.endTime,
+        restTimer.endElapsedTime,
+        restTimer.bootCount,
+        restTimer.paused,
+        restTimer.pausedRemainingMs,
+    ) {
+        mutableStateOf(((remainingMs() + 999L) / 1_000L).toInt())
+    }
+    LaunchedEffect(
+        restTimer.endTime,
+        restTimer.endElapsedTime,
+        restTimer.bootCount,
+        restTimer.paused,
+        restTimer.pausedRemainingMs,
+    ) {
         while (restTimer.active && !restTimer.paused) {
-            remaining = ((restTimer.endTime - System.currentTimeMillis()) / 1000).coerceAtLeast(0).toInt()
-            if (hapticFeedback && remaining != lastHapticSecond) {
-                // Final 5-second countdown (existing behaviour) — increasingly intense.
-                when (remaining) {
-                    5 -> { HapticsEngine.strong(context);       lastHapticSecond = remaining }
-                    4 -> { HapticsEngine.mediumStrong(context); lastHapticSecond = remaining }
-                    3 -> { HapticsEngine.medium(context);       lastHapticSecond = remaining }
-                    2 -> { HapticsEngine.low(context);          lastHapticSecond = remaining }
-                    1 -> { HapticsEngine.strong(context);       lastHapticSecond = remaining }
-                    else -> {
-                        // 30-second milestone pulse — fires at 30s, 60s, 90s, ... remaining.
-                        // Skip the very start (remaining == total) so it doesn't fire instantly.
-                        if (remaining in 6..(restTimer.total - 1) && remaining % 30 == 0) {
-                            HapticsEngine.medium(context)
-                            lastHapticSecond = remaining
-                        }
-                    }
-                }
+            remaining = ((remainingMs() + 999L) / 1_000L).toInt()
+            if (remaining <= 0) {
+                // Do not cancel or rewrite the deadline here. The service posts exactly one
+                // completion alert, then compare-and-clears the persisted deadline.
+                dispatch(WorkoutAction.RestExpired)
+                break
             }
-            if (remaining <= 0) { dispatch(WorkoutAction.SkipRest); onRestCleared(); break }
             delay(500)
         }
     }
@@ -2708,7 +3687,7 @@ private fun RestTimerPanel(
             .fillMaxWidth()
             .background(c.card, RoundedCornerShape(IronLogRadius.lg.dp))
             .border(1.dp, c.cardBorder, RoundedCornerShape(IronLogRadius.lg.dp))
-            .padding(14.dp),
+            .appPadding(14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
@@ -2727,34 +3706,50 @@ private fun RestTimerPanel(
                 fontSizeSp = IronLogType.title.fontSize,
             )
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(horizontalArrangement = appSpacedBy(8.dp)) {
             Text(
                 "+30s",
-                color = c.text,
-                modifier = Modifier.clickable {
+                color = if (controlsEnabled) c.text else c.muted,
+                modifier = Modifier.clickable(enabled = controlsEnabled) {
                     if (hapticFeedback) HapticsEngine.selection(context)
                     dispatch(WorkoutAction.Add30s)
                 }.padding(8.dp),
             )
             Text(
                 if (restTimer.paused) "RESUME" else "PAUSE",
-                color = c.text,
-                modifier = Modifier.clickable {
+                color = if (controlsEnabled) c.text else c.muted,
+                modifier = Modifier.clickable(enabled = controlsEnabled) {
                     if (hapticFeedback) HapticsEngine.lightConfirm(context)
                     if (restTimer.paused) {
-                        val pausedAt = restTimer.pausedAt ?: System.currentTimeMillis()
-                        val pausedMs = System.currentTimeMillis() - pausedAt
-                        dispatch(WorkoutAction.ResumeRest((restTimer.endTime ?: System.currentTimeMillis()) + pausedMs))
-                    } else dispatch(WorkoutAction.PauseRest(System.currentTimeMillis()))
-                }.padding(8.dp),
+                        val now = WorkoutClockSnapshot(
+                            wallTimeMs = System.currentTimeMillis(),
+                            elapsedRealtimeMs = SystemClock.elapsedRealtime(),
+                            bootCount = currentBootCount,
+                        )
+                        val deadline = WorkoutTimerClock.deadlineAfter(
+                            now,
+                            restTimer.pausedRemainingMs?.coerceAtLeast(0L) ?: 0L,
+                        )
+                        dispatch(WorkoutAction.ResumeRest(
+                            newEndTime = deadline.wallEndMs,
+                            newEndElapsedTime = deadline.elapsedEndMs,
+                            bootCount = deadline.bootCount,
+                        ))
+                    } else {
+                        dispatch(WorkoutAction.PauseRest(
+                            pausedAt = System.currentTimeMillis(),
+                            remainingMs = remainingMs(),
+                        ))
+                    }
+                }.appPadding(8.dp),
             )
             Text(
                 "SKIP",
-                color = c.accent,
+                color = if (controlsEnabled) c.accent else c.muted,
                 fontWeight = FontWeight(IronLogType.button.fontWeight),
-                modifier = Modifier.clickable {
+                modifier = Modifier.clickable(enabled = controlsEnabled) {
                     if (hapticFeedback) HapticsEngine.mediumStrong(context)
-                    dispatch(WorkoutAction.SkipRest); onRestCleared()
+                    dispatch(WorkoutAction.SkipRest)
                 }.padding(8.dp),
             )
         }
@@ -2812,7 +3807,7 @@ private fun RollingTimerText(
     fontWeight: FontWeight,
     fontSizeSp: Int,
 ) {
-    Row(horizontalArrangement = Arrangement.spacedBy(0.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(horizontalArrangement = appSpacedBy(0.dp), verticalAlignment = Alignment.CenterVertically) {
         value.forEachIndexed { idx, ch ->
             AnimatedContent(
                 targetState = ch,
@@ -2852,7 +3847,14 @@ fun PlateModal(
         containerColor = c.bg,
         dragHandle = null
     ) {
-        Column(Modifier.fillMaxWidth().padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .navigationBarsPadding()
+                .padding(horizontal = 20.dp, vertical = 16.dp),
+            verticalArrangement = appSpacedBy(16.dp),
+        ) {
             // FIXED: 1
             Text("PLATE CALCULATOR", color = c.muted, fontSize = IronLogType.eyebrow.fontSize.sp, letterSpacing = IronLogType.eyebrow.letterSpacing.sp)
             Text(
@@ -2864,7 +3866,7 @@ fun PlateModal(
 
             if (!result.isValid) {
                 Text(
-                    "Cannot exactly load ${formatWeightFromKg(targetKg, weightUnit)} with available plates.",
+                    "Available plates reach ${formatWeightFromKg(result.achievedWeightKg, weightUnit)} · ${formatWeightFromKg(result.remainderKg, weightUnit)} short of the requested load.",
                     color = c.danger,
                     fontSize = IronLogType.body.fontSize.sp
                 )
@@ -2877,7 +3879,7 @@ fun PlateModal(
                     border = androidx.compose.foundation.BorderStroke(1.dp, c.cardBorder),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Column(Modifier.fillMaxWidth().appPadding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = appSpacedBy(4.dp)) {
                         Text("BARBELL VIEW", color = c.muted, fontSize = IronLogType.micro.fontSize.sp, letterSpacing = 2.sp)
                         BarbellDiagram(
                             platesPerSide = result.platesPerSide,   // List<PlateDto>
@@ -2893,7 +3895,7 @@ fun PlateModal(
                 border = androidx.compose.foundation.BorderStroke(1.dp, c.cardBorder),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(Modifier.fillMaxWidth().appPadding(16.dp), verticalArrangement = appSpacedBy(12.dp)) {
                     Text("BAR (${formatWeightFromKg(barWeight, weightUnit)})", color = c.muted, fontSize = IronLogType.eyebrow.fontSize.sp, letterSpacing = IronLogType.eyebrow.letterSpacing.sp)
 
                     if (result.platesPerSide.isEmpty()) {
@@ -2901,17 +3903,8 @@ fun PlateModal(
                     } else {
                         result.platesPerSide.forEach { p ->
                             val assignedHex = inventory.firstOrNull { kotlin.math.abs(it.weightKg - p.weightKg) < 0.001 }?.color.orEmpty()
-                            val defaultPlateColor = when {
-                                p.weightKg >= 20 -> Color(0xFFD32F2F)
-                                p.weightKg >= 15 -> Color(0xFF1976D2)
-                                p.weightKg >= 10 -> Color(0xFFFFB300)
-                                p.weightKg >= 5 -> Color(0xFF43A047)
-                                else -> Color(0xFF8E24AA)
-                            }
-                            val plateColor = if (assignedHex.isNotBlank()) {
-                                try { Color(android.graphics.Color.parseColor(assignedHex)) } catch (_: Exception) { defaultPlateColor }
-                            } else defaultPlateColor
-                            Column(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            val plateColor = plateFillColor(p.weightKg, assignedHex)
+                            Column(Modifier.fillMaxWidth().appPadding(vertical = 4.dp), verticalArrangement = appSpacedBy(6.dp)) {
                                 Row(
                                     Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -2931,6 +3924,7 @@ fun PlateModal(
                                         .height(24.dp)
                                         .clip(RoundedCornerShape(6.dp))
                                         .background(plateColor.copy(alpha = 0.85f))
+                                        .border(1.dp, c.text.copy(alpha = 0.35f), RoundedCornerShape(6.dp))
                                 )
                                 Text(
                                     "per side visual",
@@ -2950,7 +3944,7 @@ fun PlateModal(
             ) {
                 Text("DONE", color = c.bg, fontWeight = FontWeight.Black, letterSpacing = 2.sp)
             }
-            Spacer(Modifier.height(40.dp))
+            Spacer(Modifier.height(appGapDp(40.dp)))
         }
     }
 }
@@ -3046,7 +4040,9 @@ private fun ConfettiOverlay(
 }
 
 private fun normalizeSessionExercise(planEx: UiPlanExercise, lib: LegacyExerciseShape?): NormalizedSessionExercise {
-    val trackingType = lib?.trackingType ?: "weight_reps"
+    val isBodyweight = lib?.let(::isBodyweightExercise) == true
+    val rawTrackingType = lib?.trackingType ?: "weight_reps"
+    val trackingType = resolveSessionTrackingType(rawTrackingType, isBodyweight)
     return NormalizedSessionExercise(
         name = lib?.name ?: planEx.name.ifBlank { "Custom Exercise" },
         exerciseId = planEx.exerciseId.ifBlank { lib?.id ?: planEx.name },
@@ -3055,11 +4051,16 @@ private fun normalizeSessionExercise(planEx: UiPlanExercise, lib: LegacyExercise
         trackingType = trackingType,
         isWarmup = planEx.isWarmup,
         equipment = lib?.equipment,
+        isBodyweight = isBodyweight,
     )
 }
 
+internal fun resolveSessionTrackingType(rawTrackingType: String, isBodyweight: Boolean): String =
+    if (isBodyweight && rawTrackingType == "weight_reps") "bodyweight_plus_weight_reps" else rawTrackingType
+
 @Serializable
 private data class WorkoutDraftDto(
+    val version: Int = 3,
     val inputs: Map<String, WorkoutInputDto> = emptyMap(),
     val setLog: Map<String, List<LoggedSetDto>> = emptyMap(),
     val exerciseNotes: Map<String, String> = emptyMap(),
@@ -3067,10 +4068,18 @@ private data class WorkoutDraftDto(
     val restTimer: RestTimerDto = RestTimerDto(),
     val addedExercises: List<AddedExerciseDto> = emptyList(),
     val removedBaseExerciseIndices: List<Int> = emptyList(),
+    val targetOverrides: Map<String, TargetOverrideDto> = emptyMap(),
+    val pendingWarmups: Map<String, List<PendingWarmupDto>> = emptyMap(),
     val orderedIndices: List<Int> = emptyList(),
     /** Persists mid-workout exercise swaps so they survive minimize/resume. Key = exIndex (String). */
     val swappedExercises: Map<String, SwappedExerciseDto> = emptyMap(),
 )
+
+@Serializable
+private data class TargetOverrideDto(val sets: Int = 0, val reps: Int = 0)
+
+@Serializable
+private data class PendingWarmupDto(val id: String = "", val weightKg: Double = 0.0, val reps: Int = 0)
 
 /** Minimal snapshot of a swapped exercise — enough to rebuild the UI overlay after resume. */
 @Serializable
@@ -3102,9 +4111,12 @@ private data class LoggedSetDto(
 private data class RestTimerDto(
     val active: Boolean = false,
     val endTime: Long? = null,
+    val endElapsedTime: Long? = null,
+    val bootCount: Int = -1,
     val total: Int = 0,
     val paused: Boolean = false,
     val pausedAt: Long? = null,
+    val pausedRemainingMs: Long? = null,
     val triggerExIndex: Int? = null,
 )
 
@@ -3112,26 +4124,30 @@ private data class RestTimerDto(
  * Builds a short progression suggestion string based on the last session's ghost data.
  * Returns null if there's not enough data to make a suggestion.
  *
- * Logic:
- *  - If ghost sets have weight > 0: suggest the same reps at +2.5kg (or +5lb).
- *  - If bodyweight only: suggest +2 reps on the top set.
+ * The engine checks completed targets, tracking type and effort; weights remain in kg.
  */
-private fun buildProgressionSuggestion(
+internal fun buildProgressionSuggestion(
     ghost: com.ironlog.app.ui.state.GhostData,
     weightUnit: String,
+    trackingType: String = "weight_reps",
+    targetSets: Int = 0,
+    targetReps: Int = 0,
+    availableLoadStepKg: Double? = null,
+    policy: ResolvedProgressionPolicy = ResolvedProgressionPolicy.conservativeDefault(),
 ): String? {
-    val sets = ghost.sets.ifEmpty { return null }
     val isLb = weightUnit.lowercase().trimEnd('s') == "lb"
-    val increment = if (isLb) 5.0 else 2.5
-    val topSet = sets.maxByOrNull { it.weight }
-    return if (topSet != null && topSet.weight > 0) {
-        val suggested = topSet.weight + increment
-        val repStr = if (topSet.reps > 0) " × ${topSet.reps.toInt()}" else ""
-        java.lang.String.format(java.util.Locale.US, "%.1f $weightUnit$repStr", suggested)
-    } else {
-        // Bodyweight: suggest +2 reps on top set
-        val topReps = sets.maxOfOrNull { it.reps }?.toInt() ?: return null
-        "BW × ${topReps + 2} reps"
+    val advice = com.ironlog.app.domain.intelligence.ProgressionRecommendationEngine.recommend(
+        ghost.sets, trackingType, targetSets, targetReps,
+        loadStepKg = availableLoadStepKg ?: if (isLb) 5.0 / 2.20462262185 else 2.5,
+        sourceDate = ghost.date,
+        policy = policy,
+    ) ?: return null
+    return when (advice.action) {
+        com.ironlog.app.domain.intelligence.ProgressionAction.HOLD -> advice.reason
+        com.ironlog.app.domain.intelligence.ProgressionAction.ADD_LOAD ->
+            "Next option: ${formatWeightFromKg(advice.weightKg, if (isLb) "lbs" else "kg")} × ${advice.reps}. Keep technique and effort in reserve."
+        com.ironlog.app.domain.intelligence.ProgressionAction.ADD_REPS ->
+            "Next option: ${advice.reps} reps at the same load, if technique stays solid."
     }
 }
 
@@ -3148,7 +4164,7 @@ private fun plateFillColor(weightKg: Double, hexOverride: String): Color {
         weightKg >= 15.0 -> Color(0xFFF9A825)   // yellow
         weightKg >= 10.0 -> Color(0xFF2E7D32)   // green
         weightKg >= 5.0  -> Color(0xFFF5F5F5)   // white / light
-        weightKg >= 2.5  -> Color(0xFF212121)   // black
+        weightKg >= 2.5  -> Color(0xFF8E44EC)   // violet: visible on every IronLog surface
         else             -> Color(0xFFBDBDBD)   // chrome
     }
 }
@@ -3178,12 +4194,14 @@ private fun BarbellDiagram(
     Canvas(modifier = modifier) {
         val cx = size.width / 2f
         val cy = size.height / 2f
-        val barH        = 8f
-        val sleeveW     = 72f
-        val sleeveH     = 24f
-        val collarW     = 12f
-        val collarH     = 30f
-        val plateW      = 13f
+        val barH = 3.dp.toPx()
+        val sleeveW = 28.dp.toPx()
+        val sleeveH = 9.dp.toPx()
+        val collarW = 4.dp.toPx()
+        val collarH = 15.dp.toPx()
+        val availablePerSide = (size.width / 2f - sleeveW / 2f - collarW - 6.dp.toPx()).coerceAtLeast(1f)
+        val plateW = (availablePerSide / flatPlates.size.coerceAtLeast(1)).coerceIn(7.dp.toPx(), 13.dp.toPx())
+        val outlineWidth = 1.dp.toPx()
 
         // Bar (full width)
         drawRect(barColor, topLeft = Offset(0f, cy - barH / 2f), size = androidx.compose.ui.geometry.Size(size.width, barH))
@@ -3194,18 +4212,19 @@ private fun BarbellDiagram(
         // Plates — right side (stack outward from sleeve)
         var rightX = cx + sleeveW / 2f + collarW
         flatPlates.forEach { (wkg, col) ->
-            val pH = (wkg.toFloat() * 2.4f).coerceIn(18f, 62f)
-            drawRect(col, topLeft = Offset(rightX, cy - pH / 2f), size = androidx.compose.ui.geometry.Size(plateW - 1f, pH))
-            drawRect(col.copy(alpha = 0.35f), topLeft = Offset(rightX, cy - pH / 2f), size = androidx.compose.ui.geometry.Size(plateW - 1f, pH), style = Stroke(1f))
+            val pH = (size.height * (0.36f + (wkg / 25.0).toFloat() * 0.54f)).coerceIn(28.dp.toPx(), size.height * 0.92f)
+            drawRect(col, topLeft = Offset(rightX, cy - pH / 2f), size = androidx.compose.ui.geometry.Size(plateW - outlineWidth, pH))
+            drawRect(c.text.copy(alpha = 0.55f), topLeft = Offset(rightX, cy - pH / 2f), size = androidx.compose.ui.geometry.Size(plateW - outlineWidth, pH), style = Stroke(outlineWidth))
             rightX += plateW
         }
 
         // Plates — left side (mirror; heaviest still closest to sleeve)
         var leftX = cx - sleeveW / 2f - collarW
         flatPlates.forEach { (wkg, col) ->
-            val pH = (wkg.toFloat() * 2.4f).coerceIn(18f, 62f)
+            val pH = (size.height * (0.36f + (wkg / 25.0).toFloat() * 0.54f)).coerceIn(28.dp.toPx(), size.height * 0.92f)
             leftX -= plateW
-            drawRect(col, topLeft = Offset(leftX + 1f, cy - pH / 2f), size = androidx.compose.ui.geometry.Size(plateW - 1f, pH))
+            drawRect(col, topLeft = Offset(leftX + outlineWidth, cy - pH / 2f), size = androidx.compose.ui.geometry.Size(plateW - outlineWidth, pH))
+            drawRect(c.text.copy(alpha = 0.55f), topLeft = Offset(leftX + outlineWidth, cy - pH / 2f), size = androidx.compose.ui.geometry.Size(plateW - outlineWidth, pH), style = Stroke(outlineWidth))
         }
 
         // Collars (drawn on top of plates so they're always visible)
@@ -3227,8 +4246,8 @@ private data class AddedExerciseDto(
 
 @Composable
 private fun ActiveWorkoutRollingTimerText(vm: ActiveWorkoutViewModel, c: IronLogThemeTokens) {
-    val elapsedSeconds by vm.elapsedSeconds.collectAsState()
-    val timerStarted by vm.timerStarted.collectAsState()
+    val elapsedSeconds by vm.elapsedSeconds.collectAsStateWithLifecycle()
+    val timerStarted by vm.timerStarted.collectAsStateWithLifecycle()
     RollingTimerText(
         value = if (timerStarted) formatDurationShort(elapsedSeconds) else "--:--",
         color = c.accent,

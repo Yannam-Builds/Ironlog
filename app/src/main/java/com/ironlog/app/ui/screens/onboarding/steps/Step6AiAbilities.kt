@@ -1,5 +1,8 @@
 package com.ironlog.app.ui.screens.onboarding.steps
 
+import com.ironlog.app.ui.theme.appGapDp
+import com.ironlog.app.ui.theme.appPadding
+import com.ironlog.app.ui.theme.appSpacedBy
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.BorderStroke
@@ -35,7 +38,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
+import com.ironlog.app.ui.theme.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -101,7 +104,7 @@ fun Step6AiAbilities(
             .fillMaxSize()
             .background(OnboardingConfig.bgDark)
             .verticalScroll(rememberScrollState())
-            .padding(start = 24.dp, top = 32.dp, end = 24.dp, bottom = 64.dp),
+            .appPadding(start = 24.dp, top = 32.dp, end = 24.dp, bottom = 64.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         OnboardingPageHeader(
@@ -110,7 +113,7 @@ fun Step6AiAbilities(
             body = "Recovery, suggestions and gamification work without an account or API key. Cloud AI is only for richer plan generation and review.",
         )
 
-        Spacer(Modifier.height(22.dp))
+        Spacer(Modifier.height(appGapDp(22.dp)))
         Surface(
             color = OnboardingConfig.surfaceDark,
             shape = RoundedCornerShape(24.dp),
@@ -118,18 +121,18 @@ fun Step6AiAbilities(
         ) {
             Column(Modifier.padding(18.dp)) {
                 Text("Local coaching is active", color = OnboardingConfig.accentGold, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold)
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(appGapDp(8.dp)))
                 Text("Recovery scoring, workout suggestions, and effort tracking stay on-device.", color = OnboardingConfig.textMuted, fontSize = 13.sp, lineHeight = 19.sp)
             }
         }
 
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(appGapDp(14.dp)))
         SetupReward("Local coaching already includes readiness, progression and workout feedback", Modifier.fillMaxWidth())
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(appGapDp(14.dp)))
         GlowButton(text = "Continue with local coaching", onClick = onSkip)
-        Spacer(Modifier.height(18.dp))
-        Text("OPTIONAL CLOUD SETUP", color = OnboardingConfig.textFaint, fontSize = 10.sp, fontWeight = FontWeight.Black, letterSpacing = 1.4.sp)
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(appGapDp(18.dp)))
+        Text("OPTIONAL CLOUD SETUP", color = OnboardingConfig.textFaint, fontSize = 12.sp, fontWeight = FontWeight.Black, letterSpacing = 1.4.sp)
+        Spacer(Modifier.height(appGapDp(10.dp)))
         Surface(
             color = OnboardingConfig.surfaceDark,
             shape = RoundedCornerShape(24.dp),
@@ -138,12 +141,12 @@ fun Step6AiAbilities(
         ) {
             Column(Modifier.padding(18.dp)) {
                 Text("Cloud AI", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Black)
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(appGapDp(4.dp)))
                 Text("Choose a provider and model you already have access to. Your key is stored securely on this device.", color = OnboardingConfig.textMuted, fontSize = 13.sp, lineHeight = 18.sp)
 
-                Spacer(Modifier.height(18.dp))
+                Spacer(Modifier.height(appGapDp(18.dp)))
                 Text("Provider", color = OnboardingConfig.textMuted, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(appGapDp(8.dp)))
                 OutlinedButton(
                     onClick = { showProviderSheet = true },
                     modifier = Modifier.fillMaxWidth(),
@@ -161,11 +164,11 @@ fun Step6AiAbilities(
                     }
                 }
 
-                Spacer(Modifier.height(14.dp))
+                Spacer(Modifier.height(appGapDp(14.dp)))
                 LabeledField(label = "Base URL", value = provider.baseUrl.ifBlank { "Set in Settings after onboarding" })
 
                 if (provider == OnboardingConfig.AiProvider.GEMINI) {
-                    Spacer(Modifier.height(10.dp))
+                    Spacer(Modifier.height(appGapDp(10.dp)))
                     Text(
                         "Get Gemini API key ->",
                         color = OnboardingConfig.accentBlue,
@@ -176,9 +179,9 @@ fun Step6AiAbilities(
                     )
                 }
 
-                Spacer(Modifier.height(14.dp))
+                Spacer(Modifier.height(appGapDp(14.dp)))
                 Text("API key", color = OnboardingConfig.textMuted, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(appGapDp(6.dp)))
                 OutlinedTextField(
                     value = cloudApiKey,
                     onValueChange = onApiKeyChange,
@@ -198,8 +201,8 @@ fun Step6AiAbilities(
                     modifier = Modifier.fillMaxWidth(),
                 )
 
-                Spacer(Modifier.height(12.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                Spacer(Modifier.height(appGapDp(12.dp)))
+                Row(horizontalArrangement = appSpacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                 OutlinedButton(
                         onClick = {
                             remoteModels = presetModels.map { it.modelId }
@@ -239,9 +242,9 @@ fun Step6AiAbilities(
                     }
                 }
 
-                Spacer(Modifier.height(14.dp))
+                Spacer(Modifier.height(appGapDp(14.dp)))
                 Text("Model", color = OnboardingConfig.textMuted, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(appGapDp(6.dp)))
                 OutlinedButton(
                     onClick = {
                         remoteModels = (remoteModels + presetModels.map { it.modelId }).distinct()
@@ -264,18 +267,18 @@ fun Step6AiAbilities(
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f),
                         )
-                        Spacer(Modifier.width(12.dp))
+                        Spacer(Modifier.width(appGapDp(12.dp)))
                         Text("Change", color = OnboardingConfig.accentBlue, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
                 }
 
                 status?.let {
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(Modifier.height(appGapDp(12.dp)))
                     Text(it, color = if (it.startsWith("Loaded") || it.startsWith("Verified")) OnboardingConfig.grantedColor else OnboardingConfig.deniedColor, fontSize = 13.sp)
                 }
 
-                Spacer(Modifier.height(16.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                Spacer(Modifier.height(appGapDp(16.dp)))
+                Row(horizontalArrangement = appSpacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                     OutlinedButton(
                         onClick = {
                             scope.launch {
@@ -302,10 +305,10 @@ fun Step6AiAbilities(
         }
 
         if (cloudApiKey.isNotBlank()) {
-            Spacer(Modifier.height(18.dp))
+            Spacer(Modifier.height(appGapDp(18.dp)))
             GlowButton(text = "Save cloud setup", onClick = onNext)
         }
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(appGapDp(24.dp)))
     }
 
     if (showModelSheet) {
@@ -320,7 +323,7 @@ fun Step6AiAbilities(
                     .fillMaxWidth()
                     .height(360.dp)
                     .padding(horizontal = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = appSpacedBy(8.dp),
             ) {
                 items(modelOptions) { model ->
                     Surface(
@@ -338,7 +341,7 @@ fun Step6AiAbilities(
                     }
                 }
             }
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(appGapDp(24.dp)))
         }
     }
 
@@ -353,11 +356,11 @@ fun Step6AiAbilities(
                 color = Color.White,
                 fontSize = 22.sp,
                 fontWeight = FontWeight.Black,
-                modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
+                modifier = Modifier.appPadding(horizontal = 24.dp, vertical = 12.dp),
             )
             Column(
-                modifier = Modifier.padding(horizontal = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.appPadding(horizontal = 16.dp),
+                verticalArrangement = appSpacedBy(8.dp),
             ) {
                 OnboardingConfig.AiProvider.entries.forEach { item ->
                     Surface(
@@ -377,7 +380,7 @@ fun Step6AiAbilities(
                     }
                 }
             }
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(appGapDp(24.dp)))
         }
     }
 }
@@ -385,7 +388,7 @@ fun Step6AiAbilities(
 @Composable
 private fun LabeledField(label: String, value: String) {
     Text(label, color = OnboardingConfig.textMuted, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-    Spacer(Modifier.height(6.dp))
+    Spacer(Modifier.height(appGapDp(6.dp)))
     Surface(
         color = OnboardingConfig.bgDark.copy(alpha = 0.55f),
         shape = RoundedCornerShape(16.dp),

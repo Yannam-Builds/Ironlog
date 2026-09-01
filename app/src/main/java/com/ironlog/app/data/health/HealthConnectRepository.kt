@@ -1,30 +1,28 @@
-// app/src/main/java/com/ironlog/app/data/health/HealthConnectRepository.kt
 package com.ironlog.app.data.health
 
 import android.content.Context
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.permission.HealthPermission
-import androidx.health.connect.client.records.ExerciseSessionRecord
 import androidx.health.connect.client.records.HeartRateVariabilityRmssdRecord
 import androidx.health.connect.client.records.RestingHeartRateRecord
 import androidx.health.connect.client.records.SleepSessionRecord
-import androidx.health.connect.client.records.WeightRecord
-import androidx.health.connect.client.records.metadata.Metadata
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
-import androidx.health.connect.client.units.Mass
-import com.ironlog.app.ui.model.HistoryEntry
-import timber.log.Timber
 import java.time.Duration
 import java.time.Instant
-import java.time.LocalDate
-import java.time.ZoneId
+import timber.log.Timber
+
+internal fun canReadAnyHealthContext(
+    grantedPermissions: Set<String>,
+    supportedReadPermissions: Set<String>,
+): Boolean = grantedPermissions.any(supportedReadPermissions::contains)
 
 /**
- * Wraps the Health Connect client for IronLog read/write operations.
+ * Wraps the read-only Health Connect context supported by this build.
  *
- * All public methods are suspend functions and must be called from a coroutine.
- * Callers should check [isAvailable] before calling any other method.
+ * IronLog displays recent sleep, resting heart rate, and HRV values in Settings. Those records do
+ * not alter recovery/readiness calculations because the app does not yet maintain the personal
+ * baselines and measurement-quality metadata needed to interpret them responsibly.
  */
 class HealthConnectRepository(private val context: Context) {
 
@@ -38,19 +36,14 @@ class HealthConnectRepository(private val context: Context) {
     fun isAvailable(): Boolean =
         HealthConnectClient.getSdkStatus(context) == HealthConnectClient.SDK_AVAILABLE
 
-    /** The permission set IronLog requests from Health Connect. */
-    val writePermissions: Set<String> = setOf(
-        HealthPermission.getWritePermission(ExerciseSessionRecord::class),
-        HealthPermission.getWritePermission(WeightRecord::class),
-    )
-
+    /** Every permission requested by this build has an immediate read consumer. */
     val readPermissions: Set<String> = setOf(
         HealthPermission.getReadPermission(SleepSessionRecord::class),
         HealthPermission.getReadPermission(RestingHeartRateRecord::class),
         HealthPermission.getReadPermission(HeartRateVariabilityRmssdRecord::class),
     )
 
-    val requiredPermissions: Set<String> = writePermissions + readPermissions
+    val requiredPermissions: Set<String> = readPermissions
 
     /** Returns which of [requiredPermissions] have been granted. */
     suspend fun grantedPermissions(): Set<String> {
@@ -58,61 +51,13 @@ class HealthConnectRepository(private val context: Context) {
         return c.permissionController.getGrantedPermissions()
     }
 
-    /** Returns true if all required permissions are granted. */
+    /** Returns true if all read permissions used by this build are granted. */
     suspend fun hasAllPermissions(): Boolean =
         grantedPermissions().containsAll(requiredPermissions)
 
-    // ── Write ─────────────────────────────────────────────────────────────
-
     /**
-     * Write a completed workout session from a [HistoryEntry] to Health Connect.
-     * No-op if Health Connect is unavailable or permissions are missing.
-     */
-    suspend fun writeWorkoutSession(entry: HistoryEntry) {
-        val c = client ?: return
-        runCatching {
-            val date = LocalDate.parse(entry.date.take(10))
-            val zone = ZoneId.systemDefault()
-            val start = date.atStartOfDay(zone).toInstant()
-            val end = start.plusSeconds(entry.duration.toLong().coerceAtLeast(60))
-
-            val record = ExerciseSessionRecord(
-                startTime = start,
-                startZoneOffset = zone.rules.getOffset(start),
-                endTime = end,
-                endZoneOffset = zone.rules.getOffset(end),
-                exerciseType = ExerciseSessionRecord.EXERCISE_TYPE_STRENGTH_TRAINING,
-                title = entry.name,
-                metadata = Metadata(),
-            )
-            c.insertRecords(listOf(record))
-        }.onFailure { Timber.e(it, "HealthConnect: writeWorkoutSession failed") }
-    }
-
-    /**
-     * Write the user's body weight to Health Connect.
-     * @param weightKg Weight in kilograms.
-     */
-    suspend fun writeWeight(weightKg: Double) {
-        val c = client ?: return
-        runCatching {
-            val now = Instant.now()
-            val zone = ZoneId.systemDefault()
-            val record = WeightRecord(
-                time = now,
-                zoneOffset = zone.rules.getOffset(now),
-                weight = Mass.kilograms(weightKg),
-                metadata = Metadata(),
-            )
-            c.insertRecords(listOf(record))
-        }.onFailure { Timber.e(it, "HealthConnect: writeWeight failed") }
-    }
-
-    // ── Read ──────────────────────────────────────────────────────────────
-
-    /**
-     * Read a [BiometricSnapshot] for the last 36 hours.
-     * Returns a snapshot with null fields where data is unavailable.
+     * Read recent raw context for display. Missing, invalid, or inaccessible fields stay null.
+     * No value returned here is interpreted as a clinical or training-readiness score.
      */
     suspend fun readBiometricSnapshot(): BiometricSnapshot {
         val c = client ?: return BiometricSnapshot()
@@ -123,34 +68,34 @@ class HealthConnectRepository(private val context: Context) {
 
         val sleepHours: Double? = runCatching {
             val result = c.readRecords(
-                ReadRecordsRequest(SleepSessionRecord::class, timeRange)
+                ReadRecordsRequest(SleepSessionRecord::class, timeRange),
             )
-            result.records.lastOrNull()?.let { session ->
+            result.records.maxByOrNull { it.endTime }?.let { session ->
                 Duration.between(session.startTime, session.endTime).toMinutes() / 60.0
             }
         }.onFailure { Timber.w(it, "HealthConnect: readBiometricSnapshot sleepHours failed") }
-         .getOrNull()
+            .getOrNull()
 
         val restingHr: Long? = runCatching {
             val result = c.readRecords(
-                ReadRecordsRequest(RestingHeartRateRecord::class, timeRange)
+                ReadRecordsRequest(RestingHeartRateRecord::class, timeRange),
             )
-            result.records.lastOrNull()?.beatsPerMinute
+            result.records.maxByOrNull { it.time }?.beatsPerMinute
         }.onFailure { Timber.w(it, "HealthConnect: readBiometricSnapshot restingHr failed") }
-         .getOrNull()
+            .getOrNull()
 
         val hrv: Double? = runCatching {
             val result = c.readRecords(
-                ReadRecordsRequest(HeartRateVariabilityRmssdRecord::class, timeRange)
+                ReadRecordsRequest(HeartRateVariabilityRmssdRecord::class, timeRange),
             )
-            result.records.lastOrNull()?.heartRateVariabilityMillis
+            result.records.maxByOrNull { it.time }?.heartRateVariabilityMillis
         }.onFailure { Timber.w(it, "HealthConnect: readBiometricSnapshot hrv failed") }
-         .getOrNull()
+            .getOrNull()
 
         return BiometricSnapshot(
             sleepHours = sleepHours,
             restingHrBpm = restingHr,
             hrvRmssd = hrv,
-        )
+        ).validatedForDisplay()
     }
 }

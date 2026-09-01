@@ -2,27 +2,33 @@ package com.ironlog.app.services
 
 import android.content.Context
 import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.Operation
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeout
 import java.util.Calendar
+import java.util.concurrent.Executor
 import java.util.concurrent.TimeUnit
 
 object BackupScheduler {
     private const val BACKUP_WORK_NAME = "ironlog_auto_backup"
 
-    fun scheduleDaily(context: Context, hour: Int, minute: Int) {
+    suspend fun scheduleDaily(context: Context, hour: Int, minute: Int) {
         val req = PeriodicWorkRequestBuilder<BackupWorker>(24, TimeUnit.HOURS)
             .setInitialDelay(initialDelay(hour, minute), TimeUnit.MILLISECONDS)
             .build()
-        WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+        val workManager = WorkManager.getInstance(context)
+        awaitOperation(workManager.enqueueUniquePeriodicWork(
             BACKUP_WORK_NAME,
             ExistingPeriodicWorkPolicy.UPDATE,
             req,
-        )
+        ))
     }
 
-    fun cancel(context: Context) {
-        WorkManager.getInstance(context).cancelUniqueWork(BACKUP_WORK_NAME)
+    suspend fun cancel(context: Context) {
+        val workManager = WorkManager.getInstance(context)
+        awaitOperation(workManager.cancelUniqueWork(BACKUP_WORK_NAME))
     }
 
     private fun initialDelay(hour: Int, minute: Int): Long {
@@ -36,4 +42,27 @@ object BackupScheduler {
         }
         return (next.timeInMillis - now.timeInMillis).coerceAtLeast(60_000L)
     }
+
+    private suspend fun awaitOperation(operation: Operation) {
+        withTimeout(WORK_MANAGER_OPERATION_TIMEOUT_MS) {
+            suspendCancellableCoroutine { continuation ->
+                val future = operation.result
+                future.addListener(
+                    {
+                        if (continuation.isActive) {
+                            continuation.resumeWith(runCatching {
+                                future.get()
+                                Unit
+                            })
+                        }
+                    },
+                    DIRECT_EXECUTOR,
+                )
+                continuation.invokeOnCancellation { future.cancel(true) }
+            }
+        }
+    }
+
+    private val DIRECT_EXECUTOR = Executor { command -> command.run() }
+    private const val WORK_MANAGER_OPERATION_TIMEOUT_MS = 10_000L
 }

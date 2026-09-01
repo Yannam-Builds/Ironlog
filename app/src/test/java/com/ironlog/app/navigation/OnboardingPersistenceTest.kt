@@ -1,6 +1,11 @@
 package com.ironlog.app.navigation
 
 import com.ironlog.app.data.objectbox.AthleteCalibrationEntity
+import com.ironlog.app.domain.intelligence.INTELLIGENCE_MODE_BUILTIN
+import com.ironlog.app.domain.intelligence.INTELLIGENCE_MODE_CLOUD_AI
+import com.ironlog.app.domain.intelligence.INTELLIGENCE_MODE_GEMINI_NANO
+import com.ironlog.app.domain.intelligence.TrainingDayPreferences
+import com.ironlog.app.domain.intelligence.canonicalIntelligenceMode
 import com.ironlog.app.ui.screens.onboarding.OnboardingDraft
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -16,6 +21,28 @@ class OnboardingPersistenceTest {
         assertEquals("conservative", canonicalProgressionStyle("LINEAR"))
         assertEquals("balanced", canonicalProgressionStyle("DOUBLE_PROGRESSION"))
         assertEquals("aggressive", canonicalProgressionStyle("UNDULATING"))
+        assertEquals(INTELLIGENCE_MODE_BUILTIN, canonicalIntelligenceMode("LOCAL"))
+        assertEquals(INTELLIGENCE_MODE_CLOUD_AI, canonicalIntelligenceMode("AUTO"))
+        assertEquals(INTELLIGENCE_MODE_GEMINI_NANO, canonicalIntelligenceMode("gemini_nano"))
+    }
+
+    @Test
+    fun `onboarding cloud selection and exact weekdays survive settings json round trip`() {
+        val merged = mergeOnboardingSettingsJson(
+            existingRaw = "{\"theme\":\"Dark\"}",
+            draft = OnboardingDraft(
+                intelligenceMode = "AUTO",
+                weeklyGoalDays = 3,
+                selectedDayIndices = setOf(1, 3, 5),
+            ),
+        )
+
+        assertEquals("Dark", merged.getString("theme"))
+        assertEquals(INTELLIGENCE_MODE_CLOUD_AI, merged.getString("intelligenceMode"))
+        assertEquals(
+            setOf(1, 3, 5),
+            TrainingDayPreferences.readFromSettings(merged, fallbackCount = 3),
+        )
     }
 
     @Test
@@ -68,5 +95,15 @@ class OnboardingPersistenceTest {
         assertEquals("570", baselineSettings["baseline_mile_run_seconds"])
         assertEquals("true", baselineSettings["baseline_has_past_training"])
         assertEquals("true", baselineSettings["baseline_has_gym_access"])
+        assertEquals("false", baselineSettings["notifications_enabled"])
+    }
+
+    @Test
+    fun `notification permission choice is persisted with onboarding`() {
+        val granted = onboardingBaselineSettingsFromDraft(OnboardingDraft(notificationsGranted = true))
+        val skipped = onboardingBaselineSettingsFromDraft(OnboardingDraft(notificationsGranted = false))
+
+        assertEquals("true", granted["notifications_enabled"])
+        assertEquals("false", skipped["notifications_enabled"])
     }
 }

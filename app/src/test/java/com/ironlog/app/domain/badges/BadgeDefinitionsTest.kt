@@ -35,9 +35,9 @@ class BadgeDefinitionsTest {
         assertTrue("streak_3" in BadgeDefinitions.evaluate(stats))
     }
 
-    @Test fun `s_rank badge unlocks only for S rank`() {
+    @Test fun `legacy s rank duplicate is not emitted because grades are canonical milestones`() {
         assertFalse("s_rank" in BadgeDefinitions.evaluate(AppStats(currentRank = "A")))
-        assertTrue("s_rank" in BadgeDefinitions.evaluate(AppStats(currentRank = "S")))
+        assertFalse("s_rank" in BadgeDefinitions.evaluate(AppStats(currentRank = "S")))
     }
 
     @Test fun `evaluate returns correct set for multiple stats`() {

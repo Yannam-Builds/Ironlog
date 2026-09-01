@@ -1,5 +1,8 @@
 ﻿package com.ironlog.app.ui.screens.body
 
+import com.ironlog.app.ui.theme.appGapDp
+import com.ironlog.app.ui.theme.appPadding
+import com.ironlog.app.ui.theme.appSpacedBy
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -10,6 +13,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
+import com.ironlog.app.ui.theme.Text
+import com.ironlog.app.ui.theme.rememberTypographyPaint
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,8 +48,29 @@ private data class PlotPad(val top: Float = 20f, val right: Float = 30f, val bot
 private val PLOT = PlotPad()
 
 data class SummaryCard(val id: String, val label: String, val value: String, val raw: Double?)
-fun formatWeightValue(value: Double?, unit: String): String = if (value == null || !value.isFinite()) "--" else java.lang.String.format(Locale.US, "%.1f %s", value, unit)
-fun formatSigned(value: Double?, unit: String): String = if (value == null || !value.isFinite()) "--" else "${if (value > 0) "+" else ""}${java.lang.String.format(Locale.US, "%.1f %s", value, unit)}"
+private fun canonicalBodyWeightUnit(unit: String): String {
+    val normalized = unit.trim().lowercase(Locale.US)
+    return if (normalized == "lb" || normalized == "lbs") "lbs" else "kg"
+}
+
+/** Converts a user-entered display value into the canonical kilograms used by persistence. */
+fun bodyWeightInputToKg(value: Double?, unit: String): Double? =
+    value?.takeIf { it.isFinite() }?.let { convertUnitToKg(it, canonicalBodyWeightUnit(unit), decimals = 3) }
+
+/** Converts canonical kilograms back to a stable one-decimal value for editable fields. */
+fun bodyWeightInputTextFromKg(valueKg: Double?, unit: String): String {
+    if (valueKg == null || !valueKg.isFinite()) return ""
+    val displayValue = convertKgToUnit(valueKg, canonicalBodyWeightUnit(unit), decimals = 1)
+    return java.lang.String.format(Locale.US, "%.1f", displayValue)
+}
+
+fun formatWeightValue(valueKg: Double?, unit: String): String =
+    if (valueKg == null || !valueKg.isFinite()) "--"
+    else formatWeightFromKg(valueKg, canonicalBodyWeightUnit(unit))
+
+fun formatSigned(valueKg: Double?, unit: String): String =
+    if (valueKg == null || !valueKg.isFinite()) "--"
+    else "${if (valueKg > 0) "+" else ""}${formatWeightFromKg(valueKg, canonicalBodyWeightUnit(unit))}"
 fun computeMovingAverage(entries: List<NormalizedBodyWeightEntry>, windowDays: Int = 7): List<Double> = entries.mapIndexed { i, entry ->
     val cutoff = entry.timestamp - windowDays * 24L * 60L * 60L * 1000L
     val window = entries.take(i + 1).filter { it.timestamp >= cutoff }
@@ -73,7 +99,7 @@ fun BodyWeightScreen(
     val colors = useTheme()
     val context = LocalContext.current
     var weightInput by remember { mutableStateOf("") }
-    var goalInput by remember { mutableStateOf(goalWeight?.let { java.lang.String.format(Locale.US, "%.1f", it) } ?: "") }
+    var goalInput by remember { mutableStateOf(bodyWeightInputTextFromKg(goalWeight, weightUnit)) }
     var range by remember { mutableStateOf("30D") }
     var error by remember { mutableStateOf<String?>(null) }
     val allEntriesAsc = remember(bodyWeight) { normalizeBodyWeightEntries(bodyWeight.map { RawBodyWeightEntry(it.id, it.weight, it.date) }) }
@@ -93,8 +119,8 @@ fun BodyWeightScreen(
         if (stored != null) heightInput = java.lang.String.format(Locale.US, "%.0f", stored)
     }
 
-    // BMI: uses weight in kg and height in cm
-    val currentWeightKg = summary.currentWeight?.let { if (weightUnit == "lbs") it / 2.2046226218 else it }
+    // Body-weight rows and analytics are canonical kilograms regardless of display unit.
+    val currentWeightKg = summary.currentWeight
     val bmi = remember(currentWeightKg, heightCm) {
         val w = currentWeightKg; val h = heightCm
         if (w != null && h != null && h > 0) w / ((h / 100.0) * (h / 100.0)) else null
@@ -107,14 +133,14 @@ fun BodyWeightScreen(
     }
 
     // Sync goal input field when prop changes (e.g. initial load)
-    LaunchedEffect(goalWeight) {
-        if (goalInput.isEmpty()) goalInput = goalWeight?.let { java.lang.String.format(Locale.US, "%.1f", it) } ?: ""
+    LaunchedEffect(goalWeight, weightUnit) {
+        goalInput = bodyWeightInputTextFromKg(goalWeight, weightUnit)
     }
 
     Column(Modifier.fillMaxSize().background(colors.bg).statusBarsPadding().verticalScroll(rememberScrollState()).padding(16.dp).navigationBarsPadding()) {
         ScreenHeader(title = "BODY WEIGHT", onBack = onBack)
         CardBlock("LOG BODY WEIGHT") {
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(horizontalArrangement = appSpacedBy(10.dp)) {
                 OutlinedTextField(
                     value = weightInput,
                     onValueChange = { weightInput = it },
@@ -124,15 +150,19 @@ fun BodyWeightScreen(
                     singleLine = true,
                 )
                 Button(onClick = {
-                    val value = weightInput.toDoubleOrNull()
-                    // GAP-22: unit-aware validation range
-                    val (minVal, maxVal) = if (weightUnit == "lbs") 44.0 to 880.0 else 20.0 to 400.0
-                    if (value == null || value < minVal || value > maxVal) { error = "Please enter a value between ${"%.0f".format(minVal)} and ${"%.0f".format(maxVal)} $weightUnit."; return@Button }
-                    scope.launch { onLogBodyWeight(BodyMeasurementInput(measuredAt = System.currentTimeMillis(), bodyweight = value)); weightInput = "" }
+                    val weightKg = bodyWeightInputToKg(weightInput.toDoubleOrNull(), weightUnit)
+                    if (weightKg == null || weightKg < 20.0 || weightKg > 400.0) {
+                        error = "Please enter a value between ${formatWeightValue(20.0, weightUnit)} and ${formatWeightValue(400.0, weightUnit)}."
+                        return@Button
+                    }
+                    scope.launch {
+                        onLogBodyWeight(BodyMeasurementInput(measuredAt = System.currentTimeMillis(), bodyweight = weightKg))
+                        weightInput = ""
+                    }
                 }) { Text("LOG") }
             }
-            Spacer(Modifier.height(10.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            Spacer(Modifier.height(appGapDp(10.dp)))
+            Row(horizontalArrangement = appSpacedBy(10.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                 OutlinedTextField(
                     value = goalInput,
                     onValueChange = { goalInput = it },
@@ -143,12 +173,13 @@ fun BodyWeightScreen(
                     label = { Text("Goal weight") },
                 )
                 Button(onClick = {
-                    val g = goalInput.trim().toDoubleOrNull()
-                    val isLbs = weightUnit.lowercase().trimEnd('s') == "lb"
-                    val minGoal = if (isLbs) 44.0 else 20.0
-                    val maxGoal = if (isLbs) 880.0 else 400.0
-                    if (g != null && (g < minGoal || g > maxGoal)) { error = "Goal must be between ${minGoal.toInt()} and ${maxGoal.toInt()} $weightUnit."; return@Button }
-                    scope.launch { onSetGoalWeight(g) }
+                    val rawGoal = goalInput.trim()
+                    val goalKg = bodyWeightInputToKg(rawGoal.toDoubleOrNull(), weightUnit)
+                    if (rawGoal.isNotEmpty() && (goalKg == null || goalKg < 20.0 || goalKg > 400.0)) {
+                        error = "Goal must be between ${formatWeightValue(20.0, weightUnit)} and ${formatWeightValue(400.0, weightUnit)}."
+                        return@Button
+                    }
+                    scope.launch { onSetGoalWeight(goalKg) }
                 }) { Text("SET") }
             }
             // GAP-13: predicted goal-reach date
@@ -157,7 +188,7 @@ fun BodyWeightScreen(
             if (current != null && goalWeight != null && trend != null && trend != 0.0) {
                 val delta = goalWeight - current
                 val weeksToGoal = if ((delta > 0) == (trend > 0)) (abs(delta / trend)).toInt().coerceAtLeast(1) else null
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(appGapDp(6.dp)))
                 if (weeksToGoal != null) {
                     Text(
                         "At current rate: ~$weeksToGoal week${if (weeksToGoal == 1) "" else "s"} to goal",
@@ -175,21 +206,22 @@ fun BodyWeightScreen(
                 }
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+        Row(horizontalArrangement = appSpacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
             BODY_WEIGHT_RANGES.forEach { option -> FilterChip(selected = option == range, onClick = { range = option }, label = { Text(option) }) }
         }
-        Spacer(Modifier.height(12.dp))
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Spacer(Modifier.height(appGapDp(12.dp)))
+        Column(verticalArrangement = com.ironlog.app.ui.theme.appCardSpacedBy(12.dp)) {
             cards.chunked(2).forEach { row ->
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                Row(horizontalArrangement = com.ironlog.app.ui.theme.appCardSpacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
                     row.forEach { card -> SummaryCardView(card, Modifier.weight(1f)) }
                     if (row.size == 1) Spacer(Modifier.weight(1f))
                 }
             }
         }
+        Spacer(Modifier.height(appGapDp(16.dp, com.ironlog.app.ui.theme.SpacingRole.CARDS)))
         // BMI card
         CardBlock("BMI") {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = appSpacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                 OutlinedTextField(
                     value = heightInput,
                     onValueChange = { heightInput = it },
@@ -208,7 +240,7 @@ fun BodyWeightScreen(
                 }) { Text("SET") }
             }
             if (bmi != null) {
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(appGapDp(12.dp)))
                 val cat = bmiCategory(bmi)
                 val bmiColor = when (cat) {
                     "Underweight" -> colors.warning
@@ -216,7 +248,7 @@ fun BodyWeightScreen(
                     "Overweight"  -> colors.warning
                     else          -> colors.danger
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(horizontalArrangement = appSpacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column {
                         Text("BMI", color = colors.muted, fontSize = IronLogType.eyebrow.fontSize.sp, letterSpacing = 1.5.sp)
                         Text(java.lang.String.format(Locale.US, "%.1f", bmi), color = bmiColor, fontSize = IronLogType.title.fontSize.sp, fontWeight = FontWeight.Black)
@@ -227,7 +259,7 @@ fun BodyWeightScreen(
                     }
                 }
             } else {
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(appGapDp(8.dp)))
                 Text(
                     if (heightCm == null) "Enter your height to calculate BMI." else "Log a body weight entry to calculate BMI.",
                     color = colors.muted,
@@ -247,12 +279,14 @@ fun BodyWeightScreen(
                 ),
             )
         }) { Text("Share Progress") }
-        CardBlock("WEIGHT TREND ($range)") { WeightChart(chartEntries, weightUnit, goalWeight) }
+        CardBlock("WEIGHT TREND ($range · ${canonicalBodyWeightUnit(weightUnit).uppercase(Locale.US)})") {
+            WeightChart(chartEntries, weightUnit, goalWeight)
+        }
         CardBlock("HISTORY") {
             if (historyDesc.isEmpty()) Text("No body weight entries logged yet.", color = colors.muted)
             historyDesc.forEach { entry ->
                 Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Column { Text(java.lang.String.format(Locale.US, "%.1f %s", entry.weight, weightUnit), color = colors.text); Text(formatHistoryDate(entry.timestamp), color = colors.subtext, fontSize = IronLogType.meta.fontSize.sp) }
+                    Column { Text(formatWeightValue(entry.weight, weightUnit), color = colors.text); Text(formatHistoryDate(entry.timestamp), color = colors.subtext, fontSize = IronLogType.meta.fontSize.sp) }
                     // GAP-09: confirm before deleting
                     Text("Delete", color = colors.muted, modifier = Modifier.clickable { pendingDeleteId = entry.id })
                 }
@@ -281,9 +315,9 @@ fun BodyWeightScreen(
 
 @Composable private fun CardBlock(title: String, content: @Composable ColumnScope.() -> Unit) {
     val colors = useTheme()
-    Column(Modifier.fillMaxWidth().padding(bottom = 12.dp).background(colors.card, RoundedCornerShape(16.dp)).border(1.dp, colors.cardBorder, RoundedCornerShape(16.dp)).padding(16.dp)) {
+    Column(Modifier.fillMaxWidth().padding(bottom = appGapDp(12.dp, com.ironlog.app.ui.theme.SpacingRole.CARDS)).background(colors.card, RoundedCornerShape(16.dp)).border(1.dp, colors.cardBorder, RoundedCornerShape(16.dp)).appPadding(16.dp)) {
         Text(title, color = colors.muted, fontSize = IronLogType.eyebrow.fontSize.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 2.2.sp)
-        Spacer(Modifier.height(12.dp)); content()
+        Spacer(Modifier.height(appGapDp(12.dp))); content()
     }
 }
 @Composable private fun SummaryCardView(card: SummaryCard, modifier: Modifier = Modifier) {
@@ -332,20 +366,12 @@ private fun weightCatmullRomFillPath(pts: List<Offset>, baselineY: Float, tensio
     )
     // Hoist Paint objects out of the draw lambda — allocating them inside
     // Canvas.DrawScope causes a new object per frame which triggers garbage collection pressure.
-    val axisPaint = remember(colors) {
-        android.graphics.Paint().apply {
-            textSize = 28f
-            isAntiAlias = true
-            typeface = android.graphics.Typeface.DEFAULT
-        }
-    }.also { it.color = colorToArgb(colors.muted) }
-    // goalLabelPaint is mutated (color + align) inside the draw lambda — create once, update properties.
-    val goalLabelPaint = remember {
-        android.graphics.Paint().apply {
-            textSize = 24f
-            isAntiAlias = true
-        }
+    val axisPaint = rememberTypographyPaint().also {
+        it.textSize = 28f
+        it.color = colorToArgb(colors.muted)
     }
+    // goalLabelPaint is mutated (color + align) inside the draw lambda — create once, update properties.
+    val goalLabelPaint = rememberTypographyPaint().also { it.textSize = 24f }
     // formatChartAxisDate is a pure function — no need to remember it
 
 
@@ -424,7 +450,7 @@ private fun weightCatmullRomFillPath(pts: List<Offset>, baselineY: Float, tensio
                 else -> ""
             }
             drawContext.canvas.nativeCanvas.drawText(
-                java.lang.String.format(Locale.US, "Goal: %.1f%s", goalWeight, suffix),
+                "Goal: ${formatWeightFromKg(goalWeight, canonicalBodyWeightUnit(unit))}$suffix",
                 size.width - PLOT.right - 4f,
                 goalY - 6f,
                 goalLabelPaint,
@@ -436,10 +462,11 @@ private fun weightCatmullRomFillPath(pts: List<Offset>, baselineY: Float, tensio
         axisPaint.textAlign = android.graphics.Paint.Align.RIGHT
         for (i in 0..yTickCount) {
             val frac = i.toFloat() / yTickCount
-            val value = yMin + (yMax - yMin) * frac
+            val valueKg = yMin + (yMax - yMin) * frac
+            val displayValue = convertKgToUnit(valueKg, canonicalBodyWeightUnit(unit), decimals = 1)
             val lineY = PLOT.top + plotHeight * (1f - frac)
             nc.drawText(
-                String.format(Locale.US, "%.1f", value),
+                String.format(Locale.US, "%.1f", displayValue),
                 PLOT.left - 6f,
                 lineY + axisPaint.textSize / 3f,
                 axisPaint,

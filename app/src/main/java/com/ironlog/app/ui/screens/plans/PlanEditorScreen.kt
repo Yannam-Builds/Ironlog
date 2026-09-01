@@ -1,8 +1,13 @@
 ﻿package com.ironlog.app.ui.screens.plans
 
+import com.ironlog.app.ui.theme.appGapDp
+import com.ironlog.app.ui.theme.appPadding
+import com.ironlog.app.ui.theme.appSpacedBy
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -16,6 +21,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.outlined.Menu
+import androidx.compose.material.icons.outlined.NoteAlt
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -24,26 +30,39 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.ui.platform.LocalContext
 import com.ironlog.app.domain.intelligence.CloudAiEngine
 import com.ironlog.app.domain.intelligence.CloudAiKeyStore
+import com.ironlog.app.domain.intelligence.ProgramRules
 import com.ironlog.app.ui.viewmodel.AppDataViewModel
 import com.valentinilk.shimmer.shimmer
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material3.*
+import com.ironlog.app.ui.theme.Text
+import com.ironlog.app.ui.theme.typographyTextStyle
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ironlog.app.data.model.LegacyExerciseShape
 import com.ironlog.app.data.model.PlanExerciseInput
 import com.ironlog.app.data.repository.ExerciseRepository
 import com.ironlog.app.data.repository.SettingsRepository
+import com.ironlog.app.data.repository.exerciseProgressionOverrideKey
+import com.ironlog.app.data.repository.observePlanExerciseNotesVisible
+import com.ironlog.app.data.repository.programProgressionRulesKey
+import com.ironlog.app.data.repository.setPlanExerciseNotesVisible
+import com.ironlog.app.ui.components.ExerciseNotesSettingsDialog
+import com.ironlog.app.ui.components.IronLogDropdownMenu
 import com.ironlog.app.ui.components.ScreenHeader
 import com.ironlog.app.ui.context.useTheme
 import com.ironlog.app.ui.model.UiPlanExercise
@@ -55,8 +74,8 @@ import com.ironlog.app.util.getExerciseFilterSummary
 import com.ironlog.app.util.matchesExerciseFilter
 import com.ironlog.app.util.queryExerciseSearch
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
-import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import sh.calvin.reorderable.ReorderableItem
@@ -64,19 +83,7 @@ import sh.calvin.reorderable.rememberReorderableLazyListState
 
 private val DAY_COLORS = listOf("#FF4500", "#0080FF", "#00C170", "#A020F0", "#FFD700", "#FF6B35", "#00BCD4")
 
-@Serializable
-data class ProgramRules(
-    val progressionModel: String = "double_progression",
-    val blockLengthWeeks: Int = 4,
-    val currentWeek: Int = 1,
-    val deloadEveryWeeks: Int = 4,
-    val percent1RM: Int = 75,
-    val rpeTarget: Int = 8,
-    val rirTarget: Int = 2,
-)
-
 private val rulesJson = Json { ignoreUnknownKeys = true }
-private fun rulesKey(planId: String) = "program_rules:$planId"
 
 @Composable
 fun PlanEditorScreen(
@@ -91,16 +98,20 @@ fun PlanEditorScreen(
     val scope = rememberCoroutineScope()
     val settingsRepo = remember { SettingsRepository() }
     val appVm: AppDataViewModel = viewModel()
-    val appState by appVm.state.collectAsState()
+    val appState by appVm.state.collectAsStateWithLifecycle()
     val cloudSettings = appState.settings
-    val cloudApiKey = remember(cloudSettings.cloudAiProviderPreset) {
+    val credentialRevision by CloudAiKeyStore.revision.collectAsStateWithLifecycle()
+    val cloudApiKey = remember(credentialRevision, cloudSettings.cloudAiProviderPreset) {
         CloudAiKeyStore.load(context, cloudSettings.cloudAiProviderPreset)
     }
     val cloudConfigured = cloudApiKey.isNotBlank()
         && cloudSettings.cloudAiBaseUrl.isNotBlank()
         && cloudSettings.cloudAiModelName.isNotBlank()
-    val plans by vm.plans.collectAsState()
+    val plans by vm.plans.collectAsStateWithLifecycle()
     val plan = plans.firstOrNull { it.id == planId }
+    val planNotesVisible by remember(settingsRepo) {
+        settingsRepo.observePlanExerciseNotesVisible()
+    }.collectAsStateWithLifecycle(initialValue = true)
 
     var editDayIdx by remember(planId) { mutableStateOf(0) }
     var showAddDay by remember { mutableStateOf(false) }
@@ -117,11 +128,14 @@ fun PlanEditorScreen(
     var dayNameInput by remember { mutableStateOf("") }
 
     var rules by remember { mutableStateOf(ProgramRules()) }
+    var showNotesSettings by remember { mutableStateOf(false) }
+    var deletingPlanNotes by remember { mutableStateOf(false) }
+    var notesSettingsError by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) { allExercises = exerciseRepo.getExercisesSnapshot() }
     LaunchedEffect(libSearch) { delay(170); debouncedLibSearch = libSearch }
     LaunchedEffect(planId) {
-        val raw = settingsRepo.getString(rulesKey(planId))
+        val raw = settingsRepo.getString(programProgressionRulesKey(planId))
         if (!raw.isNullOrBlank()) {
             runCatching { rules = rulesJson.decodeFromString<ProgramRules>(raw) }
         }
@@ -130,7 +144,7 @@ fun PlanEditorScreen(
     fun saveRules(next: ProgramRules) {
         rules = next
         scope.launch {
-            runCatching { settingsRepo.setSetting(rulesKey(planId), rulesJson.encodeToString(next)) }
+            runCatching { settingsRepo.setSetting(programProgressionRulesKey(planId), rulesJson.encodeToString(next)) }
         }
     }
 
@@ -140,6 +154,8 @@ fun PlanEditorScreen(
     }
 
     val activeDay = plan.days.getOrNull(editDayIdx)
+    var reordering by remember(planId) { mutableStateOf(false) }
+    var reorderError by remember(planId) { mutableStateOf<String?>(null) }
     val libMuscles = remember(allExercises) { buildFilterChipOptions(allExercises, includeCategory = false, includeEquipment = false) }
     val filteredExercises = remember(allExercises, debouncedLibSearch, libMuscle) {
         val base = allExercises.filter { ex -> libMuscle == null || matchesExerciseFilter(ex, libMuscle) }
@@ -147,27 +163,61 @@ fun PlanEditorScreen(
     }
 
     val lazyListState = rememberLazyListState()
-    val reorderState = rememberReorderableLazyListState(lazyListState) { from, to ->
-        val offset = 3
-        val fromIdx = from.index - offset
-        val toIdx = to.index - offset
-        if (activeDay != null && fromIdx in activeDay.exercises.indices && toIdx in activeDay.exercises.indices) {
-            val ids = activeDay.exercises.map { it.id }.toMutableList()
-            java.util.Collections.swap(ids, fromIdx, toIdx)
-            vm.reorderExercises(activeDay.id, ids)
+    suspend fun moveExercise(fromKey: Any?, toKey: Any?) {
+        val day = activeDay ?: return
+        if (reordering) return
+        reordering = true
+        reorderError = null
+        try {
+            // Keep rendering the persisted list until both the write and refresh finish.
+            persistPlanExerciseMove(day.exercises.map { it.id }, fromKey, toKey) { ids ->
+                vm.reorderExercisesAndAwait(day.id, ids)
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            reorderError = "Could not reorder exercises. Please try again."
+        } finally {
+            reordering = false
         }
+    }
+    val reorderState = rememberReorderableLazyListState(lazyListState) { from, to ->
+        moveExercise(from.key, to.key)
     }
 
     LazyColumn(
         state = lazyListState,
         modifier = Modifier.fillMaxSize().background(c.bg).statusBarsPadding().padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = com.ironlog.app.ui.theme.appCardSpacedBy(12.dp),
         contentPadding = PaddingValues(top = 16.dp, bottom = 80.dp)
     ) {
-        item { ScreenHeader(title = "EDIT PLAN", onBack = onBack) }
+        item {
+            ScreenHeader(
+                title = "EDIT PLAN",
+                onBack = onBack,
+                action = {
+                    IconButton(onClick = { notesSettingsError = null; showNotesSettings = true }) {
+                        Icon(
+                            Icons.Outlined.NoteAlt,
+                            contentDescription = "Plan note settings",
+                            tint = if (planNotesVisible) c.accent else c.muted,
+                        )
+                    }
+                },
+            )
+        }
+        if (reorderError != null || reordering) {
+            item(key = "reorder-status") {
+                Text(
+                    text = reorderError ?: "Saving exercise order…",
+                    color = if (reorderError != null) c.danger else c.muted,
+                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                )
+            }
+        }
         item {
             if (editingPlanName) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(horizontalArrangement = appSpacedBy(8.dp)) {
                     OutlinedTextField(
                         value = planNameInput,
                         onValueChange = { planNameInput = it },
@@ -185,19 +235,19 @@ fun PlanEditorScreen(
                     planNameInput = plan.name; editingPlanName = true
                 }) {
                     Text(plan.name, color = c.text, fontWeight = FontWeight.Black, fontSize = IronLogType.title.fontSize.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Spacer(Modifier.width(6.dp))
+                    Spacer(Modifier.width(appGapDp(6.dp)))
                     Text("✏", color = c.muted, fontSize = IronLogType.body.fontSize.sp)
                 }
             }
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(appGapDp(8.dp)))
             val isDeloadWeek = rules.deloadEveryWeeks > 0 && rules.currentWeek % rules.deloadEveryWeeks == 0
-            androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = appSpacedBy(8.dp)) {
                 itemsIndexed(plan.days) { idx, day ->
                     AssistChip(
                         onClick = { editDayIdx = idx },
                         label = {
                             if (isDeloadWeek) {
-                                Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Row(horizontalArrangement = appSpacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
                                     Text(day.name, color = if (idx == editDayIdx) c.accent else c.text)
                                     Text(
                                         "DELOAD",
@@ -218,7 +268,7 @@ fun PlanEditorScreen(
                 }
             }
             if (showAddDay) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
+                Row(horizontalArrangement = appSpacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
                     OutlinedTextField(dayName, { dayName = it }, placeholder = { Text("Day name") }, modifier = Modifier.weight(1f), singleLine = true)
                     Button(onClick = {
                         if (dayName.trim().isNotEmpty()) {
@@ -236,13 +286,13 @@ fun PlanEditorScreen(
                 border = androidx.compose.foundation.BorderStroke(1.dp, c.cardBorder),
                 shape = RoundedCornerShape(IronLogRadius.xl.dp),
             ) {
-                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(Modifier.fillMaxWidth().appPadding(16.dp), verticalArrangement = appSpacedBy(10.dp)) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                         Column {
                             Text("PROGRAM RULES", color = c.muted, fontSize = IronLogType.eyebrow.fontSize.sp, fontWeight = FontWeight(700), letterSpacing = 1.2.sp)
                             Text("Week ${rules.currentWeek} of ${rules.blockLengthWeeks}", color = c.text, fontWeight = FontWeight.Bold, fontSize = IronLogType.title.fontSize.sp)
                         }
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(horizontalArrangement = appSpacedBy(6.dp)) {
                             Box(
                                 Modifier
                                     .defaultMinSize(minWidth = 44.dp, minHeight = 44.dp)
@@ -268,7 +318,7 @@ fun PlanEditorScreen(
                         }
                     }
 
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(horizontalArrangement = appSpacedBy(8.dp)) {
                         listOf("double_progression" to "Double", "linear" to "Linear", "percent_1rm" to "%1RM", "rpe_rir" to "RPE/RIR").forEach { (id, label) ->
                             val active = rules.progressionModel == id
                             Box(
@@ -281,7 +331,7 @@ fun PlanEditorScreen(
                         }
                     }
 
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(horizontalArrangement = appSpacedBy(8.dp)) {
                         listOf(3, 4, 5, 6).forEach { weeks ->
                             val active = rules.blockLengthWeeks == weeks
                             Box(
@@ -295,7 +345,7 @@ fun PlanEditorScreen(
                     }
 
                     if (rules.progressionModel == "percent_1rm") {
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(horizontalArrangement = appSpacedBy(8.dp)) {
                             listOf(65, 70, 75, 80, 85).forEach { pct ->
                                 val active = rules.percent1RM == pct
                                 Box(
@@ -310,7 +360,7 @@ fun PlanEditorScreen(
                     }
 
                     if (rules.progressionModel == "rpe_rir") {
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(horizontalArrangement = appSpacedBy(8.dp)) {
                             listOf(7, 8, 9).forEach { rpe ->
                                 val active = rules.rpeTarget == rpe
                                 Box(
@@ -339,7 +389,7 @@ fun PlanEditorScreen(
                 var aiReviewLoading by remember(dayId) { mutableStateOf(false) }
                 var showDeloadConfirm by remember(dayId) { mutableStateOf(false) }
                 var deloadCreating by remember(dayId) { mutableStateOf(false) }
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(verticalArrangement = appSpacedBy(8.dp)) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                         if (editingDayId == activeDay.id) {
                             OutlinedTextField(
@@ -349,7 +399,7 @@ fun PlanEditorScreen(
                                 singleLine = true,
                                 label = { Text("Day name") },
                             )
-                            Spacer(Modifier.width(6.dp))
+                            Spacer(Modifier.width(appGapDp(6.dp)))
                             Button(onClick = {
                                 if (dayNameInput.isNotBlank()) vm.renameDay(activeDay.id, dayNameInput.trim())
                                 editingDayId = null
@@ -357,12 +407,12 @@ fun PlanEditorScreen(
                         } else {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(activeDay.name, color = c.text, fontWeight = FontWeight.Bold, fontSize = IronLogType.section.fontSize.sp)
-                                Spacer(Modifier.width(4.dp))
+                                Spacer(Modifier.width(appGapDp(4.dp)))
                                 Box {
                                     IconButton(onClick = { dayMenuExpanded = true }) {
                                         Icon(Icons.Filled.MoreVert, contentDescription = "Menu", tint = c.muted)
                                     }
-                                    DropdownMenu(dayMenuExpanded, onDismissRequest = { dayMenuExpanded = false }, modifier = Modifier.background(c.surface)) {
+                    IronLogDropdownMenu(dayMenuExpanded, onDismissRequest = { dayMenuExpanded = false }) {
                                         DropdownMenuItem(text = { Text("Rename Day", color = c.text) }, onClick = { dayMenuExpanded = false; dayNameInput = activeDay.name; editingDayId = activeDay.id })
                                         DropdownMenuItem(text = { Text("Copy Day to…", color = c.text) }, onClick = { dayMenuExpanded = false; showCopyDayPicker = true })
                                         DropdownMenuItem(text = { Text("Delete Day", color = c.danger) }, onClick = {
@@ -435,7 +485,7 @@ fun PlanEditorScreen(
                         }
                     }
 
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(horizontalArrangement = appSpacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                         DAY_COLORS.forEach { hex ->
                             val swatch = runCatching { Color(android.graphics.Color.parseColor(hex)) }.getOrDefault(c.accent)
                             val selected = activeDay.color.equals(hex, ignoreCase = true)
@@ -484,8 +534,8 @@ fun PlanEditorScreen(
                         containerColor = c.card,
                     ) {
                         Column(
-                            Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                            Modifier.fillMaxWidth().appPadding(horizontal = 20.dp, vertical = 16.dp),
+                            verticalArrangement = appSpacedBy(12.dp),
                         ) {
                             Text(
                                 "CLOUD AI REVIEW",
@@ -501,7 +551,7 @@ fun PlanEditorScreen(
                                 fontSize = IronLogType.meta.fontSize.sp,
                             )
                             if (aiReviewLoading) {
-                                Column(Modifier.shimmer(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Column(Modifier.shimmer(), verticalArrangement = appSpacedBy(6.dp)) {
                                     repeat(3) { idx ->
                                         Box(
                                             Modifier
@@ -539,13 +589,13 @@ fun PlanEditorScreen(
                                         }
                                         .padding(vertical = 4.dp),
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                    horizontalArrangement = appSpacedBy(4.dp),
                                 ) {
                                     Icon(Icons.Outlined.Refresh, null, tint = c.muted, modifier = Modifier.size(12.dp))
                                     Text("Regenerate", color = c.muted, fontSize = IronLogType.micro.fontSize.sp)
                                 }
                             }
-                            Spacer(Modifier.height(16.dp))
+                            Spacer(Modifier.height(appGapDp(16.dp)))
                         }
                     }
                 }
@@ -611,9 +661,9 @@ fun PlanEditorScreen(
             if (activeDay.exercises.isEmpty()) {
                 item {
                     Column(
-                        Modifier.fillMaxWidth().padding(vertical = 32.dp),
+                        Modifier.fillMaxWidth().appPadding(vertical = 32.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                        verticalArrangement = appSpacedBy(8.dp)
                     ) {
                         Text("No exercises yet", color = c.text, fontWeight = FontWeight.Bold, fontSize = IronLogType.section.fontSize.sp)
                         Text("Search the library below to start building your routine.", color = c.muted, fontSize = IronLogType.body.fontSize.sp)
@@ -635,14 +685,28 @@ fun PlanEditorScreen(
                         onRepsChange = { reps -> vm.updateExercise(ex.id, PlanExerciseInput(reps = reps)) },
                         onRestChange = { rest -> vm.updateExercise(ex.id, PlanExerciseInput(restSeconds = rest)) },
                         onNotesChange = { notes -> vm.updateExercise(ex.id, PlanExerciseInput(notes = notes)) },
+                        showNotes = planNotesVisible,
                         onSwapExercise = { alt -> vm.updateExercise(ex.id, PlanExerciseInput(exerciseId = alt.id)) },
+                        canMoveUp = index > 0,
+                        canMoveDown = index < activeDay.exercises.lastIndex,
+                        isReordering = reordering,
+                        onMoveUp = {
+                            activeDay.exercises.getOrNull(index - 1)?.let { previous ->
+                                scope.launch { moveExercise(ex.id, previous.id) }
+                            }
+                        },
+                        onMoveDown = {
+                            activeDay.exercises.getOrNull(index + 1)?.let { next ->
+                                scope.launch { moveExercise(ex.id, next.id) }
+                            }
+                        },
                         dragModifier = Modifier.draggableHandle()
                     )
                 }
             }
 
             item {
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(appGapDp(8.dp)))
                 Card(
                     colors = CardDefaults.cardColors(containerColor = c.card),
                     border = androidx.compose.foundation.BorderStroke(1.dp, c.cardBorder),
@@ -652,7 +716,7 @@ fun PlanEditorScreen(
                         Row(
                             Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 9.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            horizontalArrangement = appSpacedBy(8.dp),
                         ) {
                             Icon(Icons.Outlined.Search, contentDescription = null, tint = c.muted, modifier = Modifier.size(15.dp))
                             BasicTextField(
@@ -660,7 +724,7 @@ fun PlanEditorScreen(
                                 onValueChange = { libSearch = it },
                                 modifier = Modifier.weight(1f),
                                 singleLine = true,
-                                textStyle = TextStyle(color = c.text, fontSize = IronLogType.body.fontSize.sp),
+                textStyle = typographyTextStyle(TextStyle(color = c.text, fontSize = IronLogType.body.fontSize.sp)),
                                 cursorBrush = SolidColor(c.accent),
                                 decorationBox = { inner ->
                                     if (libSearch.isEmpty()) Text("Search exercises…", color = c.faint, fontSize = IronLogType.body.fontSize.sp)
@@ -675,9 +739,9 @@ fun PlanEditorScreen(
                         HorizontalDivider(color = c.cardBorder)
                         // Filter chips
                         LazyRow(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 7.dp),
+                            modifier = Modifier.fillMaxWidth().appPadding(vertical = 7.dp),
                             contentPadding = PaddingValues(horizontal = 12.dp),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            horizontalArrangement = appSpacedBy(6.dp),
                         ) {
                             item {
                                 val isAll = libMuscle == null
@@ -704,7 +768,7 @@ fun PlanEditorScreen(
                         // Compact exercise rows
                         val displayExercises = filteredExercises.take(60)
                         if (displayExercises.isEmpty()) {
-                            Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                            Box(Modifier.fillMaxWidth().appPadding(16.dp), contentAlignment = Alignment.Center) {
                                 Text("No exercises found", color = c.muted, fontSize = IronLogType.body.fontSize.sp)
                             }
                         } else {
@@ -718,12 +782,12 @@ fun PlanEditorScreen(
                                                 PlanExerciseInput(exerciseId = ex.id, sets = 3, reps = if (inferTrackingType(ex) == "weight_reps") "10" else "60", restSeconds = 90),
                                             )
                                         }
-                                        .padding(horizontal = 12.dp, vertical = 9.dp),
+                                        .appPadding(horizontal = 12.dp, vertical = 9.dp),
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
                                     Text(ex.name, color = c.text, fontSize = IronLogType.body.fontSize.sp, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    Spacer(Modifier.width(8.dp))
+                                    Spacer(Modifier.width(appGapDp(8.dp)))
                                     Text(getExerciseFilterSummary(ex), color = c.muted, fontSize = IronLogType.meta.fontSize.sp, maxLines = 1)
                                 }
                                 if (idx < displayExercises.lastIndex) {
@@ -731,11 +795,42 @@ fun PlanEditorScreen(
                                 }
                             }
                         }
-                        Spacer(Modifier.height(4.dp))
+                        Spacer(Modifier.height(appGapDp(4.dp)))
                     }
                 }
             }
         }
+    }
+
+    if (showNotesSettings) {
+        ExerciseNotesSettingsDialog(
+            title = "Plan notes",
+            deleteLabel = "DELETE ALL NOTES IN THIS PLAN",
+            deleteWarning = "This removes the plan description and every exercise note in ${plan.name}.",
+            notesVisible = planNotesVisible,
+            isDeleting = deletingPlanNotes,
+            error = notesSettingsError,
+            onNotesVisibleChange = { visible ->
+                notesSettingsError = null
+                scope.launch {
+                    runCatching { settingsRepo.setPlanExerciseNotesVisible(visible) }
+                        .onFailure { notesSettingsError = it.message ?: "Could not update note visibility." }
+                }
+            },
+            onDeleteConfirmed = {
+                if (!deletingPlanNotes) {
+                    deletingPlanNotes = true
+                    notesSettingsError = null
+                    scope.launch {
+                        runCatching { vm.clearPlanNotesNow(plan.id) }
+                            .onSuccess { showNotesSettings = false }
+                            .onFailure { notesSettingsError = it.message ?: "Could not delete the plan notes." }
+                        deletingPlanNotes = false
+                    }
+                }
+            },
+            onDismiss = { if (!deletingPlanNotes) showNotesSettings = false },
+        )
     }
 }
 
@@ -751,7 +846,13 @@ private fun PlanExerciseRow(
     onRepsChange: (String) -> Unit,
     onRestChange: (Int) -> Unit,
     onNotesChange: (String) -> Unit,
+    showNotes: Boolean,
     onSwapExercise: (LegacyExerciseShape) -> Unit,
+    canMoveUp: Boolean,
+    canMoveDown: Boolean,
+    isReordering: Boolean,
+    onMoveUp: () -> Unit,
+    onMoveDown: () -> Unit,
     dragModifier: Modifier = Modifier
 ) {
     val c = useTheme()
@@ -767,7 +868,7 @@ private fun PlanExerciseRow(
     // Per-exercise progression override (empty string = use plan default)
     var progressionOverride by remember(ex.id) { mutableStateOf("") }
     LaunchedEffect(ex.id) {
-        progressionOverride = settingsRepo.getString("ex_prog:${ex.id}").orEmpty()
+        progressionOverride = settingsRepo.getString(exerciseProgressionOverrideKey(ex.id)).orEmpty()
     }
 
     Card(
@@ -775,41 +876,48 @@ private fun PlanExerciseRow(
         border = androidx.compose.foundation.BorderStroke(1.dp, if (isDragging) c.accent else c.cardBorder),
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Column(Modifier.appPadding(14.dp), verticalArrangement = appSpacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(horizontalArrangement = appSpacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text("${index + 1}. ${ex.name}", color = c.text, fontWeight = FontWeight.Bold, fontSize = IronLogType.body.fontSize.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         if (ex.supersetGroup.isNotBlank()) {
                             Box(
                                 Modifier
                                     .background(c.accent.copy(alpha = 0.15f), RoundedCornerShape(IronLogRadius.full.dp))
                                     .border(1.dp, c.accent.copy(alpha = 0.4f), RoundedCornerShape(IronLogRadius.full.dp))
-                                    .padding(horizontal = 6.dp, vertical = 2.dp),
+                                    .appPadding(horizontal = 6.dp, vertical = 2.dp),
                             ) { Text(ex.supersetGroup, color = c.accent, fontSize = IronLogType.eyebrow.fontSize.sp, fontWeight = FontWeight(700)) }
                         }
                     }
                 }
                 Box {
                     IconButton(onClick = { showMenu = true }) {
-                        Icon(Icons.Filled.MoreVert, contentDescription = "Menu", tint = c.muted)
+                        Icon(Icons.Filled.MoreVert, contentDescription = "Actions for ${ex.name}", tint = c.muted)
                     }
-                    DropdownMenu(showMenu, onDismissRequest = { showMenu = false }, modifier = Modifier.background(c.surface)) {
+            IronLogDropdownMenu(showMenu, onDismissRequest = { showMenu = false }) {
+                        PlanExerciseMoveActions(
+                            canMoveUp = canMoveUp,
+                            canMoveDown = canMoveDown,
+                            isSaving = isReordering,
+                            onMoveUp = { showMenu = false; onMoveUp() },
+                            onMoveDown = { showMenu = false; onMoveDown() },
+                        )
                         DropdownMenuItem(text = { Text(if (alternativesExpanded) "Hide Alternatives" else "Replace Exercise", color = c.text) }, onClick = { showMenu = false; alternativesExpanded = !alternativesExpanded })
                         DropdownMenuItem(text = { Text("Remove", color = c.danger) }, onClick = { showMenu = false; onRemove() })
                     }
                 }
-                Box(dragModifier.padding(4.dp)) {
-                    Icon(Icons.Outlined.Menu, contentDescription = "Reorder", tint = c.faint, modifier = Modifier.size(22.dp))
+                Box(dragModifier.size(48.dp), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Outlined.Menu, contentDescription = "Drag to reorder ${ex.name}", tint = c.faint, modifier = Modifier.size(22.dp))
                 }
             }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            Row(horizontalArrangement = appSpacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                 OutlinedTextField(
                     value = setsInput,
                     onValueChange = { setsInput = it; it.toIntOrNull()?.takeIf { v -> v > 0 }?.let(onSetsChange) },
                     label = { Text("Sets", fontSize = IronLogType.meta.fontSize.sp) },
-                    textStyle = TextStyle(fontSize = IronLogType.body.fontSize.sp, color = c.text),
+                            textStyle = typographyTextStyle(TextStyle(fontSize = IronLogType.body.fontSize.sp, color = c.text)),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.weight(1f),
                     singleLine = true,
@@ -818,7 +926,7 @@ private fun PlanExerciseRow(
                     value = repsInput,
                     onValueChange = { repsInput = it; if (it.isNotBlank()) onRepsChange(it) },
                     label = { Text("Reps", fontSize = IronLogType.meta.fontSize.sp) },
-                    textStyle = TextStyle(fontSize = IronLogType.body.fontSize.sp, color = c.text),
+                            textStyle = typographyTextStyle(TextStyle(fontSize = IronLogType.body.fontSize.sp, color = c.text)),
                     modifier = Modifier.weight(1.2f),
                     singleLine = true,
                 )
@@ -826,14 +934,14 @@ private fun PlanExerciseRow(
                     value = restInput,
                     onValueChange = { restInput = it; it.toIntOrNull()?.takeIf { v -> v >= 0 }?.let(onRestChange) },
                     label = { Text("Rest s", fontSize = IronLogType.meta.fontSize.sp) },
-                    textStyle = TextStyle(fontSize = IronLogType.body.fontSize.sp, color = c.text),
+                            textStyle = typographyTextStyle(TextStyle(fontSize = IronLogType.body.fontSize.sp, color = c.text)),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.weight(1f),
                     singleLine = true,
                 )
             }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(top = 4.dp)) {
+            Row(horizontalArrangement = appSpacedBy(12.dp), modifier = Modifier.appPadding(top = 4.dp)) {
                 listOf(null, "A", "B", "C").forEach { group ->
                     Text(
                         group ?: "NO SS",
@@ -846,9 +954,12 @@ private fun PlanExerciseRow(
 
             // Per-exercise progression model override
             Row(
-                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                horizontalArrangement = appSpacedBy(5.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(top = 2.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .appPadding(top = 2.dp),
             ) {
                 Text("Prog:", color = c.muted, fontSize = IronLogType.meta.fontSize.sp)
                 listOf("" to "Plan", "double_progression" to "2x", "linear" to "Lin", "percent_1rm" to "%1RM", "rpe_rir" to "RPE").forEach { (id, label) ->
@@ -859,39 +970,43 @@ private fun PlanExerciseRow(
                             .border(1.dp, if (isActive) c.accent else c.cardBorder, RoundedCornerShape(IronLogRadius.full.dp))
                             .clickable {
                                 progressionOverride = id
-                                scope.launch { settingsRepo.setSetting("ex_prog:${ex.id}", id) }
+                                scope.launch { settingsRepo.setSetting(exerciseProgressionOverrideKey(ex.id), id) }
                             }
-                            .padding(horizontal = 8.dp, vertical = 2.dp),
+                            .heightIn(min = 48.dp)
+                            .padding(horizontal = 9.dp, vertical = 8.dp),
+                        contentAlignment = Alignment.Center,
                     ) {
                         Text(
                             label,
                             color = if (isActive) c.accent else c.muted,
-                            fontSize = 9.sp,
+                            fontSize = 12.sp,
                             fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
                         )
                     }
                 }
             }
 
-            if (notesExpanded) {
-                OutlinedTextField(
-                    value = notesInput,
-                    onValueChange = { notesInput = it; onNotesChange(it) },
-                    label = { Text("Note") },
-                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                    maxLines = 2,
-                )
-            } else {
-                Text(
-                    if (notesInput.isBlank()) "+ Add note" else "📝 $notesInput",
-                    color = c.muted,
-                    fontSize = IronLogType.meta.fontSize.sp,
-                    modifier = Modifier.clickable { notesExpanded = true }.padding(top = 4.dp, bottom = 10.dp),
-                )
+            if (showNotes) {
+                if (notesExpanded) {
+                    OutlinedTextField(
+                        value = notesInput,
+                        onValueChange = { notesInput = it; onNotesChange(it) },
+                        label = { Text("Note") },
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                        maxLines = 2,
+                    )
+                } else {
+                    Text(
+                        if (notesInput.isBlank()) "+ Add note" else "📝 $notesInput",
+                        color = c.muted,
+                        fontSize = IronLogType.meta.fontSize.sp,
+                        modifier = Modifier.clickable { notesExpanded = true }.padding(top = 4.dp, bottom = 10.dp),
+                    )
+                }
             }
 
             if (alternativesExpanded && alternatives.isNotEmpty()) {
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(appGapDp(8.dp)))
                 alternatives.take(8).forEach { alt ->
                     Row(
                         Modifier.fillMaxWidth().clickable { onSwapExercise(alt.exercise); alternativesExpanded = false }.padding(vertical = 4.dp),

@@ -36,6 +36,7 @@ object SmartPlanStructuringEngine {
         var supersetAdds = 0
         var restAdjustments = 0
         val notes = mutableListOf<String>()
+        val goal = plan.goal.orEmpty().trim().lowercase()
 
         val newDays = plan.days.map { day ->
             val baseRows = day.exercises.toMutableList()
@@ -57,18 +58,18 @@ object SmartPlanStructuringEngine {
                     if (!hasWarmupAlready) {
                         withWarmups += row.copy(
                             sets = 2,
-                            reps = if (isTime) "45" else "8-10",
-                            restSeconds = 60,
+                            reps = "5",
+                            restSeconds = if (goal.contains("strength")) 90 else 60,
                             supersetGroup = null,
                             isWarmup = true,
-                            notes = mergeNote(row.notes, "Auto warmup"),
+                            notes = mergeNote(row.notes, "Ramp-up warmup · light load, then moderate load · stop well before fatigue"),
                         )
                         warmupAdds++
                     }
                     warmedCompounds += key
                 }
 
-                val normalizedRest = normalizeRest(row, profile)
+                val normalizedRest = normalizeRest(row, profile, goal)
                 if (normalizedRest != (row.restSeconds ?: 0)) {
                     restAdjustments++
                 }
@@ -151,18 +152,30 @@ object SmartPlanStructuringEngine {
         return mA.isNotBlank() && mB.isNotBlank() && mA != mB
     }
 
-    private fun normalizeRest(row: PlanExerciseInput, profile: ExerciseProfile?): Int {
+    private fun normalizeRest(row: PlanExerciseInput, profile: ExerciseProfile?, goal: String): Int {
         val current = row.restSeconds ?: 0
         if (row.isWarmup == true) {
             return if (current > 0) current.coerceIn(45, 90) else 60
         }
         if (isTimeBased(profile, row)) {
-            return if (current > 0) current.coerceIn(30, 75) else 45
+            return if (current > 0) current.coerceIn(30, 120) else 45
         }
         return if (isCompound(profile)) {
-            if (current > 0) current.coerceIn(120, 210) else 150
+            val range = when {
+                goal.contains("strength") -> 150..300
+                goal.contains("hypertrophy") || goal.contains("muscle") || goal.contains("aesthetic") -> 90..180
+                else -> 120..240
+            }
+            val fallback = when {
+                goal.contains("strength") -> 180
+                goal.contains("hypertrophy") || goal.contains("muscle") || goal.contains("aesthetic") -> 120
+                else -> 150
+            }
+            if (current > 0) current.coerceIn(range) else fallback
         } else {
-            if (current > 0) current.coerceIn(60, 120) else 75
+            val range = if (goal.contains("strength")) 75..150 else 60..120
+            val fallback = if (goal.contains("strength")) 90 else 75
+            if (current > 0) current.coerceIn(range) else fallback
         }
     }
 

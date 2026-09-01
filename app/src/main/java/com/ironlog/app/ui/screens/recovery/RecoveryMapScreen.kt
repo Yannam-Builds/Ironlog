@@ -13,9 +13,15 @@ import androidx.compose.foundation.background
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Box
@@ -44,7 +50,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.Text
+import com.ironlog.app.ui.theme.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -58,6 +64,10 @@ import androidx.compose.foundation.verticalScroll
 import com.ironlog.app.ui.theme.IronLogRadius
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asAndroidPath
@@ -69,6 +79,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ironlog.app.domain.intelligence.ManualRecoveryInput
 import com.ironlog.app.domain.intelligence.RecoveryReadinessEngine
 import com.ironlog.app.ui.context.useTheme
@@ -106,63 +117,54 @@ fun RecoveryMapScreen(
 ) {
     val c = useTheme()
     val context = LocalContext.current
-    val state by vm.state.collectAsState()
-    val manualInput by vm.manualRecoveryInput.collectAsState()
-    val bodyMapDataset = remember { loadBodyMapDataset(context) }
+    val state by vm.state.collectAsStateWithLifecycle()
+    val nowEpochMs by com.ironlog.app.ui.state.rememberPresentationTime()
+    val bodyMapDataset = com.ironlog.app.ui.screens.body.rememberBodyMapDataset(context)
     var windowKey by remember { mutableStateOf("30D") }
     val rangeDays = remember(windowKey) { RECOVERY_WINDOWS.firstOrNull { it.first == windowKey }?.second ?: 30 }
     var selected by remember { mutableStateOf<String?>(null) }
     var showManualModal by remember { mutableStateOf(false) }
-    val filtered = remember(state.history, rangeDays) { state.history.filter { recoveryAgeDays(it.date) <= rangeDays } }
+    var savingCheckIn by remember { mutableStateOf(false) }
+    var checkInError by remember { mutableStateOf<String?>(null) }
+    val filtered = remember(state.history, rangeDays, nowEpochMs) { state.history.filter {
+        com.ironlog.app.domain.gamification.parseHistoryInstant(it.date)?.toEpochMilli()?.let { t -> t <= nowEpochMs && nowEpochMs - t <= rangeDays * 86_400_000L } == true
+    } }
 
-    // GAP-20: Pain flags — loaded from SettingsRepository on entry; saved on toggle
     val scope = rememberCoroutineScope()
     val settingsRepo = remember { com.ironlog.app.data.repository.SettingsRepository() }
-    val painRegions = listOf("Push", "Pull", "Legs", "Core", "Arms", "Shoulders")
-    var painFlags by remember { mutableStateOf(setOf<String>()) }
-    LaunchedEffect(Unit) {
-        val loaded = painRegions.filter { region ->
-            settingsRepo.getString("pain_flag_${region}") == "true"
-        }.toSet()
-        painFlags = loaded
+    val painRegions = com.ironlog.app.domain.intelligence.RECOVERY_REGIONS
+    val observedSettings by remember(settingsRepo) {
+        settingsRepo.observeStrings(setOf("manual_recovery_input") + painRegions.map { "pain_flag_$it" })
+    }.collectAsStateWithLifecycle(initialValue = emptyMap())
+    val painFlags = painRegions.filter { observedSettings["pain_flag_$it"] == "true" }.toSet()
+    val manualInput = com.ironlog.app.domain.intelligence.RecoveryCheckInCodec.decode(observedSettings["manual_recovery_input"], nowEpochMs)
+    // The range filters explanatory history only, never the current recovery calculation.
+    val snapshot = remember(state.history, painFlags, manualInput, nowEpochMs) {
+        RecoveryReadinessEngine.snapshot(state.history, painFlags, manualInput, nowEpochMs)
     }
-
-    val readiness = remember(filtered, painFlags) { RecoveryReadinessEngine.readinessByRegion(filtered, painFlags) }
+    val readiness = snapshot.readiness
     val displayReadiness = remember(readiness) { buildDisplayReadiness(readiness) }
-    val recoveryScore = remember(readiness, manualInput) { RecoveryReadinessEngine.score(readiness, manualInput) }
+    val recoveryScore = snapshot.score
     val score = recoveryScore.score
-    val suggestions = remember(readiness) { RecoveryReadinessEngine.suggestions(readiness) }
-
-    // GAP-15: 14-day readiness trend — compute one score per day.
-    val trend14 = remember(state.history) {
-        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-        val now = System.currentTimeMillis()
-        (0 until 14).map { daysBack ->
-            val dayMs = now - daysBack * 86_400_000L
-            val dayKey = sdf.format(java.util.Date(dayMs))
-            val dayHistory = state.history.filter { it.date.startsWith(dayKey) }
-            // Use sessions up to and including this day (last 7 days of that point) for readiness
-            val window = state.history.filter {
-                val t = com.ironlog.app.domain.gamification.parseHistoryInstant(it.date)?.toEpochMilli()
-                    ?: return@filter false
-                t <= dayMs && t >= dayMs - 7 * 86_400_000L
-            }
-            val r = RecoveryReadinessEngine.readinessByRegion(window, nowEpochMs = dayMs)
-            val score = RecoveryReadinessEngine.score(r, nowEpochMs = dayMs).score
-            Pair(dayKey, score)
-        }.reversed() // oldest first
+    val suggestions = remember(readiness, painFlags) {
+        if (painFlags.isEmpty()) RecoveryReadinessEngine.suggestions(readiness) else listOf("Review pain flags before training; avoid painful movements.")
     }
-
-    val confidenceLabel = remember(filtered.size, manualInput) {
-        val base = when {
-            filtered.size >= 16 -> "High confidence"
-            filtered.size >= 8 -> "Moderate confidence"
-            filtered.size >= 3 -> "Low confidence"
-            else -> "Very low confidence"
+    val trend14 = remember(state.history, nowEpochMs) {
+        val localNow = Instant.ofEpochMilli(nowEpochMs).atZone(ZoneId.systemDefault())
+        (13 downTo 0).map { daysBack ->
+            val sample = localNow.minusDays(daysBack.toLong())
+            sample.toLocalDate().toString() to RecoveryReadinessEngine.snapshot(state.history, nowEpochMs = sample.toInstant().toEpochMilli()).score.scoreOrNull
         }
-        if (manualInput != null && System.currentTimeMillis() - manualInput!!.recordedAt < 48 * 3600_000L) {
-            "$base + manual check-in"
-        } else base
+    }
+    val confidenceLabel = remember(snapshot.workloadEvidence, manualInput) {
+        val count = snapshot.workloadEvidence.values.flatten().map { it.workoutId }.distinct().size
+        val base = when {
+            count >= 16 -> "More recorded history — unvalidated estimate"
+            count >= 3 -> "Limited recorded history"
+            count > 0 -> "Very limited recorded history"
+            else -> "No mapped workout evidence"
+        }
+        if (manualInput != null) "$base + manual check-in" else base
     }
 
     if (showManualModal) {
@@ -170,18 +172,21 @@ fun RecoveryMapScreen(
             initial = manualInput ?: ManualRecoveryInput(),
             painFlags = painFlags,
             painRegions = painRegions,
-            onDismiss = { showManualModal = false },
+            saving = savingCheckIn,
+            error = checkInError,
+            onDismiss = { if (!savingCheckIn) showManualModal = false },
             onSave = { updatedInput, updatedFlags ->
-                vm.viewModelScope.launch {
-                    vm.saveManualRecovery(updatedInput)
-                    showManualModal = false
-                }
-                // Persist pain flags
-                scope.launch {
-                    painRegions.forEach { region ->
-                        settingsRepo.setString("pain_flag_${region}", if (region in updatedFlags) "true" else "false")
+                if (!savingCheckIn) {
+                    savingCheckIn = true
+                    checkInError = null
+                    scope.launch {
+                        try {
+                            settingsRepo.saveRecoveryCheckIn(updatedInput, updatedFlags)
+                            showManualModal = false
+                        } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+                        catch (_: Exception) { checkInError = "Could not save the check-in. Your entries are retained; try again." }
+                        finally { savingCheckIn = false }
                     }
-                    painFlags = updatedFlags
                 }
             },
         )
@@ -223,11 +228,11 @@ fun RecoveryMapScreen(
         item {
             Card(colors = CardDefaults.cardColors(containerColor = c.card), border = androidx.compose.foundation.BorderStroke(1.dp, c.cardBorder)) {
                 Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Overall readiness", color = c.muted)
-                    Text("$score", color = if (score >= 70) c.success else if (score >= 40) c.warning else c.danger, fontSize = IronLogType.display.fontSize.sp)
+                    Text("Estimated readiness", color = c.muted)
+                    Text(recoveryScore.scoreOrNull?.toString() ?: "—", color = if (!recoveryScore.hasEvidence) c.muted else if (score >= 85) c.success else if (score >= 60) c.warning else c.danger, fontSize = IronLogType.display.fontSize.sp)
                     // Action directive chip
-                    val actionDirective = if (score >= 78) "Train" else if (score >= 55) "Maintain" else "Back Off"
-                    val directiveColor = if (score >= 78) c.success else if (score >= 55) c.warning else c.danger
+                    val actionDirective = if (painFlags.isNotEmpty()) "Review pain" else if (!recoveryScore.hasEvidence) "Establish a baseline" else if (score >= 85) "Ready" else if (score >= 60) "Recovering" else "Reduce Load"
+                    val directiveColor = if (!recoveryScore.hasEvidence) c.muted else if (score >= 85) c.success else if (score >= 60) c.warning else c.danger
                     Box(
                         Modifier
                             .clip(CircleShape)
@@ -258,6 +263,21 @@ fun RecoveryMapScreen(
                         onSelect   = { selected = it },
                         painFlags  = painFlags,
                     )
+                    Text("Muscle details", color = c.text, fontWeight = FontWeight.Bold)
+                    com.ironlog.app.ui.screens.body.BODY_REGIONS.forEach { region ->
+                        val value = displayReadiness[region.key]
+                        val flagged = region.key in com.ironlog.app.ui.screens.body.bodyPainRegions(painFlags)
+                        val status = if (flagged) "Pain flagged" else value?.let { "${(it * 100).toInt()}% estimated" } ?: "No data"
+                        Row(
+                            Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                                .semantics(mergeDescendants = true) { contentDescription = "${region.label}, $status"; this.selected = selected == region.key }
+                                .clickable(onClickLabel = "Open ${region.label} details") { selected = region.key }.padding(vertical = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(region.label, color = c.text, modifier = Modifier.weight(1f))
+                            Text(status, color = if (flagged) c.danger else c.subtext, modifier = Modifier.weight(1f))
+                        }
+                    }
                 }
             }
         }
@@ -305,8 +325,9 @@ fun RecoveryMapScreen(
     selected?.let { region ->
             RecoveryRegionSheet(
                 region = region,
-                readiness = displayReadiness[region] ?: 1.0,
-                filtered = filtered,
+                readiness = displayReadiness[region],
+                painFlagged = region in com.ironlog.app.ui.screens.body.bodyPainRegions(painFlags),
+                evidence = snapshot.workloadEvidence[com.ironlog.app.ui.screens.body.BODY_REGIONS.firstOrNull { it.key == region }?.group].orEmpty().filter { evidence -> filtered.any { it.id == evidence.workoutId } },
                 sourceLabel = confidenceLabel,
                 onDismiss = { selected = null },
             )
@@ -543,14 +564,14 @@ private fun recoveryAgeDays(iso: String): Long {
 
 /**
  * Canvas line chart showing 14-day readiness trend with coloured zone bands:
- *   Red   0–40%  (low)
- *   Yellow 40–70% (moderate)
- *   Green  70–100% (good)
+ *   Red   0–60%  (low)
+ *   Yellow 60–85% (moderate)
+ *   Green  85–100% (good)
  * Missing-data days are represented as gaps (no interpolation).
  */
 @Composable
 private fun ReadinessTrendChart(
-    trend14: List<Pair<String, Int>>,   // (dateKey, score 0-100), oldest first
+    trend14: List<Pair<String, Int?>>,   // Unknown days are gaps, never fabricated zeroes.
     modifier: Modifier = Modifier,
 ) {
     if (trend14.isEmpty()) return
@@ -566,19 +587,20 @@ private fun ReadinessTrendChart(
         fun yForScore(score: Int) = padTop + chartH * (1f - score / 100f)
 
         // Zone bands
-        drawRect(color = c.danger.copy(alpha = 0.10f),   topLeft = Offset(0f, yForScore(40)),  size = Size(w, yForScore(0)  - yForScore(40)))
-        drawRect(color = c.warning.copy(alpha = 0.08f),  topLeft = Offset(0f, yForScore(70)),  size = Size(w, yForScore(40) - yForScore(70)))
-        drawRect(color = c.success.copy(alpha = 0.07f),  topLeft = Offset(0f, yForScore(100)), size = Size(w, yForScore(70) - yForScore(100)))
+        drawRect(color = c.danger.copy(alpha = 0.10f),   topLeft = Offset(0f, yForScore(60)),  size = Size(w, yForScore(0)  - yForScore(60)))
+        drawRect(color = c.warning.copy(alpha = 0.08f),  topLeft = Offset(0f, yForScore(85)),  size = Size(w, yForScore(60) - yForScore(85)))
+        drawRect(color = c.success.copy(alpha = 0.07f),  topLeft = Offset(0f, yForScore(100)), size = Size(w, yForScore(85) - yForScore(100)))
 
         // Zone divider lines
-        drawLine(c.danger.copy(alpha = 0.25f),  Offset(0f, yForScore(40)), Offset(w, yForScore(40)),  strokeWidth = 1f)
-        drawLine(c.warning.copy(alpha = 0.25f), Offset(0f, yForScore(70)), Offset(w, yForScore(70)), strokeWidth = 1f)
+        drawLine(c.danger.copy(alpha = 0.25f),  Offset(0f, yForScore(60)), Offset(w, yForScore(60)),  strokeWidth = 1f)
+        drawLine(c.warning.copy(alpha = 0.25f), Offset(0f, yForScore(85)), Offset(w, yForScore(85)), strokeWidth = 1f)
 
         // Line segments (skip gaps where score == 0 and no history)
         val stepX = w / (trend14.size - 1).coerceAtLeast(1).toFloat()
         val path = Path()
         var penDown = false
         trend14.forEachIndexed { i, (_, score) ->
+            if (score == null) { penDown = false; return@forEachIndexed }
             val x = i * stepX
             val y = yForScore(score)
             if (!penDown) {
@@ -592,11 +614,12 @@ private fun ReadinessTrendChart(
 
         // Dot on each point
         trend14.forEachIndexed { i, (_, score) ->
+            if (score == null) return@forEachIndexed
             val x = i * stepX
             val y = yForScore(score)
             val dotColor = when {
-                score >= 70 -> c.success
-                score >= 40 -> c.warning
+                score >= 85 -> c.success
+                score >= 60 -> c.warning
                 else        -> c.danger
             }
             drawCircle(dotColor, radius = 4f, center = Offset(x, y))
@@ -609,47 +632,35 @@ private fun ReadinessTrendChart(
 @Composable
 private fun RecoveryRegionSheet(
     region: String,
-    readiness: Double,
-    filtered: List<HistoryEntry>,
+    readiness: Double?,
+    painFlagged: Boolean,
+    evidence: List<com.ironlog.app.domain.intelligence.RegionWorkloadEvidence>,
     sourceLabel: String,
     onDismiss: () -> Unit,
 ) {
     val c = useTheme()
     val action = when {
+        painFlagged -> "Pain flagged: avoid painful movements; readiness is not medical clearance."
+        readiness == null -> "Not enough recorded workload to estimate this region."
         readiness >= 0.90 -> "Train"
         readiness >= 0.72 -> "Maintain"
         else -> "Back Off"
     }
-    val hits = remember(region, filtered) {
-        filtered.flatMap { it.exercises }
-            .filter {
-                val m = (it.primaryMuscle ?: it.primaryMuscles.firstOrNull().orEmpty()).lowercase()
-                when (region) {
-                    "chest" -> m in setOf("chest", "pectorals")
-                    "back" -> m in setOf("back", "lats", "rhomboids", "traps", "trapezius")
-                    "shoulders", "rearDelts" -> m in setOf("shoulders", "delts", "rear delts", "rear_delts")
-                    "arms" -> m in setOf("arms", "forearms", "biceps", "triceps")
-                    "quads" -> m in setOf("quads", "quadriceps")
-                    "hamstrings" -> m in setOf("hamstrings", "glutes", "adductors")
-                    "calves" -> m in setOf("calves", "tibialis")
-                    "core" -> m in setOf("core", "abs", "obliques")
-                    else -> true
-                }
+    val hits = remember(evidence) {
+        evidence.groupBy { it.exerciseName }.entries
+            .sortedByDescending { it.value.sumOf { row -> row.workingSets * row.contribution } }
+            .take(5).map { (name, rows) ->
+                "$name (${rows.map { it.workoutId }.distinct().size} sessions · ${rows.sumOf { it.workingSets }} working sets)"
             }
-            .groupBy { it.name }
-            .entries
-            .sortedByDescending { it.value.size }
-            .take(5)
-            .map { "${it.key} (${it.value.size} sessions)" }
     }
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = c.card) {
-        Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(Modifier.fillMaxWidth().navigationBarsPadding().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             val displayRegion = region
                 .replace(Regex("([A-Z])"), " $1")
                 .trim()
                 .replaceFirstChar { it.titlecase() }
             Text(displayRegion, color = c.text, fontSize = IronLogType.title.fontSize.sp)
-            Text("Readiness ${(readiness * 100).toInt()}%", color = c.subtext)
+            Text(readiness?.let { "Estimated readiness ${(it * 100).toInt()}%" } ?: "No data", color = c.subtext)
             Text("Source: $sourceLabel", color = c.muted, fontSize = IronLogType.meta.fontSize.sp)
             Text(action, color = c.accent)
             Text("Recent contributing exercises", color = c.muted, fontSize = IronLogType.meta.fontSize.sp, modifier = Modifier.padding(top = 4.dp))
@@ -659,10 +670,12 @@ private fun RecoveryRegionSheet(
 }
 
 @Composable
-private fun ManualRecoveryCheckInModal(
+internal fun ManualRecoveryCheckInModal(
     initial: ManualRecoveryInput,
     painFlags: Set<String> = emptySet(),
     painRegions: List<String> = emptyList(),
+    saving: Boolean = false,
+    error: String? = null,
     onDismiss: () -> Unit,
     onSave: (ManualRecoveryInput, Set<String>) -> Unit,
 ) {
@@ -674,7 +687,7 @@ private fun ManualRecoveryCheckInModal(
     // GAP-20: pain flags editable in this modal
     var localPainFlags by remember { mutableStateOf(painFlags) }
 
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(onDismissRequest = { if (!saving) onDismiss() }) {
         Card(
             colors = CardDefaults.cardColors(containerColor = c.card),
             border = androidx.compose.foundation.BorderStroke(1.dp, c.cardBorder),
@@ -684,11 +697,12 @@ private fun ManualRecoveryCheckInModal(
                 Modifier.padding(20.dp).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                Text("Manual Recovery Input", color = c.text, fontSize = IronLogType.title.fontSize.sp)
+                Text("Recovery check-in", color = c.text, fontSize = IronLogType.title.fontSize.sp)
+                error?.let { Text(it, color = c.danger, modifier = Modifier.semantics { liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite }) }
 
-                ScoreRow(label = "Soreness (1-5)", value = soreness, c = c) { soreness = it }
-                ScoreRow(label = "Sleep (1-5)", value = sleep, c = c) { sleep = it }
-                ScoreRow(label = "Energy (1-5)", value = energy, c = c) { energy = it }
+                ScoreRow(label = "Soreness (1-5)", value = soreness, c = c, enabled = !saving) { soreness = it }
+                ScoreRow(label = "Sleep (1-5)", value = sleep, c = c, enabled = !saving) { sleep = it }
+                ScoreRow(label = "Energy (1-5)", value = energy, c = c, enabled = !saving) { energy = it }
 
                 // GAP-20: Pain flags per muscle region
                 if (painRegions.isNotEmpty()) {
@@ -703,8 +717,10 @@ private fun ManualRecoveryCheckInModal(
                                         .clip(RoundedCornerShape(IronLogRadius.full.dp))
                                         .background(if (flagged) c.danger.copy(alpha = 0.15f) else c.surface)
                                         .border(1.dp, if (flagged) c.danger else c.cardBorder, RoundedCornerShape(IronLogRadius.full.dp))
-                                        .clickable {
-                                            localPainFlags = if (flagged) localPainFlags - region else localPainFlags + region
+                                        .heightIn(min = 48.dp)
+                                        .semantics { contentDescription = "Pain flag $region" }
+                                        .toggleable(value = flagged, enabled = !saving, role = Role.Checkbox) { checked ->
+                                            localPainFlags = if (checked) localPainFlags + region else localPainFlags - region
                                         }
                                         .padding(horizontal = 10.dp, vertical = 5.dp),
                                     contentAlignment = Alignment.Center,
@@ -725,6 +741,7 @@ private fun ManualRecoveryCheckInModal(
                     Text("Notes (optional)", color = c.subtext, fontSize = IronLogType.meta.fontSize.sp)
                     OutlinedTextField(
                         value = notes,
+                        enabled = !saving,
                         onValueChange = { notes = it },
                         placeholder = { Text("How are you feeling?", color = c.muted) },
                         modifier = Modifier.fillMaxWidth(),
@@ -736,6 +753,7 @@ private fun ManualRecoveryCheckInModal(
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(top = 8.dp)) {
                     Button(
                         onClick = onDismiss,
+                        enabled = !saving,
                         modifier = Modifier.weight(1f),
                         colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent, contentColor = c.muted),
                         border = androidx.compose.foundation.BorderStroke(1.dp, c.faint)
@@ -744,11 +762,12 @@ private fun ManualRecoveryCheckInModal(
                     }
                     Button(
                         onClick = { onSave(ManualRecoveryInput(soreness, sleep, energy, notes = notes), localPainFlags) },
+                        enabled = !saving,
                         modifier = Modifier.weight(1f),
                         colors = ButtonDefaults.buttonColors(containerColor = c.accent.copy(alpha = 0.15f), contentColor = c.accent),
                         border = androidx.compose.foundation.BorderStroke(1.dp, c.accent)
                     ) {
-                        Text("Save")
+                        Text(if (saving) "Saving…" else "Save")
                     }
                 }
             }
@@ -759,10 +778,10 @@ private fun ManualRecoveryCheckInModal(
 // buildDisplayReadiness → BodyMapCanvas.kt
 
 @Composable
-private fun ScoreRow(label: String, value: Int, c: IronLogThemeTokens, onChange: (Int) -> Unit) {
+private fun ScoreRow(label: String, value: Int, c: IronLogThemeTokens, enabled: Boolean = true, onChange: (Int) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(label, color = c.subtext, fontSize = IronLogType.meta.fontSize.sp)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(Modifier.selectableGroup(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             (1..5).forEach { i ->
                 val active = value == i
                 val bg = if (active) c.accent.copy(alpha = 0.15f) else Color.Transparent
@@ -771,10 +790,11 @@ private fun ScoreRow(label: String, value: Int, c: IronLogThemeTokens, onChange:
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .height(36.dp)
+                        .heightIn(min = 48.dp)
                         .background(bg, RoundedCornerShape(8.dp))
                         .border(1.dp, color = borderColor, shape = RoundedCornerShape(8.dp))
-                        .clickable { onChange(i) },
+                        .semantics { contentDescription = "$label, $i" }
+                        .selectable(selected = active, enabled = enabled, role = Role.RadioButton) { onChange(i) },
                     contentAlignment = Alignment.Center
                 ) {
                     Text("$i", color = tc, fontWeight = FontWeight.Bold)

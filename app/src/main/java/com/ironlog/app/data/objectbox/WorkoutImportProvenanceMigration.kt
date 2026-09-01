@@ -1,6 +1,7 @@
 package com.ironlog.app.data.objectbox
 
 import org.json.JSONObject
+import io.objectbox.BoxStore
 
 /**
  * One-time bridge from the legacy account-wide imported-history flag to per-workout
@@ -11,48 +12,57 @@ import org.json.JSONObject
 object WorkoutImportProvenanceMigration {
     private const val MIGRATION_KEY = "workout_import_provenance_v1"
     private const val LEGACY_IMPORTED_KEY = "ledger_imported_history"
+    private const val SET_NOTES_MIGRATION_KEY = "workout_set_notes_v1"
 
-    fun run() {
-        val store = ObjectBox.store
-        normalizeAthleteSingletons()
+    /** The caller supplies the store so startup and refresh cannot normalize different databases. */
+    fun run(store: BoxStore) {
+        store.runInTx { runInsideTransaction(store) }
+    }
+
+    /** Used by the authoritative gamification transaction before it reads or creates a profile. */
+    internal fun runInsideTransaction(store: BoxStore) {
+        normalizeAthleteSingletons(store)
         val settingsBox = store.boxFor(AppSettingEntity::class.java)
+        migrateSetNotesOnce(store, settingsBox)
         val alreadyMigrated = settingsBox.query(AppSettingEntity_.key.equal(MIGRATION_KEY))
             .build().use { it.findFirst() }
             ?.value
             ?.toBooleanStrictOrNull() == true
         if (alreadyMigrated) return
 
-        store.runInTx {
-            val legacySetting = settingsBox.query(AppSettingEntity_.key.equal(LEGACY_IMPORTED_KEY))
-                .build().use { it.findFirst() }
-                ?.value
-                ?.toBooleanStrictOrNull() == true
-            val legacyCalibration = store.boxFor(AthleteCalibrationEntity::class.java)
-                .query(AthleteCalibrationEntity_.importedHistory.equal(true))
-                .build().use { it.count() > 0 }
+        val legacySetting = settingsBox.query(AppSettingEntity_.key.equal(LEGACY_IMPORTED_KEY))
+            .build().use { it.findFirst() }
+            ?.value
+            ?.toBooleanStrictOrNull() == true
+        val legacyCalibration = store.boxFor(AthleteCalibrationEntity::class.java)
+            .query(AthleteCalibrationEntity_.importedHistory.equal(true))
+            .build().use { it.count() > 0 }
 
-            if (legacySetting || legacyCalibration) {
-                val workoutBox = store.boxFor(WorkoutEntity::class.java)
-                val completed = workoutBox.query(WorkoutEntity_.status.equal("completed"))
-                    .build().use { it.find() }
-                completed.forEach { it.imported = true }
-                workoutBox.put(completed)
-            }
-
-            settingsBox.put(AppSettingEntity().apply {
-                key = MIGRATION_KEY
-                value = "true"
-                valueType = "boolean"
-                updatedAt = System.currentTimeMillis()
-            })
+        if (legacySetting || legacyCalibration) {
+            val workoutBox = store.boxFor(WorkoutEntity::class.java)
+            val completed = workoutBox.query(WorkoutEntity_.status.equal("completed"))
+                .build().use { it.find() }
+            completed.forEach { it.imported = true }
+            workoutBox.put(completed)
         }
+
+        settingsBox.put(AppSettingEntity().apply {
+            key = MIGRATION_KEY
+            value = "true"
+            valueType = "boolean"
+            updatedAt = System.currentTimeMillis()
+        })
     }
 
-    private fun normalizeAthleteSingletons() {
-        val store = ObjectBox.store
-        store.runInTx {
+    private fun normalizeAthleteSingletons(store: BoxStore) {
             val profileBox = store.boxFor(GamificationProfileEntity::class.java)
             val profiles = profileBox.all
+            profiles.filter { it.badgeUnlocksJson == null }.forEach {
+                it.badgeUnlocksJson = "{}"
+                it.updatedAt = maxOf(it.updatedAt, System.currentTimeMillis())
+                profileBox.put(it)
+            }
+
             if (profiles.isNotEmpty() && (profiles.size > 1 || profiles.single().offlineUserId != "local")) {
                 val primary = profiles.maxBy { it.totalXp }
                 val badges = profiles.flatMap { it.unlockedBadges.split(',') }
@@ -94,7 +104,25 @@ object WorkoutImportProvenanceMigration {
                 latest.baselineMileRunSeconds = calibrations.maxOf { it.baselineMileRunSeconds }
                 calibrationBox.put(latest)
             }
-        }
+    }
+
+    /** Avoids scanning every historical set during every gamification refresh. */
+    private fun migrateSetNotesOnce(store: BoxStore, settingsBox: io.objectbox.Box<AppSettingEntity>) {
+        val complete = settingsBox.query(AppSettingEntity_.key.equal(SET_NOTES_MIGRATION_KEY))
+            .build().use { it.findFirst() }
+            ?.value
+            ?.toBooleanStrictOrNull() == true
+        if (complete) return
+        val workoutSetBox = store.boxFor(WorkoutSetEntity::class.java)
+        val setsMissingNotes = workoutSetBox.all.filter { it.notes == null }
+        setsMissingNotes.forEach { it.notes = "" }
+        if (setsMissingNotes.isNotEmpty()) workoutSetBox.put(setsMissingNotes)
+        settingsBox.put(AppSettingEntity().apply {
+            key = SET_NOTES_MIGRATION_KEY
+            value = "true"
+            valueType = "boolean"
+            updatedAt = System.currentTimeMillis()
+        })
     }
 
     private fun mergeCompletionMaps(values: List<String>): String {

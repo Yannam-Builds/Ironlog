@@ -1,10 +1,13 @@
 package com.ironlog.app.ui.screens.onboarding.steps
 
+import com.ironlog.app.ui.theme.appGapDp
+import com.ironlog.app.ui.theme.appPadding
+import com.ironlog.app.ui.theme.appSpacedBy
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Text
+import com.ironlog.app.ui.theme.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -39,7 +42,7 @@ fun Step5GoalMode(
             .fillMaxSize()
             .background(OnboardingConfig.bgDark)
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 24.dp, vertical = 24.dp),
+            .appPadding(horizontal = 24.dp, vertical = 24.dp),
     ) {
         OnboardingPageHeader(
             step = "Primary goal",
@@ -47,9 +50,9 @@ fun Step5GoalMode(
             body = "Your choice tunes rep ranges, rest periods, progression suggestions and how training insights are framed.",
         )
 
-        Spacer(Modifier.height(26.dp))
+        Spacer(Modifier.height(appGapDp(26.dp)))
 
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(verticalArrangement = appSpacedBy(12.dp)) {
             GOAL_OPTIONS.forEachIndexed { index, option ->
                 val isSelected = option.mode == selectedGoalMode
                 GlowCard(
@@ -64,24 +67,24 @@ fun Step5GoalMode(
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Black,
                         )
-                        Spacer(Modifier.width(14.dp))
+                        Spacer(Modifier.width(appGapDp(14.dp)))
                         Column(Modifier.weight(1f)) {
                             Text(option.label, color = OnboardingConfig.textPrimary, fontSize = 17.sp, fontWeight = FontWeight.ExtraBold)
-                            Spacer(Modifier.height(4.dp))
+                            Spacer(Modifier.height(appGapDp(4.dp)))
                             Text(option.subtitle, color = OnboardingConfig.textMuted, fontSize = 13.sp, lineHeight = 18.sp)
-                            Spacer(Modifier.height(8.dp))
-                            Text(option.programming, color = OnboardingConfig.accentGold, fontSize = 11.sp, lineHeight = 16.sp, fontWeight = FontWeight.SemiBold)
+                            Spacer(Modifier.height(appGapDp(8.dp)))
+                            Text(option.programming, color = OnboardingConfig.accentGold, fontSize = 12.sp, lineHeight = 17.sp, fontWeight = FontWeight.SemiBold)
                         }
                     }
                 }
             }
         }
 
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(appGapDp(20.dp)))
         SetupReward("Completing workouts can later unlock the Multiclass badge across goal modes", Modifier.fillMaxWidth())
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(appGapDp(14.dp)))
 
         GlowButton(text = stringResource(R.string.onb_goal_cta), onClick = onNext)
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(appGapDp(24.dp)))
     }
 }

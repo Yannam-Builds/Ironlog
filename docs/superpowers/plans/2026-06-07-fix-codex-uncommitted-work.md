@@ -165,7 +165,7 @@
   in BodyMapCanvas.kt (fitWidth/fitHeight canonical box, TOP anchor) is
   correct and unchanged.
 
-  Co-Authored-By: Claude Haiku 4.5 <noreply@anthropic.com>"
+  "
   ```
 
 ---
@@ -236,7 +236,7 @@
   weeklyCompletion, todayCompleted, minutesUntilWorkout, isAtRisk, isRecoveryDay,
   hasNewPb, and visualState fields. 11 PNG mascot assets included.
 
-  Co-Authored-By: Claude Haiku 4.5 <noreply@anthropic.com>"
+  "
   ```
 
 ---
@@ -288,7 +288,7 @@
   backfillMissingAthleteStateRows() to synthesize calibration + gamification
   rows from legacy exports that predate the calibration table.
 
-  Co-Authored-By: Claude Haiku 4.5 <noreply@anthropic.com>"
+  "
   ```
 
 ---
@@ -349,7 +349,7 @@
   instead of calculateQualifiedBadge(). AppNavigator persists the new field.
   IronLedgerEngine and GamificationViewModel updated for baseline seeding.
 
-  Co-Authored-By: Claude Haiku 4.5 <noreply@anthropic.com>"
+  "
   ```
 
 ---
@@ -389,7 +389,7 @@
   Extracts ProgressPhotoCompareLogic for date-bucketed before/after photo pair
   selection. ProgressPhotosScreen updated to use the new logic class.
 
-  Co-Authored-By: Claude Haiku 4.5 <noreply@anthropic.com>"
+  "
   ```
 
 ---
@@ -453,7 +453,7 @@
   - CreateExercise: `navigationBarsPadding` bottom spacer; copy-picker `maxLines`.
   - PlanQrScan: executor `DisposableEffect` shutdown; scan-error `maxLines`; instruction overlay scrim + `navigationBarsPadding`.
 
-  **Build verification:** All 19 commits build successfully. Release APK installed on device `R5CY925TFHT` via `adb install -r`.
+  **Build verification:** All 19 commits build successfully. Release APK installed on the physical test device via `adb install -r`.
   ```
 
 - [ ] **Step 2: Also add an entry for the bodymap fix + uncommitted commits (from Task 1–5)**

@@ -219,11 +219,10 @@ Note any imbalances or missing movement patterns in 2–3 sentences. Under 70 wo
         recentWeightKg: Double,
         recentReps: Int,
         trend: String,
+        policy: ResolvedProgressionPolicy = ResolvedProgressionPolicy.conservativeDefault(),
     ): String {
         if (apiKey.isBlank() || baseUrl.isBlank()) return "Configure your Cloud AI key in Settings."
-        val prompt = """You are a concise personal trainer AI inside the IronLog workout app.
-$exerciseName: working weight ${recentWeightKg}kg × $recentReps reps, progress trend is $trend.
-In 1–2 sentences explain the recommended next progression step. Under 50 words. Plain text only."""
+        val prompt = buildProgressionExplanationPrompt(exerciseName, recentWeightKg, recentReps, trend, policy)
         return runCatching { chat(baseUrl, apiKey, modelName, apiFormat, prompt) }
             .getOrElse { Timber.w(it, "askProgressionExplanation failed"); "" }
     }

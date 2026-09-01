@@ -1,6 +1,15 @@
 ﻿package com.ironlog.app.ui.screens.workout
 
+import com.ironlog.app.ui.theme.appGapDp
+import com.ironlog.app.ui.theme.appPadding
+import com.ironlog.app.ui.theme.appSpacedBy
 import com.ironlog.app.domain.gamification.parseHistoryInstant
+import com.ironlog.app.domain.gamification.parseHistoryLocalDate
+import com.ironlog.app.domain.gamification.CreditedProof
+import com.ironlog.app.ui.screens.history.calendarSessionsByLocalDate
+import com.ironlog.app.ui.state.rememberPresentationTime
+import java.time.Instant
+import java.time.ZoneId
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -15,6 +24,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.*
+import com.ironlog.app.ui.theme.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,15 +53,15 @@ import kotlin.math.roundToInt
 private val DAY_HEADERS = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 private val MONTH_NAMES = listOf("January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December")
 
-fun getCalendarStreakCount(history: List<HistoryEntry>): Int {
-    if (history.isEmpty()) return 0
-    val workoutDays = history.map { it.date.substringBefore('T') }.toSet()
-    val cursor = Calendar.getInstance().apply { set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0) }
+fun getCalendarStreakCount(history: List<HistoryEntry>, now: Instant = Instant.now(), zoneId: ZoneId = ZoneId.systemDefault()): Int {
+    val workoutDays = history.filter { CreditedProof.qualifies(it, now, zoneId) }
+        .mapNotNull { parseHistoryLocalDate(it.date, zoneId) }.toSet()
+    val today = now.atZone(zoneId).toLocalDate()
+    var cursor = if (today in workoutDays) today else today.minusDays(1)
     var streak = 0
-    val fmt = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-    while (true) {
-        val key = fmt.format(cursor.time)
-        if (workoutDays.contains(key)) { streak++; cursor.add(Calendar.DATE, -1) } else break
+    while (cursor in workoutDays) {
+        streak++
+        cursor = cursor.minusDays(1)
     }
     return streak
 }
@@ -71,9 +81,7 @@ fun formatDateLong(isoString: String): String = runCatching {
         .format(instant.atZone(java.time.ZoneId.systemDefault()))
 }.getOrElse { isoString }
 
-fun calcSessionVolume(session: HistoryEntry): Int = session.exercises.sumOf { ex ->
-    ex.sets.sumOf { set -> ((set.weight ?: 0.0) * (set.reps ?: 0.0)).roundToInt() }
-}
+fun calcSessionVolume(session: HistoryEntry): Int = session.volume.roundToInt()
 
 fun toDisplayVolume(kgValue: Int, unit: String): Int = if (unit == "lbs") (kgValue * 2.2046226218).roundToInt() else kgValue
 
@@ -83,11 +91,14 @@ fun WorkoutCalendarScreen(
     history: List<HistoryEntry>,
     weightUnit: String = "kg",
     onBack: () -> Unit = {},
-    onLogWorkout: (CreateCompletedWorkoutInput) -> Unit = {},
-    onStartWorkout: (dateKey: String) -> Unit = {},
+    onLogHistorical: (dateKey: String) -> Unit = {},
 ) {
     val colors = useTheme()
-    val today = remember { Calendar.getInstance() }
+    val nowMillis by rememberPresentationTime()
+    val zoneId = ZoneId.systemDefault()
+    val now = Instant.ofEpochMilli(nowMillis)
+    val todayDate = now.atZone(zoneId).toLocalDate()
+    val today = remember(todayDate, zoneId) { java.util.GregorianCalendar.from(todayDate.atStartOfDay(zoneId)) }
     var viewYear by remember { mutableIntStateOf(today.get(Calendar.YEAR)) }
     var viewMonth by remember { mutableIntStateOf(today.get(Calendar.MONTH)) }
     var selectedSession by remember { mutableStateOf<HistoryEntry?>(null) }
@@ -97,13 +108,12 @@ fun WorkoutCalendarScreen(
 
     var addForDate by remember { mutableStateOf<String?>(null) }
 
-    val sessionsByDate = remember(history) { history.groupBy { it.date.substringBefore('T') } }
-    val streak = remember(history) { getCalendarStreakCount(history) }
-    val monthSessions = remember(history, viewYear, viewMonth) {
+    val sessionsByDate = remember(history, zoneId) { calendarSessionsByLocalDate(history, zoneId) }
+    val streak = remember(history, now, zoneId) { getCalendarStreakCount(history, now, zoneId) }
+    val monthSessions = remember(history, viewYear, viewMonth, zoneId) {
         history.filter {
-            val instant = parseHistoryInstant(it.date) ?: return@filter false
-            val c = Calendar.getInstance().apply { time = Date.from(instant) }
-            c.get(Calendar.YEAR) == viewYear && c.get(Calendar.MONTH) == viewMonth
+            val date = parseHistoryLocalDate(it.date, zoneId) ?: return@filter false
+            date.year == viewYear && date.monthValue == viewMonth + 1
         }
     }
     val monthTotalVolume = remember(monthSessions) { monthSessions.sumOf { calcSessionVolume(it) } }
@@ -113,20 +123,14 @@ fun WorkoutCalendarScreen(
         (dow - 2 + 7) % 7
     }
     val daysInMonth = remember(viewYear, viewMonth) { Calendar.getInstance().apply { set(viewYear, viewMonth + 1, 0) }.get(Calendar.DAY_OF_MONTH) }
-    val todayKey = remember { SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date()) }
-    val fmt = remember { SimpleDateFormat("yyyy-MM-dd", Locale.US) }
+    val todayKey = todayDate.toString()
+    val fmt = remember(zoneId) { SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { timeZone = java.util.TimeZone.getTimeZone(zoneId) } }
 
     // Week view: compute the 7 days of the offset week (Sun..Sat)
-    val weekDays = remember(weekOffset) {
-        val cal = Calendar.getInstance()
-        cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0)
-        cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0)
-        cal.set(Calendar.DAY_OF_WEEK, Calendar.MONDAY)
-        cal.add(Calendar.WEEK_OF_YEAR, weekOffset)
+    val weekDays = remember(weekOffset, todayDate, zoneId) {
+        val monday = todayDate.with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY)).plusWeeks(weekOffset.toLong())
         (0..6).map { offset ->
-            val d = cal.clone() as Calendar
-            d.add(Calendar.DATE, offset)
-            d
+            java.util.GregorianCalendar.from(monday.plusDays(offset.toLong()).atStartOfDay(zoneId))
         }
     }
     val weekLabel = remember(weekDays) {
@@ -135,10 +139,9 @@ fun WorkoutCalendarScreen(
         "${startFmt.format(weekDays.first().time)} – ${endFmt.format(weekDays.last().time)}"
     }
     // Sessions for the selected week (agenda list)
-    val weekSessions = remember(history, weekDays) {
+    val weekSessions = remember(sessionsByDate, weekDays) {
         val weekKeys = weekDays.map { fmt.format(it.time) }.toSet()
-        history.filter { it.date.substringBefore('T') in weekKeys }
-            .sortedBy { it.date }
+        weekKeys.flatMap { sessionsByDate[it].orEmpty() }.sortedBy { parseHistoryInstant(it.date, zoneId) }
     }
 
     fun prevMonth() { if (viewMonth == 0) { viewMonth = 11; viewYear -= 1 } else viewMonth -= 1 }
@@ -155,8 +158,8 @@ fun WorkoutCalendarScreen(
                 .clip(RoundedCornerShape(IronLogRadius.lg.dp))
                 .background(colors.surface)
                 .border(1.dp, colors.cardBorder, RoundedCornerShape(IronLogRadius.lg.dp))
-                .padding(4.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                .appPadding(4.dp),
+            horizontalArrangement = appSpacedBy(4.dp),
         ) {
             listOf("Month" to false, "Week" to true).forEach { (label, weekMode) ->
                 val selected = showWeekView == weekMode
@@ -178,10 +181,10 @@ fun WorkoutCalendarScreen(
                 }
             }
         }
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(appGapDp(12.dp)))
 
         // Stats row
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+        Row(horizontalArrangement = appSpacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
             StatCard("STREAK", streak.toString(), Modifier.weight(1f))
             if (showWeekView) {
                 StatCard("THIS WEEK", weekSessions.size.toString(), Modifier.weight(1f))
@@ -193,7 +196,7 @@ fun WorkoutCalendarScreen(
                 StatCard("VOLUME ($weightUnit)", if (displayVol >= 1000) "%.1fk".format(displayVol / 1000.0) else displayVol.toString(), Modifier.weight(1f))
             }
         }
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(appGapDp(12.dp)))
 
         if (showWeekView) {
             // ── Week view ────────────────────────────────────────────────────
@@ -211,7 +214,7 @@ fun WorkoutCalendarScreen(
                 Row(Modifier.fillMaxWidth()) {
                     DAY_HEADERS.forEach { Text(it, color = colors.muted, modifier = Modifier.weight(1f), fontSize = IronLogType.meta.fontSize.sp) }
                 }
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(appGapDp(4.dp)))
                 Row(Modifier.fillMaxWidth()) {
                     weekDays.forEach { cal ->
                         val key = fmt.format(cal.time)
@@ -230,17 +233,16 @@ fun WorkoutCalendarScreen(
                                 .combinedClickable(
                                     onClick = {
                                         if (!isFuture) {
-                                            if (sessions.isNotEmpty()) selectedSession = sessions.last()
-                                            else addForDate = key
+                                            addForDate = key
                                         }
                                     },
                                     onLongClick = {
-                                        if (!isFuture && sessions.isEmpty()) onStartWorkout(key)
+                                        if (!isFuture) addForDate = key
                                     },
                                 ),
                             contentAlignment = Alignment.Center,
                         ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = appSpacedBy(2.dp)) {
                                 Text(cal.get(Calendar.DAY_OF_MONTH).toString(),
                                     color = if (isFuture) colors.muted else colors.text,
                                     fontSize = IronLogType.body.fontSize.sp)
@@ -268,7 +270,7 @@ fun WorkoutCalendarScreen(
             }
             // Agenda list for the week
             if (weekSessions.isNotEmpty()) {
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(appGapDp(16.dp)))
                 Text(
                     "SESSIONS",
                     color = colors.muted,
@@ -276,7 +278,7 @@ fun WorkoutCalendarScreen(
                     fontWeight = FontWeight(IronLogType.eyebrow.fontWeight),
                     letterSpacing = IronLogType.eyebrow.letterSpacing.sp,
                 )
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(appGapDp(8.dp)))
                 weekSessions.forEach { session ->
                     Row(
                         Modifier
@@ -289,7 +291,7 @@ fun WorkoutCalendarScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Column(verticalArrangement = appSpacedBy(2.dp)) {
                             Text(session.name.uppercase(), color = colors.accent, fontWeight = FontWeight.Bold, fontSize = IronLogType.body.fontSize.sp)
                             Text(
                                 "${session.sets} sets · ${formatDurationMins(session.duration)}",
@@ -298,15 +300,15 @@ fun WorkoutCalendarScreen(
                             )
                         }
                         Text(
-                            session.date.substringBefore('T'),
+                            parseHistoryLocalDate(session.date, zoneId)?.toString().orEmpty(),
                             color = colors.subtext,
                             fontSize = IronLogType.meta.fontSize.sp,
                         )
                     }
-                    Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(appGapDp(8.dp)))
                 }
             } else {
-                Spacer(Modifier.height(24.dp))
+                Spacer(Modifier.height(appGapDp(24.dp)))
                 Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                     Text("No workouts this week", color = colors.muted, fontSize = IronLogType.body.fontSize.sp)
                 }
@@ -344,12 +346,11 @@ fun WorkoutCalendarScreen(
                                     .then(if (key != null) Modifier.combinedClickable(
                                         onClick = {
                                             if (isPast) {
-                                                if (sessions.isNotEmpty()) selectedSession = sessions.last()
-                                                else addForDate = key
+                                                addForDate = key
                                             }
                                         },
                                         onLongClick = {
-                                            if (isPast && sessions.isEmpty()) onStartWorkout(key)
+                                            if (isPast) addForDate = key
                                         },
                                     ) else Modifier),
                                 contentAlignment = Alignment.Center
@@ -386,161 +387,26 @@ fun WorkoutCalendarScreen(
     }
 
     addForDate?.let { dateKey ->
-        AddWorkoutForDateSheet(
-            dateKey = dateKey,
-            onDismiss = { addForDate = null },
-            onConfirm = { input ->
-                onLogWorkout(input)
-                addForDate = null
-            },
-        )
-    }
-}
-
-/** Bottom-sheet style dialog for logging a manual workout on a past date. */
-@Composable
-private fun AddWorkoutForDateSheet(
-    dateKey: String,         // "yyyy-MM-dd"
-    onDismiss: () -> Unit,
-    onConfirm: (CreateCompletedWorkoutInput) -> Unit,
-) {
-    val c = useTheme()
-    var workoutName by remember { mutableStateOf("") }
-    var durationMins by remember { mutableStateOf("") }
-    var notes by remember { mutableStateOf("") }
-    var rating by remember { mutableStateOf(3) }  // 1–5
-
-    val displayDate = remember(dateKey) {
-        runCatching {
-            val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-            val cal = Calendar.getInstance().apply { time = sdf.parse(dateKey)!! }
-            SimpleDateFormat("EEEE, MMMM d, yyyy", Locale.US).format(cal.time)
-        }.getOrElse { dateKey }
-    }
-
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false),
-    ) {
-        Column(
-            Modifier
-                .fillMaxWidth(0.94f)
-                .clip(RoundedCornerShape(IronLogRadius.xl.dp))
-                .background(c.card)
-                .padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            // Header
-            Text("LOG WORKOUT", color = c.accent, fontWeight = FontWeight.Black,
-                fontSize = IronLogType.eyebrow.fontSize.sp, letterSpacing = 2.sp)
-            Text(displayDate, color = c.subtext, fontSize = IronLogType.body.fontSize.sp)
-
-            // Workout name
-            OutlinedTextField(
-                value = workoutName,
-                onValueChange = { workoutName = it },
-                label = { Text("Workout name (optional)", color = c.muted) },
-                placeholder = { Text("e.g. Push Day", color = c.muted.copy(alpha = 0.5f)) },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = c.accent,
-                    unfocusedBorderColor = c.cardBorder,
-                    focusedTextColor = c.text,
-                    unfocusedTextColor = c.text,
-                ),
-            )
-
-            // Duration
-            OutlinedTextField(
-                value = durationMins,
-                onValueChange = { durationMins = it.filter { ch -> ch.isDigit() } },
-                label = { Text("Duration (minutes)", color = c.muted) },
-                placeholder = { Text("e.g. 60", color = c.muted.copy(alpha = 0.5f)) },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.fillMaxWidth(),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = c.accent,
-                    unfocusedBorderColor = c.cardBorder,
-                    focusedTextColor = c.text,
-                    unfocusedTextColor = c.text,
-                ),
-            )
-
-            // Rating
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("RATING", color = c.muted, fontSize = IronLogType.eyebrow.fontSize.sp, letterSpacing = 2.sp)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    (1..5).forEach { star ->
-                        Box(
-                            Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .background(if (star <= rating) c.accent else c.surface)
-                                .border(1.dp, if (star <= rating) c.accent else c.cardBorder, CircleShape)
-                                .clickable { rating = star },
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text("$star", color = if (star <= rating) c.textOnAccent else c.muted,
-                                fontWeight = FontWeight.Bold, fontSize = IronLogType.body.fontSize.sp)
+        val sessions = sessionsByDate[dateKey].orEmpty()
+        AlertDialog(
+            onDismissRequest = { addForDate = null },
+            title = { Text(dateKey, color = colors.text) },
+            text = {
+                Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = appSpacedBy(8.dp)) {
+                    Text("Recorded sessions", color = colors.subtext)
+                    if (sessions.isEmpty()) Text("No workout recorded yet.", color = colors.muted)
+                    sessions.forEach { session ->
+                        TextButton(onClick = { addForDate = null; selectedSession = session },
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                            Text("${parseHistoryInstant(session.date, zoneId)?.atZone(zoneId)?.toLocalTime()?.withSecond(0)?.withNano(0)} · ${session.name}", color = colors.text)
                         }
                     }
                 }
-            }
-
-            // Notes
-            OutlinedTextField(
-                value = notes,
-                onValueChange = { notes = it },
-                label = { Text("Notes (optional)", color = c.muted) },
-                minLines = 2,
-                maxLines = 4,
-                modifier = Modifier.fillMaxWidth(),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = c.accent,
-                    unfocusedBorderColor = c.cardBorder,
-                    focusedTextColor = c.text,
-                    unfocusedTextColor = c.text,
-                ),
-            )
-
-            // Buttons
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                TextButton(onClick = onDismiss, modifier = Modifier.weight(1f)) {
-                    Text("CANCEL", color = c.muted)
-                }
-                Button(
-                    onClick = {
-                        // Build startedAt = noon on the selected date
-                        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-                        val cal = Calendar.getInstance().apply {
-                            time = runCatching { sdf.parse(dateKey)!! }.getOrElse { Date() }
-                            set(Calendar.HOUR_OF_DAY, 12)
-                            set(Calendar.MINUTE, 0)
-                            set(Calendar.SECOND, 0)
-                            set(Calendar.MILLISECOND, 0)
-                        }
-                        val durationSec = (durationMins.toIntOrNull() ?: 0) * 60
-                        val name = workoutName.trim().ifBlank { "Manual Workout" }
-                        onConfirm(
-                            CreateCompletedWorkoutInput(
-                                name = name,
-                                startedAt = cal.timeInMillis,
-                                durationSeconds = durationSec,
-                                rating = rating.toDouble(),
-                                notes = notes.trim().takeIf { it.isNotBlank() },
-                                exerciseData = emptyList(),
-                            )
-                        )
-                    },
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(containerColor = c.accent),
-                ) {
-                    Text("SAVE", color = c.bg, fontWeight = FontWeight.Black, letterSpacing = 2.sp)
-                }
-            }
-        }
+            },
+            confirmButton = { TextButton(onClick = { addForDate = null; onLogHistorical(dateKey) }) { Text("Log workout") } },
+            dismissButton = { TextButton(onClick = { addForDate = null }) { Text("Cancel") } },
+            containerColor = colors.card,
+        )
     }
 }
 
@@ -563,7 +429,7 @@ private fun SessionDetailDialog(session: HistoryEntry, weightUnit: String, onDis
                 .verticalScroll(rememberScrollState()),
         ) {
             // Header
-            Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp)) {
+            Column(Modifier.fillMaxWidth().appPadding(horizontal = 20.dp, vertical = 16.dp)) {
                 Text(
                     session.name.uppercase(),
                     color = c.accent,
@@ -582,7 +448,7 @@ private fun SessionDetailDialog(session: HistoryEntry, weightUnit: String, onDis
                 Modifier
                     .fillMaxWidth()
                     .border(width = 1.dp, color = c.faint, shape = RoundedCornerShape(0.dp))
-                    .padding(vertical = 12.dp),
+                    .appPadding(vertical = 12.dp),
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -594,7 +460,7 @@ private fun SessionDetailDialog(session: HistoryEntry, weightUnit: String, onDis
             }
             // Exercise breakdown
             if (session.exercises.isNotEmpty()) {
-                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(Modifier.fillMaxWidth().appPadding(16.dp), verticalArrangement = appSpacedBy(8.dp)) {
                     Text(
                         "EXERCISES",
                         color = c.muted,
@@ -609,8 +475,8 @@ private fun SessionDetailDialog(session: HistoryEntry, weightUnit: String, onDis
                                 .clip(RoundedCornerShape(IronLogRadius.sm.dp))
                                 .background(c.bg)
                                 .border(1.dp, c.faint, RoundedCornerShape(IronLogRadius.sm.dp))
-                                .padding(horizontal = 12.dp, vertical = 8.dp),
-                            verticalArrangement = Arrangement.spacedBy(2.dp),
+                                .appPadding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalArrangement = appSpacedBy(2.dp),
                         ) {
                             Text(ex.name, color = c.text, fontWeight = FontWeight.SemiBold, fontSize = IronLogType.body.fontSize.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             if (ex.sets.isNotEmpty()) {
@@ -624,7 +490,7 @@ private fun SessionDetailDialog(session: HistoryEntry, weightUnit: String, onDis
                     }
                 }
             } else {
-                Box(Modifier.fillMaxWidth().padding(20.dp), contentAlignment = Alignment.Center) {
+                Box(Modifier.fillMaxWidth().appPadding(20.dp), contentAlignment = Alignment.Center) {
                     Text("No exercise details recorded.", color = c.muted, fontSize = IronLogType.body.fontSize.sp)
                 }
             }
@@ -639,7 +505,7 @@ private fun SessionDetailDialog(session: HistoryEntry, weightUnit: String, onDis
 @Composable
 private fun StatPill(value: String, label: String) {
     val c = useTheme()
-    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = appSpacedBy(2.dp)) {
         Text(value, color = c.text, fontWeight = FontWeight.Bold, fontSize = IronLogType.title.fontSize.sp)
         Text(label, color = c.muted, fontSize = IronLogType.eyebrow.fontSize.sp, fontWeight = FontWeight(IronLogType.eyebrow.fontWeight), letterSpacing = 1.sp)
     }
@@ -647,7 +513,7 @@ private fun StatPill(value: String, label: String) {
 
 @Composable private fun StatCard(label: String, value: String, modifier: Modifier = Modifier) {
     val colors = useTheme()
-    Column(modifier.background(colors.card, RoundedCornerShape(12.dp)).border(1.dp, colors.cardBorder, RoundedCornerShape(12.dp)).padding(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(modifier.background(colors.card, RoundedCornerShape(12.dp)).border(1.dp, colors.cardBorder, RoundedCornerShape(12.dp)).appPadding(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Text(value, color = colors.text, fontSize = IronLogType.title.fontSize.sp)
         Text(label, color = colors.muted, fontSize = IronLogType.micro.fontSize.sp)
     }

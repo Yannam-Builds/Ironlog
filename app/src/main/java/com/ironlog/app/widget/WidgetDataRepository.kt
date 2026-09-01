@@ -26,6 +26,7 @@ import com.ironlog.app.domain.gamification.dailyWorkoutStreakDays
 import com.ironlog.app.domain.gamification.parseHistoryLocalDate
 import com.ironlog.app.domain.intelligence.RecoveryReadinessEngine
 import com.ironlog.app.domain.intelligence.WorkoutSuggestionEngine
+import com.ironlog.app.data.repository.currentAthleteBodyweightKg
 import com.ironlog.app.ui.model.HistoryEntry
 import io.objectbox.BoxStore
 import java.time.LocalDate
@@ -74,12 +75,15 @@ class WidgetDataRepository(
         val reconciledXpInLevel = ledgerEngine.xpInCurrentLevel(reconciledXp)
         val reconciledXpForNextLevel = ledgerEngine.xpForLevel(reconciledLevel)
 
-        val recentHistory = history.sortedByDescending { parseHistoryLocalDate(it.date) }.take(60)
-        val (recommendedDayName, recommendedDayBlurb) = buildRecommendation(recentHistory)
-        val weekSessions = countIsoWeekSessions(history)
+        val nowMs = System.currentTimeMillis()
+        val painFlags = com.ironlog.app.domain.intelligence.RECOVERY_REGIONS.filter { readSettingString("pain_flag_$it") == "true" }.toSet()
+        val manual = com.ironlog.app.domain.intelligence.RecoveryCheckInCodec.decode(readSettingString("manual_recovery_input"), nowMs)
+        val readiness = RecoveryReadinessEngine.readinessByRegion(history, painFlags, nowMs)
+        val (recommendedDayName, recommendedDayBlurb) = buildRecommendation(readiness, painFlags)
+        val weekSessions = com.ironlog.app.domain.gamification.creditedSessionsThisWeek(history, java.time.Instant.ofEpochMilli(nowMs))
         val readinessScore = RecoveryReadinessEngine.score(
-            RecoveryReadinessEngine.readinessByRegion(recentHistory)
-        ).score
+            readiness, manual, nowMs
+        ).scoreOrNull
         val latestBadgeTitle = readLatestBadgeTitle(storedProfile, snapshot.grade.label)
         val recoveryCircuitCompletions = runCatching {
             Json.decodeFromString<Map<String, Int>>(storedProfile?.makeupCompletionsJson ?: "{}")
@@ -94,11 +98,13 @@ class WidgetDataRepository(
             hasActivePlan = recommendedDayName != "No Plan",
             activeWorkoutDayName = readActiveWorkoutDayName(),
             readinessScore = readinessScore,
+            nowEpochMs = nowMs,
+            painFlags = painFlags,
         )
-        val nowMs = System.currentTimeMillis()
         val localNow = LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(nowMs), ZoneId.systemDefault())
         val today = localNow.toLocalDate()
-        val historyDates = history.mapNotNull { parseHistoryLocalDate(it.date) }.toSet()
+        val historyDates = history.filter { com.ironlog.app.domain.gamification.CreditedProof.qualifies(it, java.time.Instant.ofEpochMilli(nowMs)) }
+            .mapNotNull { parseHistoryLocalDate(it.date) }.toSet()
         val weekStart = today.with(TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY))
         val weeklyCompletion = buildWeeklyCompletion(historyDates, weekStart)
         val todayCompleted = today in historyDates
@@ -113,15 +119,15 @@ class WidgetDataRepository(
             minutesUntilScheduledTime(localNow, reminderMinutesOfDay)
         } else null
         val scheduledWorkoutHour = reminderMinutesOfDay?.div(60)
-        val isAtRisk = dailyProof.status == DailyProofStatus.AT_RISK ||
-            (dailyStreakDays > 0 && !todayCompleted && localNow.hour >= 18)
+        val isAtRisk = painFlags.isEmpty() && (dailyProof.status == DailyProofStatus.AT_RISK ||
+            (dailyStreakDays > 0 && !todayCompleted && localNow.hour >= 18))
         val isRecoveryDay = dailyProof.status == DailyProofStatus.RECOVER_SMART
         val hasNewPb = isRecentWidgetEvent(
             eventEpochMs = readSettingString("widget_last_new_pb_ms")?.toLongOrNull(),
             nowEpochMs = nowMs,
             maxAgeHours = 24,
         )
-        val visualState = resolveWidgetVisualState(
+        val visualState = if (painFlags.isNotEmpty()) WidgetVisualState.RECOVERY_DAY else resolveWidgetVisualState(
             WidgetVisualInputs(
                 streakDays = dailyStreakDays,
                 todayCompleted = todayCompleted,
@@ -186,7 +192,7 @@ class WidgetDataRepository(
             historicalTrainingDaysPerWeek = entity?.historicalTrainingDaysPerWeek?.takeIf { it in 1..7 } ?: 3,
             importedHistory = entity?.importedHistory ?: false,
             weeklyGoalDays = entity?.weeklyGoalDays ?: weeklyGoal,
-            bodyweightKg = entity?.bodyweightKg,
+            bodyweightKg = currentAthleteBodyweightKg(boxStore),
             hasPastTraining = entity?.hasPastTraining ?: false,
             hasGymAccess = entity?.hasGymAccess ?: true,
             baselinePushups = entity?.baselinePushups ?: 0,
@@ -197,8 +203,8 @@ class WidgetDataRepository(
         )
     }
 
-    private fun buildRecommendation(history: List<HistoryEntry>): Pair<String, String> {
-        val readiness = RecoveryReadinessEngine.readinessByRegion(history)
+    private fun buildRecommendation(readiness: Map<String, Double>, painFlags: Set<String>): Pair<String, String> {
+        if (painFlags.isNotEmpty()) return "Review recovery" to "Pain flagged: review affected movements before choosing today's session."
 
         val planBox = boxStore.boxFor(PlanEntity::class.java)
         val dayBox = boxStore.boxFor(PlanDayEntity::class.java)
@@ -230,7 +236,7 @@ class WidgetDataRepository(
         }
         val idx = if (days.size > 1) suggestionEngine.suggestDayIndex(readiness, dayExerciseNames) else 0
         val bestDay = days.getOrNull(idx) ?: days.first()
-        val blurb = if (days.size > 1) suggestionEngine.recommendationBlurb(readiness, bestDay.name) else ""
+        val blurb = if (days.size > 1) suggestionEngine.recommendationBlurb(readiness, bestDay.name, dayExerciseNames.getOrElse(idx) { emptyList() }) else ""
         return bestDay.name to blurb
     }
 
@@ -263,10 +269,7 @@ class WidgetDataRepository(
     }
 
     private fun readLatestBadgeTitle(profile: GamificationProfileEntity?, fallback: String): String {
-        val badgeId = profile?.unlockedBadges
-            ?.split(",")
-            ?.map(String::trim)
-            ?.lastOrNull(String::isNotBlank)
+        val badgeId = profile?.let { com.ironlog.app.domain.gamification.latestEarnedBadgeId(it.unlockedBadges, it.badgeUnlocksJson) }
             ?: return fallback
         BadgeDefinitions.all.firstOrNull { it.id == badgeId }?.let { return it.title }
         IronGrade.entries.firstOrNull { it.label == badgeId }?.let { return "${it.label} grade" }

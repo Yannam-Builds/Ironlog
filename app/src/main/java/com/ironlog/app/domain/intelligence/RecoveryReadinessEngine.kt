@@ -1,10 +1,12 @@
 package com.ironlog.app.domain.intelligence
 
-import com.ironlog.app.data.health.BiometricSnapshot
 import com.ironlog.app.domain.gamification.parseHistoryInstant
 import com.ironlog.app.ui.model.HistoryEntry
+import com.ironlog.app.domain.training.TrainingSetPolicy
 import java.time.Instant
+import java.time.ZoneId
 import kotlin.math.exp
+import kotlin.math.ln
 import kotlin.math.roundToInt
 import kotlinx.serialization.Serializable
 
@@ -17,7 +19,23 @@ data class ManualRecoveryInput(
     val recordedAt: Long = 0L
 )
 
-data class RecoveryScore(val score: Int, val state: String, val explanation: String)
+data class RecoveryScore(
+    val score: Int,
+    val state: String,
+    val explanation: String,
+    val limitingRegion: String? = null,
+    val hasEvidence: Boolean = true,
+) {
+    val scoreOrNull: Int? get() = score.takeIf { hasEvidence }
+}
+
+data class RegionWorkloadEvidence(val workoutId: String, val date: String, val exerciseName: String, val workingSets: Int, val contribution: Double)
+data class RecoverySnapshot(
+    val readiness: Map<String, Double>,
+    val workloadEvidence: Map<String, List<RegionWorkloadEvidence>>,
+    val painFlags: Set<String>,
+    val score: RecoveryScore,
+)
 
 object RecoveryReadinessEngine {
     /**
@@ -28,52 +46,141 @@ object RecoveryReadinessEngine {
         history: List<HistoryEntry>,
         painFlags: Set<String> = emptySet(),
         nowEpochMs: Long = System.currentTimeMillis(),
-    ): Map<String, Double> {
-        val load = mutableMapOf("Push" to 0.0, "Pull" to 0.0, "Legs" to 0.0, "Core" to 0.0, "Arms" to 0.0, "Shoulders" to 0.0)
+        zoneId: ZoneId = ZoneId.systemDefault(),
+    ): Map<String, Double> = snapshot(history, painFlags, nowEpochMs = nowEpochMs, zoneId = zoneId).readiness
+
+    fun snapshot(
+        history: List<HistoryEntry>, painFlags: Set<String> = emptySet(),
+        manualInput: ManualRecoveryInput? = null,
+        nowEpochMs: Long = System.currentTimeMillis(), zoneId: ZoneId = ZoneId.systemDefault(),
+    ): RecoverySnapshot {
+        val fatigue = linkedMapOf<String, Double>()
+        val evidence = linkedMapOf<String, MutableList<RegionWorkloadEvidence>>()
         history.forEach { w ->
-            val t = parseHistoryInstant(w.date)?.toEpochMilli() ?: return@forEach
+            val t = parseHistoryInstant(w.date, zoneId)?.toEpochMilli() ?: return@forEach
+            // Future proof is not workload, including timestamps within a clock-skew margin.
+            if (t > nowEpochMs) return@forEach
             val hours = ((nowEpochMs - t).coerceAtLeast(0) / 3_600_000.0)
-            val decay = exp(-0.03 * hours)
+            val sessionDose = mutableMapOf<String, Double>()
+            var hasFailureWork = false
+            var hasLowerBodyCompound = false
             w.exercises.forEach { ex ->
-                val workingSets = ex.sets.count { it.type != "warmup" }.toDouble()
-                if (workingSets > 0) {
-                    val contrib = resolveContribution(ex)
-                    if (contrib.isNotEmpty()) {
-                        // Distribute load across recovery regions proportionally
-                        val regionFold = foldContributions(contrib, FINE_MUSCLE_TO_REGION)
-                        regionFold.forEach { (region, frac) ->
-                            load[region] = (load[region] ?: 0.0) + workingSets * frac * decay
-                        }
-                    } else {
-                        // Fallback: coarse keyword classification
-                        val key = when ((ex.primaryMuscle ?: ex.primaryMuscles.firstOrNull().orEmpty()).lowercase()) {
-                            "chest" -> "Push"
-                            "back", "lats" -> "Pull"
-                            "quads", "hamstrings", "glutes", "calves", "legs", "leg" -> "Legs"
-                            "biceps", "triceps", "arms", "forearms" -> "Arms"
-                            "shoulders", "delts" -> "Shoulders"
-                            else -> "Core"
-                        }
-                        load[key] = (load[key] ?: 0.0) + workingSets * decay
+                val workingSets = ex.sets.filter { TrainingSetPolicy.isValidWorkingSet(ex, it) }
+                if (workingSets.isEmpty()) return@forEach
+                val regionFold = resolveRegionContribution(ex)
+                regionFold.filterValues { it.isFinite() && it > 0.0 }.forEach { (region, fraction) ->
+                    evidence.getOrPut(region) { mutableListOf() }.add(RegionWorkloadEvidence(w.id, w.date, ex.name, workingSets.size, fraction))
+                }
+                val exerciseFactor = exerciseRecoveryFactor(ex)
+                if (exerciseFactor > 1.08 && regionFold.containsKey("Legs")) hasLowerBodyCompound = true
+                workingSets.forEach { set ->
+                    val setFactor = setRecoveryFactor(set)
+                    if (set.type.equals("failure", true) || (set.rir != null && set.rir <= 0.0) || (set.rpe != null && set.rpe >= 10.0)) {
+                        hasFailureWork = true
+                    }
+                    regionFold.forEach { (region, fraction) ->
+                        sessionDose[region] = (sessionDose[region] ?: 0.0) + fraction * setFactor * exerciseFactor
                     }
                 }
             }
+            if (sessionDose.isEmpty()) return@forEach
+
+            val totalDose = sessionDose.values.sum()
+            val halfLifeHours = (18.0 *
+                (1.0 + if (hasFailureWork) 0.28 else 0.0) *
+                (1.0 + if (hasLowerBodyCompound) 0.12 else 0.0) *
+                (1.0 + (totalDose / 24.0).coerceIn(0.0, 0.30)))
+                .coerceIn(16.0, 36.0)
+            // Two-phase approximation: acute metabolic/neuromuscular fatigue clears faster,
+            // while the slower component represents damage/remodelling. This is still an
+            // estimate, but better matches observed 24–72 h recovery than one decay constant.
+            val timeRemaining = 0.35 * exp(-ln(2.0) * hours / 8.0) +
+                0.65 * exp(-ln(2.0) * hours / halfLifeHours)
+
+            sessionDose.forEach { (region, dose) ->
+                // Saturating dose response prevents a single huge/imported session from
+                // pinning a muscle at zero, while retaining extra fatigue from high volume.
+                val initialDeficit = 1.0 - exp(-dose / 3.5)
+                val remainingDeficit = initialDeficit * timeRemaining
+                // Independent sessions combine probabilistically instead of adding without bound.
+                val prior = fatigue[region] ?: 0.0
+                fatigue[region] = 1.0 - (1.0 - prior) * (1.0 - remainingDeficit)
+            }
         }
-        val base = load.mapValues { (_, v) -> (1.0 - (v / 8.0).coerceIn(0.0, 1.0)).coerceAtLeast(0.05) }
-        return if (painFlags.isEmpty()) base else base.mapValues { (region, v) -> if (region in painFlags) 0.0 else v }
+        val base = fatigue.mapValues { (_, deficit) -> (1.0 - deficit).coerceIn(0.05, 1.0) }
+        val validPain = painFlags.intersect(RECOVERY_REGIONS.toSet())
+        val readiness = base + validPain.associateWith { 0.0 }
+        val scored = score(readiness, manualInput, nowEpochMs)
+        val finalScore = if (validPain.isEmpty()) scored else scored.copy(
+            state = "pain flagged", explanation = "Pain flagged in ${validPain.sorted().joinToString()}. Avoid painful movements; this estimate is not medical clearance.",
+        )
+        return RecoverySnapshot(readiness, evidence.mapValues { it.value.toList() }, validPain, finalScore)
+    }
+
+    private fun resolveRegionContribution(exercise: com.ironlog.app.ui.model.HistoryExercise): Map<String, Double> {
+        val fine = resolveContribution(exercise)
+        if (fine.isNotEmpty()) return foldContributions(fine, FINE_MUSCLE_TO_REGION)
+        val key = when ((exercise.primaryMuscle ?: exercise.primaryMuscles.firstOrNull().orEmpty()).lowercase()) {
+            "chest" -> "Push"
+            "back", "lats" -> "Pull"
+            "quads", "hamstrings", "glutes", "calves", "legs", "leg" -> "Legs"
+            "biceps", "triceps", "arms", "forearms" -> "Arms"
+            "shoulders", "delts" -> "Shoulders"
+            "core", "abs", "abdominals", "obliques" -> "Core"
+            else -> return emptyMap()
+        }
+        return mapOf(key to 1.0)
+    }
+
+    private fun setRecoveryFactor(set: com.ironlog.app.ui.model.HistoryExerciseSet): Double {
+        val inferredRir = set.rir ?: set.rpe?.let { 10.0 - it }
+        val effort = when {
+            inferredRir == null -> 0.90
+            inferredRir <= 0.0 -> 1.28
+            inferredRir <= 1.0 -> 1.16
+            inferredRir <= 2.0 -> 1.05
+            inferredRir <= 3.0 -> 0.95
+            else -> 0.80
+        }
+        val type = when (set.type.lowercase()) {
+            "failure" -> 1.18
+            "drop", "dropset" -> 1.14
+            "amrap" -> 1.10
+            else -> 1.0
+        }
+        val longSet = if (set.reps >= 12.0) 1.05 else 1.0
+        return (effort * type * longSet).coerceIn(0.65, 1.55)
+    }
+
+    private fun exerciseRecoveryFactor(exercise: com.ironlog.app.ui.model.HistoryExercise): Double {
+        val text = "${exercise.name} ${exercise.category.orEmpty()} ${exercise.equipment.orEmpty()}".lowercase()
+        val lowerCompound = listOf("squat", "deadlift", "leg press", "lunge", "split squat", "hinge").any(text::contains)
+        val lengthenedOrEccentric = listOf("romanian", "stiff leg", "good morning", "nordic", "fly", "pullover").any(text::contains)
+        val isolation = listOf("curl", "extension", "raise", "pushdown", "calf").any(text::contains)
+        return when {
+            lowerCompound && lengthenedOrEccentric -> 1.22
+            lowerCompound -> 1.14
+            lengthenedOrEccentric -> 1.10
+            isolation -> 0.90
+            else -> 1.0
+        }
     }
 
     private fun scoreFromManualInput(input: ManualRecoveryInput?, nowEpochMs: Long): Int? {
         if (input == null) return null
         if (input.soreness == 0 && input.sleepQuality == 0 && input.energy == 0) return null
         // Ensure manual input isn't too stale (e.g., > 48 hours)
-        if (input.recordedAt <= 0L || nowEpochMs - input.recordedAt > 48 * 3600_000L) return null
+        if (input.recordedAt <= 0L || input.recordedAt > nowEpochMs + 5 * 60_000L ||
+            nowEpochMs - input.recordedAt > 48 * 3600_000L) return null
         
-        val s = input.soreness.toDouble()
-        val sl = input.sleepQuality.toDouble()
-        val e = input.energy.toDouble()
-        val normalized = (((sl + e) / 10.0) - (s / 10.0)).coerceIn(-1.0, 1.0)
-        return (normalized * 15.0).roundToInt()
+        val signals = buildList {
+            if (input.soreness in 1..5) add(1.0 - (input.soreness - 1) / 4.0)
+            if (input.sleepQuality in 1..5) add((input.sleepQuality - 1) / 4.0)
+            if (input.energy in 1..5) add((input.energy - 1) / 4.0)
+        }
+        if (signals.isEmpty()) return null
+        val centeredWellness = signals.average() - 0.5
+        return (centeredWellness * 30.0).roundToInt().coerceIn(-15, 15)
     }
 
     fun score(
@@ -81,68 +188,44 @@ object RecoveryReadinessEngine {
         manualInput: ManualRecoveryInput? = null,
         nowEpochMs: Long = System.currentTimeMillis(),
     ): RecoveryScore {
-        val rows = readiness.values.filter { it.isFinite() }
-        val baseScore = if (rows.isEmpty()) 70 else ((rows.average() * 100).coerceIn(1.0, 99.0)).roundToInt()
+        val rows = readiness.filterValues { it.isFinite() }.mapValues { it.value.coerceIn(0.0, 1.0) }.entries.sortedBy { it.value }
+        if (rows.isEmpty()) return RecoveryScore(0, "unknown", "Log a workout with known muscle targets to begin estimating recovery. Your check-in does not replace recorded workload.", hasEvidence = false)
+        val limitingRegion = rows.firstOrNull()?.key
+        val limiting = rows.firstOrNull()?.value
+        val lowestThreeAverage = rows.take(3).map { it.value }.average().takeIf { it.isFinite() }
+        // Readiness is a go/no-go aid for the muscles the next workout may need. A simple
+        // whole-body mean hid a fatigued Push region behind five untouched regions.
+        val baseScore = if (limiting == null || lowestThreeAverage == null) 70 else {
+            ((0.75 * limiting + 0.25 * lowestThreeAverage) * 100.0).coerceIn(1.0, 99.0).roundToInt()
+        }
         
         val manualOffset = scoreFromManualInput(manualInput, nowEpochMs)
         val s = (baseScore + (manualOffset ?: 0)).coerceIn(1, 99)
         
-        val state = if (s >= 78) "fresh" else if (s >= 55) "recovering" else "fatigued"
+        val state = if (s >= 85) "ready" else if (s >= 60) "recovering" else "fatigued"
         val explanation = if (manualOffset == null) {
-            "Based on recent muscle workload and time since training."
+            limitingRegion?.let { "Estimate led by $it workload, effort and time since training." }
+                ?: "Not enough recent training data for a high-confidence estimate."
         } else {
-            "Blended from workload history and your soreness/sleep/energy check-in."
+            "Estimate blends the limiting muscle with your soreness, sleep and energy check-in."
         }
-        return RecoveryScore(s, state, explanation)
+        return RecoveryScore(s, state, explanation, limitingRegion)
     }
 
     fun suggestions(readiness: Map<String, Double>): List<String> {
-        val rows = readiness.entries.sortedByDescending { it.value }
+        val rows = readiness.filterValues { it.isFinite() }.mapValues { it.value.coerceIn(0.0, 1.0) }.entries.sortedByDescending { it.value }
         if (rows.isEmpty()) return emptyList()
         val top = rows.first()
         val low = rows.last()
-        val out = mutableListOf("${top.key} is most recovered (${(top.value * 100).roundToInt()}%).")
+        if (rows.size == 1) return listOf(
+            "${top.key} estimated readiness: ${(top.value * 100).roundToInt()}%. Other regions have no mapped workload evidence." +
+                if (top.value < 0.85) " Consider lighter work and reduce volume for this region." else ""
+        )
+        val out = mutableListOf("Among mapped regions, ${top.key} is most recovered (${(top.value * 100).roundToInt()}%).")
         if (top.key != low.key && low.value < 0.85) {
             out += "${low.key} is least recovered (${(low.value * 100).roundToInt()}%), reduce volume."
         }
         return out
     }
 
-    /**
-     * Blends a training-load [readinessScore] (0.0–1.0) with biometric data
-     * from Health Connect.
-     *
-     * Weights:
-     *   - Training load readiness: 60%
-     *   - Sleep quality:           25%
-     *   - HRV:                     15%
-     *
-     * If no biometric data is available (all nulls), returns [readinessScore] unchanged.
-     *
-     * @param readinessScore  Overall score from [score] (0.0 = very fatigued, 1.0 = fully ready).
-     * @param biometrics      Latest snapshot from HealthConnectRepository.readBiometricSnapshot().
-     */
-    fun blendWithBiometric(readinessScore: Double, biometrics: BiometricSnapshot): Double {
-        fun sleepScore(hours: Double) = ((hours - 4.0) / 4.0).coerceIn(0.0, 1.0)
-        fun hrvScore(rmssd: Double)   = ((rmssd - 20.0) / 60.0).coerceIn(0.0, 1.0)
-
-        val hasSleep = biometrics.sleepHours != null
-        val hasHrv   = biometrics.hrvRmssd != null
-
-        if (!hasSleep && !hasHrv) return readinessScore
-
-        var weightedSum = readinessScore * 0.60
-        var totalWeight = 0.60
-
-        if (hasSleep) {
-            weightedSum += sleepScore(biometrics.sleepHours!!) * 0.25
-            totalWeight += 0.25
-        }
-        if (hasHrv) {
-            weightedSum += hrvScore(biometrics.hrvRmssd!!) * 0.15
-            totalWeight += 0.15
-        }
-
-        return (weightedSum / totalWeight).coerceIn(0.0, 1.0)
-    }
 }

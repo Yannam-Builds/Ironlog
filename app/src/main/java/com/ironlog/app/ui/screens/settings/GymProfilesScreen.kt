@@ -1,5 +1,8 @@
 ﻿package com.ironlog.app.ui.screens.settings
 
+import com.ironlog.app.ui.theme.appGapDp
+import com.ironlog.app.ui.theme.appPadding
+import com.ironlog.app.ui.theme.appSpacedBy
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -21,7 +24,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Text
+import com.ironlog.app.ui.theme.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -93,11 +96,11 @@ fun GymProfilesScreen(
     LazyColumn(
         modifier = Modifier.fillMaxSize().background(c.bg).statusBarsPadding().padding(horizontal = 16.dp),
         contentPadding = PaddingValues(top = 16.dp, bottom = 80.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = com.ironlog.app.ui.theme.appCardSpacedBy(12.dp),
     ) {
         item { ScreenHeader(title = "GYM PROFILES", onBack = onBack) }
         item {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(horizontalArrangement = appSpacedBy(8.dp)) {
                 Button(onClick = onCreate) { Text("Add Profile") }
                 if (profiles.isEmpty()) {
                     Button(onClick = {
@@ -135,19 +138,19 @@ fun GymProfilesScreen(
                     border = androidx.compose.foundation.BorderStroke(1.dp, if (isActive) c.accentBorder else c.cardBorder),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Column(Modifier.fillMaxWidth().appPadding(14.dp), verticalArrangement = appSpacedBy(6.dp)) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Column(verticalArrangement = appSpacedBy(2.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = appSpacedBy(8.dp)) {
                                     Text(profile.name, color = c.text, fontSize = IronLogType.section.fontSize.sp)
                                     if (isActive) {
                                         androidx.compose.foundation.layout.Box(
                                             Modifier
                                                 .background(c.accentSoft, RoundedCornerShape(IronLogRadius.full.dp))
                                                 .border(1.dp, c.accentBorder, RoundedCornerShape(IronLogRadius.full.dp))
-                                                .padding(horizontal = 8.dp, vertical = 2.dp),
+                                                .appPadding(horizontal = 8.dp, vertical = 2.dp),
                                         ) {
-                                            Text("ACTIVE", color = c.accent, fontSize = 9.sp, letterSpacing = 1.sp)
+                                            Text("ACTIVE", color = c.accent, fontSize = 12.sp, letterSpacing = 1.sp)
                                         }
                                     }
                                 }
@@ -160,8 +163,8 @@ fun GymProfilesScreen(
                                 }
                             }
                         }
-                        Spacer(Modifier.height(2.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Spacer(Modifier.height(appGapDp(2.dp)))
+                        Row(horizontalArrangement = appSpacedBy(12.dp)) {
                             if (!isActive) {
                                 Text(
                                     "Set Active",
@@ -174,7 +177,7 @@ fun GymProfilesScreen(
                                                 activeId = profile.id
                                             }
                                         }
-                                        .padding(vertical = 10.dp),
+                                        .appPadding(vertical = 10.dp),
                                 )
                             }
                             Text(
@@ -199,7 +202,7 @@ fun GymProfilesScreen(
                                             save(profiles + copy)
                                         }
                                     }
-                                    .padding(vertical = 10.dp),
+                                    .appPadding(vertical = 10.dp),
                             )
                             Text(
                                 "Delete",

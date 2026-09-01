@@ -1,5 +1,8 @@
 ﻿package com.ironlog.app.ui.screens.intelligence
 
+import com.ironlog.app.ui.theme.appGapDp
+import com.ironlog.app.ui.theme.appPadding
+import com.ironlog.app.ui.theme.appSpacedBy
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -26,9 +29,8 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.Text
+import com.ironlog.app.ui.theme.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.produceState
@@ -40,12 +42,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.ironlog.app.domain.intelligence.FINE_MUSCLE_TO_RADAR
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ironlog.app.domain.intelligence.TrainingIntelligenceEngine
+import com.ironlog.app.domain.intelligence.TrainingIntelligenceProfile
 import com.ironlog.app.domain.intelligence.VolumeLandmark
-import com.ironlog.app.domain.intelligence.foldContributions
-import com.ironlog.app.domain.intelligence.resolveContribution
-import com.ironlog.app.ui.model.HistoryExercise
 import com.ironlog.app.ui.model.HistoryEntry
 import com.ironlog.app.ui.model.UiPlan
 import com.ironlog.app.ui.components.ScreenHeader
@@ -59,7 +59,8 @@ import com.ironlog.app.data.repository.SettingsRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
-import com.ironlog.app.ui.screens.plans.ProgramRules
+import com.ironlog.app.domain.intelligence.ProgramRules
+import com.ironlog.app.data.repository.programProgressionRulesKey
 
 private val tiJson = Json { ignoreUnknownKeys = true }
 
@@ -74,17 +75,29 @@ fun TrainingIntelligenceScreen(
     onOpenProgramInsights: () -> Unit = {},
 ) {
     val c = useTheme()
-    val state by vm.state.collectAsState()
-    val plans by plansVm.plans.collectAsState()
+    val state by vm.state.collectAsStateWithLifecycle()
+    val plans by plansVm.plans.collectAsStateWithLifecycle()
     val activePlan = plans.firstOrNull { it.isActive }
     val recommendedDayId = remember(activePlan, state.history) {
         recommendedPlanDayId(activePlan, state.history)
     }
-    val activeDraftContribution by produceState(initialValue = emptyMap<String, Int>()) {
-        value = withContext(Dispatchers.IO) { loadActiveDraftContribution() }
+    val intelligenceProfile by produceState(initialValue = TrainingIntelligenceProfile()) {
+        value = withContext(Dispatchers.IO) {
+            val raw = SettingsRepository().getString("ironlog_settings").orEmpty()
+            val settings = runCatching { org.json.JSONObject(raw) }.getOrDefault(org.json.JSONObject())
+            TrainingIntelligenceProfile(
+                goalMode = settings.optString("goalMode", "hypertrophy"),
+                weeklyGoalDays = settings.optInt("weeklyGoalDays", 3).coerceIn(1, 7),
+            )
+        }
     }
-    val snapshot = remember(state.history, state.personalBests.size, activeDraftContribution) {
-        TrainingIntelligenceEngine.build(state.history, state.personalBests.size, activeDraftContribution)
+    val snapshot = remember(state.history, state.personalBests.size, state.prResetAtEpochMs, intelligenceProfile) {
+        TrainingIntelligenceEngine.build(
+            history = state.history,
+            prCount = state.personalBests.size,
+            profile = intelligenceProfile,
+            prResetAt = state.prResetAtEpochMs?.let(java.time.Instant::ofEpochMilli),
+        )
     }
     val deloadRules by produceState(initialValue = null as ProgramRules?, activePlan?.id) {
         val planId = activePlan?.id
@@ -94,7 +107,7 @@ fun TrainingIntelligenceScreen(
         }
         val loadedRules = withContext(Dispatchers.IO) {
             val repo = SettingsRepository()
-            val raw = repo.getString("program_rules:$planId")
+            val raw = repo.getString(programProgressionRulesKey(planId))
             if (raw.isNullOrBlank()) null
             else runCatching { tiJson.decodeFromString<ProgramRules>(raw) }.getOrNull()
         }
@@ -104,21 +117,21 @@ fun TrainingIntelligenceScreen(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().background(c.bg).statusBarsPadding().padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = com.ironlog.app.ui.theme.appCardSpacedBy(12.dp),
     ) {
         item {
             ScreenHeader(title = "Training Intelligence", onBack = onBack)
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(appGapDp(4.dp)))
             Text("TRAINING COACH", color = c.accent, fontSize = IronLogType.eyebrow.fontSize.sp, fontWeight = FontWeight(IronLogType.eyebrow.fontWeight), letterSpacing = IronLogType.eyebrow.letterSpacing.sp)
             Text("Intelligence", color = c.text, fontSize = IronLogType.title.fontSize.sp, fontWeight = FontWeight(IronLogType.display.fontWeight), lineHeight = IronLogType.title.lineHeight.sp)
         }
         item {
             IntelligenceCard("Quick Actions") {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = appSpacedBy(8.dp)) {
                     IntelQuickAction("Start Workout", Modifier.weight(1f)) { onStartWorkout(recommendedDayId) }
                     IntelQuickAction("Recovery Map", Modifier.weight(1f), onOpenRecoveryMap)
                 }
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = appSpacedBy(8.dp)) {
                     IntelQuickAction("Create With AI", Modifier.weight(1f), onOpenAIPlan)
                     IntelQuickAction("Program Insights", Modifier.weight(1f), onOpenProgramInsights)
                 }
@@ -126,11 +139,11 @@ fun TrainingIntelligenceScreen(
         }
         item { TodayDirectiveCard(snapshot, c) }
         item {
-            IntelligenceCard("Weekly Volume by Muscle") {
-                Text("Based on the current ISO week (Mon–today).", color = c.muted, fontSize = IronLogType.meta.fontSize.sp)
-                androidx.compose.foundation.layout.Spacer(Modifier.height(4.dp))
+            IntelligenceCard("Weekly muscle exposure") {
+                Text("Completed workouts only · weighted set equivalents, Mon–today. Reference bands are coaching estimates, not personal minimums. A partial week is not a deficit.", color = c.subtext, fontSize = 12.sp)
+                androidx.compose.foundation.layout.Spacer(Modifier.height(appGapDp(4.dp)))
                 if (snapshot.setsByMuscle.values.all { it == 0 }) {
-                    Text("No workouts in the last 30 days.", color = c.muted, fontSize = IronLogType.body.fontSize.sp)
+                    Text("No mapped working sets this week yet.", color = c.muted, fontSize = IronLogType.body.fontSize.sp)
                 } else {
                     snapshot.volumeLandmarks.forEach { (muscle, landmark) ->
                         VolumeLandmarkRow(muscle = muscle, landmark = landmark)
@@ -147,7 +160,7 @@ fun TrainingIntelligenceScreen(
                     Text("No data yet.", color = c.muted)
                 } else {
                     snapshot.movementBalance.forEach { (k, pct) ->
-                        Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        Row(Modifier.fillMaxWidth().appPadding(vertical = 2.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                             Text(k, color = c.text, fontSize = IronLogType.body.fontSize.sp, modifier = Modifier.weight(0.3f))
                             Box(
                                 Modifier
@@ -172,7 +185,7 @@ fun TrainingIntelligenceScreen(
         }
         item {
             IntelligenceCard("PR Velocity (30D)") {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = appSpacedBy(8.dp)) {
                     Icon(Icons.Outlined.Timeline, contentDescription = null, tint = c.accent)
                     Text("${snapshot.prLast30}", color = c.accent, fontWeight = FontWeight.Bold, fontSize = IronLogType.title.fontSize.sp)
                     Text("PRs in last 30 days", color = c.muted, fontSize = IronLogType.body.fontSize.sp)
@@ -180,7 +193,7 @@ fun TrainingIntelligenceScreen(
                 val trendColor = when (snapshot.prTrend) {
                     "accelerating" -> c.success; "slowing" -> c.danger; else -> c.muted
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(horizontalArrangement = appSpacedBy(6.dp)) {
                     Text(
                         snapshot.prTrend.replaceFirstChar { it.titlecase() },
                         color = trendColor,
@@ -192,18 +205,18 @@ fun TrainingIntelligenceScreen(
             }
         }
         item {
-            IntelligenceCard("Neural Fatigue Indicator") {
+            IntelligenceCard("Heavy-load density") {
                 val nf = snapshot.neuralFatigue
-                Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(verticalAlignment = Alignment.Top, horizontalArrangement = appSpacedBy(10.dp)) {
                     Icon(
                         if (nf.isFlagged) Icons.Outlined.Bedtime else Icons.Outlined.Bolt,
                         contentDescription = null,
                         tint = if (nf.isFlagged) c.warning else c.success,
                     )
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Column(verticalArrangement = appSpacedBy(4.dp)) {
                         Text(
-                            if (nf.isFlagged) "${nf.consecutiveDays} consecutive heavy days — consider a deload."
-                            else "No consecutive heavy load detected. Readiness looks stable.",
+                            if (nf.isFlagged) "${nf.consecutiveDays} consecutive recent heavy days — consider easier loading or recovery."
+                            else "No recent cluster of heavy compound days detected.",
                             color = c.text,
                             fontSize = IronLogType.body.fontSize.sp,
                         )
@@ -231,7 +244,7 @@ fun TrainingIntelligenceScreen(
         }
         item {
             IntelligenceCard("Best Performance Window") {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = appSpacedBy(8.dp)) {
                     Icon(Icons.Outlined.SelfImprovement, contentDescription = null, tint = c.accent)
                     Text(snapshot.bestWindow, color = c.text, fontSize = IronLogType.body.fontSize.sp)
                 }
@@ -243,7 +256,7 @@ fun TrainingIntelligenceScreen(
                 Text(snapshot.trainingAgeLabel, color = c.text, fontSize = IronLogType.body.fontSize.sp, fontWeight = FontWeight(600))
                 Text(snapshot.trainingAgeTip, color = c.muted, fontSize = IronLogType.body.fontSize.sp)
             }
-            androidx.compose.foundation.layout.Spacer(Modifier.height(16.dp).navigationBarsPadding())
+            androidx.compose.foundation.layout.Spacer(Modifier.height(appGapDp(16.dp)).navigationBarsPadding())
         }
     }
 }
@@ -268,7 +281,7 @@ private fun DeloadRecommendationCard(rules: ProgramRules, c: IronLogThemeTokens)
         border = BorderStroke(1.dp, c.warning.copy(alpha = 0.45f)),
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(Modifier.fillMaxWidth().appPadding(14.dp), verticalArrangement = appSpacedBy(8.dp)) {
             Text(
                 "DELOAD WEEK",
                 color = c.warning,
@@ -282,60 +295,13 @@ private fun DeloadRecommendationCard(rules: ProgramRules, c: IronLogThemeTokens)
                 fontWeight = FontWeight.Bold,
                 fontSize = IronLogType.section.fontSize.sp,
             )
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Column(verticalArrangement = appSpacedBy(4.dp)) {
                 Text("• Reduce load to 60% of working weight", color = c.subtext, fontSize = IronLogType.body.fontSize.sp)
                 Text("• Reduce working sets by $setReduction (e.g. 3 → 2)", color = c.subtext, fontSize = IronLogType.body.fontSize.sp)
                 Text("• Keep rep ranges the same", color = c.subtext, fontSize = IronLogType.body.fontSize.sp)
             }
         }
     }
-}
-
-private suspend fun loadActiveDraftContribution(): Map<String, Int> {
-    val repo = SettingsRepository()
-    val activeId = repo.getString("active_workout_id").orEmpty()
-    if (activeId.isBlank()) return emptyMap()
-    val raw = repo.getString("active_workout_draft_$activeId").orEmpty()
-    if (raw.isBlank()) return emptyMap()
-    val accumulator = linkedMapOf("chest" to 0.0, "back" to 0.0, "arms" to 0.0, "shoulders" to 0.0, "legs" to 0.0, "core" to 0.0)
-    return runCatching {
-        val json = org.json.JSONObject(raw)
-        val setLog = json.optJSONObject("setLog") ?: return@runCatching emptyMap<String, Int>()
-        val keys = setLog.keys()
-        while (keys.hasNext()) {
-            val exName = keys.next()
-            val arr = setLog.optJSONArray(exName) ?: continue
-            val setCount = (0 until arr.length()).count { i ->
-                arr.optJSONObject(i)?.optString("type", "normal") != "warmup"
-            }
-            if (setCount == 0) continue
-            val pseudoEx = HistoryExercise(
-                name = exName, sets = emptyList(),
-                primaryMuscle = null, primaryMuscles = emptyList(), category = null,
-            )
-            val contrib = resolveContribution(pseudoEx)
-            if (contrib.isNotEmpty()) {
-                val radarFold = foldContributions(contrib, FINE_MUSCLE_TO_RADAR)
-                radarFold.forEach { (bucket, frac) ->
-                    val key = bucket.lowercase()
-                    if (key in accumulator) accumulator[key] = accumulator.getValue(key) + setCount * frac
-                }
-            } else {
-                val lower = exName.lowercase()
-                val bucket = when {
-                    lower.contains("chest") || lower.contains("pec") -> "chest"
-                    lower.contains("back") || lower.contains("row") || lower.contains("lat") -> "back"
-                    lower.contains("bicep") || lower.contains("tricep") || lower.contains("curl") -> "arms"
-                    lower.contains("delt") || lower.contains("shoulder") -> "shoulders"
-                    lower.contains("squat") || lower.contains("deadlift") || lower.contains("leg") ||
-                    lower.contains("hamstring") || lower.contains("glute") || lower.contains("calf") -> "legs"
-                    else -> "core"
-                }
-                accumulator[bucket] = accumulator.getValue(bucket) + setCount
-            }
-        }
-        accumulator.mapValues { it.value.toInt() }
-    }.getOrDefault(emptyMap())
 }
 
 @Composable
@@ -349,16 +315,14 @@ private fun TodayDirectiveCard(
             snapshot.neuralFatigue.isFlagged ->
                 "Rest or light cardio today" to
                 "${snapshot.neuralFatigue.consecutiveDays} consecutive heavy days detected — recovery first."
-            snapshot.volumeLandmarks.any { (_, lm) -> lm.status == "sub_mev" } -> {
-                val lagging = snapshot.volumeLandmarks.filter { (_, lm) -> lm.status == "sub_mev" }.keys.firstOrNull() ?: "a muscle group"
-                "Train $lagging today" to "Volume is below minimum effective dose — add a session this week."
-            }
+            snapshot.setsByMuscle.values.all { it == 0 } ->
+                "Follow your next planned session" to "No mapped working sets this week yet. Build a consistent log before adjusting your program."
             snapshot.prTrend == "slowing" ->
-                "Focus on progressive overload this week" to
-                "PR velocity is slowing vs prior 30 days — push harder on compound lifts."
+                "Review progression inputs this week" to
+                "PR frequency is lower than the prior 30 days; check technique, rep quality, recovery and load selection before adding stress."
             else ->
                 "You're on track — train as planned" to
-                "Volume and recovery indicators are within healthy ranges."
+                "Use your plan, technique and current check-in. Review a complete week before changing volume."
         }
     }
     Card(
@@ -368,8 +332,8 @@ private fun TodayDirectiveCard(
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(
-            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+            Modifier.fillMaxWidth().appPadding(horizontal = 16.dp, vertical = 14.dp),
+            verticalArrangement = appSpacedBy(6.dp),
         ) {
             Text(
                 "TODAY",
@@ -406,18 +370,18 @@ private fun VolumeLandmarkRow(muscle: String, landmark: VolumeLandmark) {
     val optMaxFrac = landmark.max.toFloat() / barMax
     val fillFrac = (landmark.sets.toFloat() / barMax).coerceIn(0f, 1f)
 
-    Column(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+    Column(Modifier.fillMaxWidth().appPadding(vertical = 4.dp), verticalArrangement = appSpacedBy(3.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(muscle, color = c.text, fontSize = IronLogType.body.fontSize.sp, fontWeight = FontWeight(600))
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("${landmark.sets} sets", color = c.text, fontSize = IronLogType.meta.fontSize.sp)
+            Row(horizontalArrangement = appSpacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("~${landmark.sets} eq.", color = c.text, fontSize = 12.sp)
                 Box(
                     Modifier
                         .clip(RoundedCornerShape(IronLogRadius.xs.dp))
                         .background(statusColor.copy(alpha = 0.15f))
-                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                        .appPadding(horizontal = 6.dp, vertical = 2.dp),
                 ) {
-                    Text(landmark.status.uppercase(), color = statusColor, fontSize = IronLogType.micro.fontSize.sp, fontWeight = FontWeight.Black, letterSpacing = 0.8.sp)
+                    Text(when (landmark.status) { "optimal" -> "IN BAND"; "high" -> "ABOVE"; else -> "SO FAR" }, color = statusColor, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                 }
             }
         }
@@ -449,9 +413,7 @@ private fun VolumeLandmarkRow(muscle: String, landmark: VolumeLandmark) {
             )
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text("MEV ${landmark.min}", color = c.muted, fontSize = IronLogType.micro.fontSize.sp)
-            Text("Target ${landmark.optimal}", color = c.accent, fontSize = IronLogType.micro.fontSize.sp)
-            Text("MRV ${landmark.max}", color = c.muted, fontSize = IronLogType.micro.fontSize.sp)
+            Text("Reference ${landmark.min}–${landmark.max} eq.", color = c.muted, fontSize = 12.sp)
         }
     }
 }
@@ -485,7 +447,7 @@ private fun IntelligenceCard(title: String, content: @Composable () -> Unit) {
         border = BorderStroke(1.dp, c.cardBorder),
         shape = RoundedCornerShape(IronLogRadius.lg.dp),
     ) {
-        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(Modifier.fillMaxWidth().appPadding(14.dp), verticalArrangement = appSpacedBy(8.dp)) {
             Text(title, color = c.text, fontSize = IronLogType.section.fontSize.sp, fontWeight = FontWeight(IronLogType.section.fontWeight))
             content()
         }

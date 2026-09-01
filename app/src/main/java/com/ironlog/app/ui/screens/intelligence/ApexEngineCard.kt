@@ -1,5 +1,7 @@
 ﻿package com.ironlog.app.ui.screens.intelligence
 
+import com.ironlog.app.ui.theme.appPadding
+import com.ironlog.app.ui.theme.appSpacedBy
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -20,7 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.Icon
-import androidx.compose.material3.Text
+import com.ironlog.app.ui.theme.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -37,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ironlog.app.domain.intelligence.GeminiNanoEngine
 import com.ironlog.app.domain.intelligence.NanoAvailability
+import com.ironlog.app.domain.intelligence.ResolvedProgressionPolicy
 import com.ironlog.app.ui.context.useTheme
 import com.ironlog.app.ui.model.HistoryEntry
 import com.ironlog.app.ui.model.UiPlanDay
@@ -46,8 +49,8 @@ import com.valentinilk.shimmer.shimmer
 import kotlinx.coroutines.launch
 
 // ── Process-scoped insight cache ──────────────────────────────────────────────
-// Survives navigation (cache lives as long as the process). Cleared only when
-// the most-recent workout ID changes — i.e. after a new workout is logged.
+// Survives navigation (cache lives as long as the process). Cleared when the
+// most-recent workout or resolved progression-policy context changes.
 
 private object ApexCache {
     private var seenWorkoutId: String? = null
@@ -87,6 +90,7 @@ fun ApexEngineCard(
     weeklyGoalDays: Int,
     prTrend: String,
     readiness: Map<String, Double>,
+    progressionPolicy: ResolvedProgressionPolicy = ResolvedProgressionPolicy.conservativeDefault(),
     onSwitchToBuiltin: () -> Unit,
     onOpenTrainingIntelligence: () -> Unit,
 ) {
@@ -99,20 +103,21 @@ fun ApexEngineCard(
     var currentText by remember { mutableStateOf<String?>(null) }
     var availability by remember { mutableStateOf<NanoAvailability?>(null) }
 
-    // Invalidate cache only when a new workout is logged; navigation-back hits the cache.
-    ApexCache.invalidateIfNewWorkout(lastWorkoutId)
+    // Policy changes must never replay an explanation generated under stale guardrails.
+    val insightContextKey = "$lastWorkoutId|${progressionPolicy.id}|${progressionPolicy.source.name}"
+    ApexCache.invalidateIfNewWorkout(insightContextKey)
 
     LaunchedEffect(Unit) {
         availability = GeminiNanoEngine.checkAvailability(context)
     }
 
-    LaunchedEffect(activeTab, availability, lastWorkoutId) {
+    LaunchedEffect(activeTab, availability, insightContextKey) {
         if (availability != NanoAvailability.SUPPORTED) { isLoading = false; return@LaunchedEffect }
         val cached = ApexCache[activeTab]
         if (cached != null) { currentText = cached; isLoading = false; return@LaunchedEffect }
         isLoading = true
         currentText = null
-        val result = fetchInsight(context, activeTab, readiness, history, weeklyGoalDays, goalMode, activePlanDay, prTrend)
+        val result = fetchInsight(context, activeTab, readiness, history, weeklyGoalDays, goalMode, activePlanDay, prTrend, progressionPolicy)
         ApexCache[activeTab] = result
         currentText = result
         isLoading = false
@@ -127,8 +132,8 @@ fun ApexEngineCard(
             .clip(RoundedCornerShape(IronLogRadius.lg.dp))
             .background(cardBg)
             .border(1.dp, accentBorder, RoundedCornerShape(IronLogRadius.lg.dp))
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+            .appPadding(16.dp),
+        verticalArrangement = appSpacedBy(12.dp),
     ) {
         // ── Header ────────────────────────────────────────────────────────────
         Row(
@@ -137,7 +142,7 @@ fun ApexEngineCard(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Row(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                horizontalArrangement = appSpacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(
@@ -163,7 +168,7 @@ fun ApexEngineCard(
         }
 
         // ── Tab row ───────────────────────────────────────────────────────────
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(horizontalArrangement = appSpacedBy(6.dp)) {
             ApexTab.entries.forEach { tab ->
                 val selected = tab == activeTab
                 Box(
@@ -210,7 +215,7 @@ fun ApexEngineCard(
             isLoading || currentText == null -> {
                 Column(
                     Modifier.shimmer(),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = appSpacedBy(6.dp),
                 ) {
                     repeat(3) { idx ->
                         Box(
@@ -229,7 +234,7 @@ fun ApexEngineCard(
                     transitionSpec = { fadeIn() togetherWith fadeOut() },
                     label = "apex_insight",
                 ) { text ->
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Column(verticalArrangement = appSpacedBy(6.dp)) {
                         Text(
                             activeTab.eyebrow,
                             color = c.muted,
@@ -243,6 +248,13 @@ fun ApexEngineCard(
                             fontSize = IronLogType.body.fontSize.sp,
                             lineHeight = IronLogType.body.lineHeight.sp,
                         )
+                        if (activeTab == ApexTab.PROGRESSION) {
+                            Text(
+                                "${progressionPolicy.label} · ${progressionPolicy.source.label}",
+                                color = c.muted,
+                                fontSize = 12.sp,
+                            )
+                        }
                     }
                 }
                 Row(
@@ -252,7 +264,7 @@ fun ApexEngineCard(
                             scope.launch {
                                 isLoading = true
                                 currentText = null
-                                val result = fetchInsight(context, activeTab, readiness, history, weeklyGoalDays, goalMode, activePlanDay, prTrend)
+                                val result = fetchInsight(context, activeTab, readiness, history, weeklyGoalDays, goalMode, activePlanDay, prTrend, progressionPolicy)
                                 ApexCache[activeTab] = result
                                 currentText = result
                                 isLoading = false
@@ -260,7 +272,7 @@ fun ApexEngineCard(
                         }
                         .padding(vertical = 2.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    horizontalArrangement = appSpacedBy(4.dp),
                 ) {
                     Icon(Icons.Outlined.Refresh, null, tint = c.muted, modifier = Modifier.size(12.dp))
                     Text("Regenerate", color = c.muted, fontSize = IronLogType.micro.fontSize.sp)
@@ -309,6 +321,7 @@ private suspend fun fetchInsight(
     goalMode: String,
     activePlanDay: UiPlanDay?,
     prTrend: String,
+    progressionPolicy: ResolvedProgressionPolicy,
 ): String = when (tab) {
     ApexTab.RECOVERY    -> GeminiNanoEngine.askRecovery(context, readiness)
     ApexTab.SPLIT       -> GeminiNanoEngine.askSplitSuggestion(context, history, weeklyGoalDays, goalMode)
@@ -330,6 +343,7 @@ private suspend fun fetchInsight(
                 recentWeightKg = bestSet?.weight ?: 0.0,
                 recentReps = bestSet?.reps?.toInt() ?: 0,
                 trend = prTrend,
+                policy = progressionPolicy,
             )
         }
     }

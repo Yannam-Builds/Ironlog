@@ -11,16 +11,15 @@ class OnboardingViewModelTest {
         assertEquals(3, vm.draft.value.weeklyGoalDays)
         assertEquals(3, vm.draft.value.historicalTrainingDaysPerWeek)
         assertEquals("kg", vm.draft.value.weightUnit)
-        assertEquals("LOCAL", vm.draft.value.intelligenceMode)
-        assertFalse(vm.draft.value.cameraGranted)
+        assertEquals("builtin", vm.draft.value.intelligenceMode)
         assertFalse(vm.draft.value.healthConnectGranted)
         assertFalse(vm.draft.value.notificationsGranted)
     }
 
     @Test fun `updateUserName preserves spaces and updates`() {
         val vm = OnboardingViewModel()
-        vm.updateUserName("  Pranav  ")
-        assertEquals("  Pranav  ", vm.draft.value.userName)
+        vm.updateUserName("  QA Athlete  ")
+        assertEquals("  QA Athlete  ", vm.draft.value.userName)
     }
 
     @Test fun `updateWeeklyGoalDays clamps to 1-7`() {
@@ -33,17 +32,17 @@ class OnboardingViewModelTest {
         assertEquals(5, vm.draft.value.weeklyGoalDays)
     }
 
-    @Test fun `setting a valid API key sets intelligenceMode to AUTO`() {
+    @Test fun `setting a valid API key selects the runtime cloud mode`() {
         val vm = OnboardingViewModel()
         vm.updateCloudApiKey("AIzaFakeKeyForTest1234567890")
-        assertEquals("AUTO", vm.draft.value.intelligenceMode)
+        assertEquals("cloud_ai", vm.draft.value.intelligenceMode)
     }
 
-    @Test fun `clearing API key reverts intelligenceMode to LOCAL`() {
+    @Test fun `clearing API key reverts to the runtime built in mode`() {
         val vm = OnboardingViewModel()
         vm.updateCloudApiKey("AIzaFakeKeyForTest1234567890")
         vm.updateCloudApiKey("")
-        assertEquals("LOCAL", vm.draft.value.intelligenceMode)
+        assertEquals("builtin", vm.draft.value.intelligenceMode)
     }
 
     @Test fun `setClassification seeds goalMode default`() {
@@ -62,12 +61,12 @@ class OnboardingViewModelTest {
 
     @Test fun `permission flags update independently`() {
         val vm = OnboardingViewModel()
-        vm.setCameraGranted(true)
-        assertTrue(vm.draft.value.cameraGranted)
-        assertFalse(vm.draft.value.healthConnectGranted)
         vm.setHealthConnectGranted(true)
         assertTrue(vm.draft.value.healthConnectGranted)
-        assertTrue(vm.draft.value.cameraGranted)
+        assertFalse(vm.draft.value.notificationsGranted)
+        vm.setNotificationsGranted(true)
+        assertTrue(vm.draft.value.healthConnectGranted)
+        assertTrue(vm.draft.value.notificationsGranted)
     }
 
     @Test fun `toggleDayIndex adds and removes days, min 1 day`() {

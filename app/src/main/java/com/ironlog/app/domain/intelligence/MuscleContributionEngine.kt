@@ -369,7 +369,7 @@ fun computeGranularVolume(history: List<HistoryEntry>): Map<String, Float> {
     val totals = linkedMapOf<String, Double>()
     history.forEach { workout ->
         workout.exercises.forEach { ex ->
-            val workingSets = ex.sets.count { it.type != "warmup" }
+            val workingSets = ex.sets.count { com.ironlog.app.domain.training.TrainingSetPolicy.isValidWorkingSet(ex, it) }
             if (workingSets > 0) {
                 val contrib = resolveContribution(ex)
                 if (contrib.isNotEmpty()) {

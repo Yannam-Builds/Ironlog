@@ -11,6 +11,7 @@ import java.time.temporal.ChronoUnit
 
 enum class DailyProofStatus {
     SETUP,
+    FIRST_PROOF,
     ACTIVE_WORKOUT,
     PROOF_LOGGED,
     TRAIN_TODAY,
@@ -27,33 +28,35 @@ data class DailyProofSummary(
     val foxExpressionId: String,
 )
 
-internal fun parseHistoryInstant(value: String): Instant? {
+internal fun parseHistoryInstant(value: String, zoneId: ZoneId = ZoneId.systemDefault()): Instant? {
     val trimmed = value.trim()
     if (trimmed.isBlank()) return null
 
     return runCatching { Instant.parse(trimmed) }.getOrNull()
         ?: runCatching {
-            LocalDate.parse(trimmed).atStartOfDay(ZoneOffset.UTC).toInstant()
+            LocalDate.parse(trimmed).atStartOfDay(zoneId).toInstant()
         }.getOrNull()
         ?: runCatching {
             LocalDateTime.parse(trimmed.replace(" ", "T"))
-                .atZone(ZoneId.systemDefault())
+                .atZone(zoneId)
                 .toInstant()
         }.getOrNull()
 }
 
-internal fun parseHistoryLocalDate(value: String): LocalDate? =
-    parseHistoryInstant(value)?.atZone(ZoneOffset.UTC)?.toLocalDate()
+internal fun parseHistoryLocalDate(value: String, zoneId: ZoneId = ZoneId.systemDefault()): LocalDate? =
+    parseHistoryInstant(value, zoneId)?.atZone(zoneId)?.toLocalDate()
 
 fun dailyWorkoutStreakDays(
     history: List<HistoryEntry>,
     nowEpochMs: Long = System.currentTimeMillis(),
+    zoneId: ZoneId = ZoneId.systemDefault(),
 ): Int {
     if (history.isEmpty()) return 0
-    val dates = history.mapNotNull { parseHistoryLocalDate(it.date) }.toSet()
+    val now = Instant.ofEpochMilli(nowEpochMs)
+    val dates = history.filter { CreditedProof.qualifies(it, now, zoneId) }.mapNotNull { parseHistoryLocalDate(it.date, zoneId) }.toSet()
     if (dates.isEmpty()) return 0
 
-    val today = Instant.ofEpochMilli(nowEpochMs).atZone(ZoneId.systemDefault()).toLocalDate()
+    val today = Instant.ofEpochMilli(nowEpochMs).atZone(zoneId).toLocalDate()
     val yesterday = today.minusDays(1)
     if (today !in dates && yesterday !in dates) return 0
 
@@ -72,15 +75,28 @@ fun buildDailyProofSummary(
     activeWorkoutDayName: String?,
     readinessScore: Int?,
     nowEpochMs: Long = System.currentTimeMillis(),
+    painFlags: Set<String> = emptySet(),
+    zoneId: ZoneId = ZoneId.systemDefault(),
 ): DailyProofSummary {
     if (!activeWorkoutDayName.isNullOrBlank()) {
         return DailyProofSummary(
             status = DailyProofStatus.ACTIVE_WORKOUT,
             headline = activeWorkoutDayName,
-            detail = "Current session is still in progress.",
+            detail = if (painFlags.isEmpty()) "Current session is still in progress." else "Pain flagged: review affected movements before continuing.",
             primaryActionLabel = "Resume workout",
             primaryRoute = "ActiveWorkout",
             foxExpressionId = ForgeFoxExpression.Determined.id,
+        )
+    }
+
+    if (painFlags.isNotEmpty()) {
+        return DailyProofSummary(
+            status = DailyProofStatus.RECOVER_SMART,
+            headline = "Check in before training",
+            detail = "Pain flagged in ${painFlags.sorted().joinToString()}. A readiness estimate does not clear painful movements.",
+            primaryActionLabel = "Review recovery",
+            primaryRoute = "RecoveryMap",
+            foxExpressionId = ForgeFoxExpression.RestBlanket.id,
         )
     }
 
@@ -95,8 +111,21 @@ fun buildDailyProofSummary(
         )
     }
 
-    val today = Instant.ofEpochMilli(nowEpochMs).atZone(ZoneId.systemDefault()).toLocalDate()
-    val lastWorkoutDate = history.mapNotNull { parseHistoryLocalDate(it.date) }.maxOrNull()
+    val now = Instant.ofEpochMilli(nowEpochMs)
+    val creditedHistory = history.filter { CreditedProof.qualifies(it, now, zoneId) }
+    if (creditedHistory.isEmpty()) {
+        return DailyProofSummary(
+            status = DailyProofStatus.FIRST_PROOF,
+            headline = "First proof awaits",
+            detail = "Complete your first qualifying session to start the Iron Ledger.",
+            primaryActionLabel = "Start workout",
+            primaryRoute = "Home",
+            foxExpressionId = ForgeFoxExpression.Determined.id,
+        )
+    }
+
+    val today = Instant.ofEpochMilli(nowEpochMs).atZone(zoneId).toLocalDate()
+    val lastWorkoutDate = creditedHistory.mapNotNull { parseHistoryLocalDate(it.date, zoneId) }.maxOrNull()
     val daysSinceWorkout = lastWorkoutDate?.let { ChronoUnit.DAYS.between(it, today).toInt() } ?: Int.MAX_VALUE
 
     if (daysSinceWorkout <= 0) {
@@ -110,7 +139,7 @@ fun buildDailyProofSummary(
         )
     }
 
-    if ((readinessScore ?: 0) >= 78) {
+    if ((readinessScore ?: 0) >= 85) {
         return DailyProofSummary(
             status = DailyProofStatus.TRAIN_TODAY,
             headline = "Fresh enough to press",

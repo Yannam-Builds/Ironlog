@@ -6,7 +6,9 @@ import kotlin.math.round
 data class PlateCalculationResult(
     val isValid: Boolean,
     val platesPerSide: List<PlateDto>,
-    val totalWeightKg: Double
+    val totalWeightKg: Double,
+    val achievedWeightKg: Double,
+    val remainderKg: Double,
 )
 
 fun calculatePlates(
@@ -15,7 +17,8 @@ fun calculatePlates(
     inventory: List<PlateDto>
 ): PlateCalculationResult {
     val perSide = (targetWeightKg - barWeightKg) / 2.0
-    if (perSide <= 0) return PlateCalculationResult(false, emptyList(), targetWeightKg)
+    if (perSide < 0) return PlateCalculationResult(false, emptyList(), targetWeightKg, barWeightKg, targetWeightKg - barWeightKg)
+    if (perSide == 0.0) return PlateCalculationResult(true, emptyList(), targetWeightKg, barWeightKg, 0.0)
     
     // Sort inventory from heaviest to lightest
     val available = inventory.sortedByDescending { it.weightKg }
@@ -35,5 +38,6 @@ fun calculatePlates(
     }
     
     val isValid = remaining <= 0.001
-    return PlateCalculationResult(isValid, used, targetWeightKg)
+    val achieved = round((targetWeightKg - remaining * 2.0) * 100.0) / 100.0
+    return PlateCalculationResult(isValid, used, targetWeightKg, achieved, round((targetWeightKg - achieved) * 100.0) / 100.0)
 }

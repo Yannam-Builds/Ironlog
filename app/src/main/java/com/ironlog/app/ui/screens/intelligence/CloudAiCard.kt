@@ -1,5 +1,7 @@
 ﻿package com.ironlog.app.ui.screens.intelligence
 
+import com.ironlog.app.ui.theme.appPadding
+import com.ironlog.app.ui.theme.appSpacedBy
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -20,7 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Cloud
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.Icon
-import androidx.compose.material3.Text
+import com.ironlog.app.ui.theme.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -37,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ironlog.app.domain.intelligence.CloudAiEngine
 import com.ironlog.app.domain.intelligence.CloudAiKeyStore
+import com.ironlog.app.domain.intelligence.ResolvedProgressionPolicy
 import com.ironlog.app.ui.context.useTheme
 import com.ironlog.app.ui.model.HistoryEntry
 import com.ironlog.app.ui.model.UiPlanDay
@@ -46,8 +49,8 @@ import com.valentinilk.shimmer.shimmer
 import kotlinx.coroutines.launch
 
 // ── Process-scoped insight cache ──────────────────────────────────────────────
-// Survives navigation (cache lives as long as the process). Cleared only when
-// the most-recent workout ID changes — i.e. after a new workout is logged.
+// Survives navigation (cache lives as long as the process). Cleared when the
+// most-recent workout or resolved progression-policy context changes.
 
 private object CloudAiCache {
     private var seenWorkoutId: String? = null
@@ -92,6 +95,7 @@ fun CloudAiCard(
     baseUrl: String,
     apiFormat: String,
     providerPreset: String,
+    progressionPolicy: ResolvedProgressionPolicy = ResolvedProgressionPolicy.conservativeDefault(),
     onSwitchToBuiltin: () -> Unit,
     onOpenTrainingIntelligence: () -> Unit,
 ) {
@@ -107,10 +111,11 @@ fun CloudAiCard(
     var isLoading by remember { mutableStateOf(false) }
     var currentText by remember { mutableStateOf<String?>(null) }
 
-    // Invalidate cache only when a new workout is logged; navigation-back hits the cache.
-    CloudAiCache.invalidateIfNewWorkout(lastWorkoutId)
+    // Policy changes must never replay an explanation generated under stale guardrails.
+    val insightContextKey = "$lastWorkoutId|${progressionPolicy.id}|${progressionPolicy.source.name}"
+    CloudAiCache.invalidateIfNewWorkout(insightContextKey)
 
-    LaunchedEffect(activeTab, lastWorkoutId) {
+    LaunchedEffect(activeTab, insightContextKey) {
         if (!configured) { isLoading = false; return@LaunchedEffect }
         val cached = CloudAiCache[activeTab]
         if (cached != null) { currentText = cached; isLoading = false; return@LaunchedEffect }
@@ -121,6 +126,7 @@ fun CloudAiCard(
             baseUrl = baseUrl, apiKey = apiKey, modelName = modelName, apiFormat = apiFormat,
             readiness = readiness, history = history, weeklyGoalDays = weeklyGoalDays,
             goalMode = goalMode, activePlanDay = activePlanDay, prTrend = prTrend,
+            progressionPolicy = progressionPolicy,
         )
         CloudAiCache[activeTab] = result
         currentText = result
@@ -136,8 +142,8 @@ fun CloudAiCard(
             .clip(RoundedCornerShape(IronLogRadius.lg.dp))
             .background(cardBg)
             .border(1.dp, accentBorder, RoundedCornerShape(IronLogRadius.lg.dp))
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+            .appPadding(16.dp),
+        verticalArrangement = appSpacedBy(12.dp),
     ) {
         // ── Header ────────────────────────────────────────────────────────────
         Row(
@@ -145,7 +151,7 @@ fun CloudAiCard(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(horizontalArrangement = appSpacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Outlined.Cloud, contentDescription = null, tint = c.accent, modifier = Modifier.size(14.dp))
                 Text(
                     displayName.uppercase(),
@@ -159,7 +165,7 @@ fun CloudAiCard(
         }
 
         // ── Tab row ───────────────────────────────────────────────────────────
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(horizontalArrangement = appSpacedBy(6.dp)) {
             CloudTab.entries.forEach { tab ->
                 val selected = tab == activeTab
                 Box(
@@ -190,7 +196,7 @@ fun CloudAiCard(
                 )
             }
             isLoading || currentText == null -> {
-                Column(Modifier.shimmer(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Column(Modifier.shimmer(), verticalArrangement = appSpacedBy(6.dp)) {
                     repeat(3) { idx ->
                         Box(
                             Modifier
@@ -208,7 +214,7 @@ fun CloudAiCard(
                     transitionSpec = { fadeIn() togetherWith fadeOut() },
                     label = "cloud_insight",
                 ) { text ->
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Column(verticalArrangement = appSpacedBy(6.dp)) {
                         Text(
                             activeTab.eyebrow,
                             color = c.muted,
@@ -217,6 +223,13 @@ fun CloudAiCard(
                             letterSpacing = 0.8.sp,
                         )
                         Text(text ?: "", color = c.text, fontSize = IronLogType.body.fontSize.sp, lineHeight = IronLogType.body.lineHeight.sp)
+                        if (activeTab == CloudTab.PROGRESSION) {
+                            Text(
+                                "${progressionPolicy.label} · ${progressionPolicy.source.label}",
+                                color = c.muted,
+                                fontSize = 12.sp,
+                            )
+                        }
                     }
                 }
                 Row(
@@ -231,6 +244,7 @@ fun CloudAiCard(
                                     baseUrl = baseUrl, apiKey = apiKey, modelName = modelName, apiFormat = apiFormat,
                                     readiness = readiness, history = history, weeklyGoalDays = weeklyGoalDays,
                                     goalMode = goalMode, activePlanDay = activePlanDay, prTrend = prTrend,
+                                    progressionPolicy = progressionPolicy,
                                 )
                                 CloudAiCache[activeTab] = result
                                 currentText = result
@@ -239,7 +253,7 @@ fun CloudAiCard(
                         }
                         .padding(vertical = 2.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    horizontalArrangement = appSpacedBy(4.dp),
                 ) {
                     Icon(Icons.Outlined.Refresh, null, tint = c.muted, modifier = Modifier.size(12.dp))
                     Text("Regenerate", color = c.muted, fontSize = IronLogType.micro.fontSize.sp)
@@ -287,6 +301,7 @@ private suspend fun fetchCloudInsight(
     goalMode: String,
     activePlanDay: UiPlanDay?,
     prTrend: String,
+    progressionPolicy: ResolvedProgressionPolicy,
 ): String = when (tab) {
     CloudTab.RECOVERY    -> CloudAiEngine.askRecovery(baseUrl, apiKey, modelName, apiFormat, readiness)
     CloudTab.SPLIT       -> CloudAiEngine.askSplitSuggestion(baseUrl, apiKey, modelName, apiFormat, history, weeklyGoalDays, goalMode)
@@ -307,6 +322,7 @@ private suspend fun fetchCloudInsight(
                 recentWeightKg = bestSet?.weight ?: 0.0,
                 recentReps = bestSet?.reps?.toInt() ?: 0,
                 trend = prTrend,
+                policy = progressionPolicy,
             )
         }
     }

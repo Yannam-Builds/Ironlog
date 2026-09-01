@@ -1,5 +1,8 @@
 ﻿package com.ironlog.app.ui.screens.body
 
+import com.ironlog.app.ui.theme.appGapDp
+import com.ironlog.app.ui.theme.appPadding
+import com.ironlog.app.ui.theme.appSpacedBy
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -11,6 +14,8 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
+import com.ironlog.app.ui.theme.Text
+import com.ironlog.app.ui.theme.typographyTextStyle
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.runtime.*
@@ -238,7 +243,7 @@ fun BodyMeasurementsScreen(
                     Modifier.fillMaxWidth()
                         .background(colors.card, RoundedCornerShape(14.dp))
                         .border(1.dp, colors.cardBorder, RoundedCornerShape(14.dp))
-                        .padding(20.dp),
+                        .appPadding(20.dp),
                 ) {
                     Text(
                         "TODAY'S WEIGHT (${weightUnit.uppercase()})",
@@ -254,9 +259,9 @@ fun BodyMeasurementsScreen(
                             fontSize = IronLogType.meta.fontSize.sp,
                         )
                     }
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(Modifier.height(appGapDp(12.dp)))
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        horizontalArrangement = appSpacedBy(12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         OutlinedTextField(
@@ -266,7 +271,7 @@ fun BodyMeasurementsScreen(
                             modifier = Modifier.weight(1f),
                             singleLine = true,
                             placeholder = { Text("0.0") },
-                            textStyle = TextStyle(fontSize = IronLogType.metric.fontSize.sp, fontWeight = FontWeight(IronLogType.metric.fontWeight)),
+                        textStyle = typographyTextStyle(TextStyle(fontSize = IronLogType.metric.fontSize.sp, fontWeight = FontWeight(IronLogType.metric.fontWeight))),
                         )
                         Button(
                             onClick = {
@@ -291,7 +296,7 @@ fun BodyMeasurementsScreen(
                             Text("LOG", fontSize = IronLogType.body.fontSize.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 2.sp)
                         }
                     }
-                    Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(appGapDp(8.dp)))
                     OutlinedTextField(
                         value = bodyFatInput,
                         onValueChange = { bodyFatInput = it },
@@ -302,7 +307,7 @@ fun BodyMeasurementsScreen(
                         label = { Text("Body fat % (optional)") },
                     )
                     weightDelta?.let { delta ->
-                        Spacer(Modifier.height(8.dp))
+                        Spacer(Modifier.height(appGapDp(8.dp)))
                         val sign = if (delta > 0) "+" else ""
                         Text(
                             "$sign${formatWeightFromKg(abs(delta), weightUnit)} vs last week",
@@ -311,7 +316,7 @@ fun BodyMeasurementsScreen(
                         )
                     }
                 }
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(appGapDp(16.dp)))
 
                 // Chart card
                 if (recentWeights.size >= 2) {
@@ -323,10 +328,10 @@ fun BodyMeasurementsScreen(
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
                         Text("LAST 30 DAYS", color = colors.muted, fontSize = IronLogType.eyebrow.fontSize.sp, letterSpacing = 3.sp, fontWeight = FontWeight.Bold)
-                        Spacer(Modifier.height(8.dp))
+                        Spacer(Modifier.height(appGapDp(8.dp)))
                         BMMiniWeightChart(recentWeights, weightUnit)
                     }
-                    Spacer(Modifier.height(16.dp))
+                    Spacer(Modifier.height(appGapDp(16.dp)))
                 }
 
                 // History rows (last 14)
@@ -334,7 +339,7 @@ fun BodyMeasurementsScreen(
                     Row(
                         Modifier.fillMaxWidth()
                             .border(width = 1.dp, color = colors.faint, shape = RoundedCornerShape(0.dp))
-                            .padding(vertical = 12.dp, horizontal = 4.dp),
+                            .appPadding(vertical = 12.dp, horizontal = 4.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
@@ -357,13 +362,13 @@ fun BodyMeasurementsScreen(
                 ) {
                     Text("+ ADD MEASUREMENT", fontSize = IronLogType.body.fontSize.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 2.sp)
                 }
-                Spacer(Modifier.height(20.dp))
+                Spacer(Modifier.height(appGapDp(20.dp)))
 
                 // 2-column grid
                 MEASUREMENT_FIELDS.chunked(2).forEach { row ->
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                        horizontalArrangement = appSpacedBy(12.dp),
+                        modifier = Modifier.fillMaxWidth().appPadding(bottom = 12.dp),
                     ) {
                         row.forEach { field ->
                             MeasurementFieldCard(
@@ -394,7 +399,7 @@ fun BodyMeasurementsScreen(
                         fontSize = IronLogType.meta.fontSize.sp,
                         letterSpacing = 1.sp,
                         textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                        modifier = Modifier.fillMaxWidth().appPadding(top = 8.dp),
                     )
                 }
             }
@@ -506,13 +511,13 @@ private fun MeasurementFieldCard(
             .defaultMinSize(minHeight = 90.dp),
     ) {
         Text(field.label.uppercase(), color = colors.muted, fontSize = IronLogType.micro.fontSize.sp, letterSpacing = 2.sp)
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(appGapDp(6.dp)))
         if (current == null) {
             Text("—", color = colors.faint, fontSize = IronLogType.title.fontSize.sp, fontWeight = FontWeight.Light)
         } else {
             Row(
                 verticalAlignment = Alignment.Bottom,
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                horizontalArrangement = appSpacedBy(4.dp),
             ) {
                 Text(
                     java.lang.String.format(Locale.US, "%.1f", current),
@@ -532,29 +537,29 @@ private fun MeasurementFieldCard(
                 }
             }
             if (chartData.size >= 2) {
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(appGapDp(6.dp)))
                 Box(Modifier.fillMaxWidth().clickable { onExpandTap() }) {
                     MeasurementMiniChart(chartData, colors.accent)
                     // Subtle expand hint
                     Text(
                         "Tap to expand",
                         color = colors.muted.copy(alpha = 0.5f),
-                        fontSize = (IronLogType.micro.fontSize - 1).sp,
-                        modifier = Modifier.align(Alignment.BottomEnd).padding(2.dp),
+                            fontSize = IronLogType.micro.fontSize.sp,
+                        modifier = Modifier.align(Alignment.BottomEnd).appPadding(2.dp),
                     )
                 }
             }
         }
 
         // ── Goal row ────────────────────────────────────────────────────────────
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(appGapDp(8.dp)))
         OutlinedTextField(
             value = goalInput,
             onValueChange = { goalInput = it },
             singleLine = true,
             placeholder = { Text("Goal", fontSize = IronLogType.meta.fontSize.sp, color = colors.faint) },
             label = { Text("Goal (${field.unit})", fontSize = IronLogType.micro.fontSize.sp, color = colors.muted) },
-            textStyle = TextStyle(fontSize = IronLogType.meta.fontSize.sp, color = colors.text),
+                        textStyle = typographyTextStyle(TextStyle(fontSize = IronLogType.meta.fontSize.sp, color = colors.text)),
             keyboardOptions = KeyboardOptions(
                 keyboardType = KeyboardType.Decimal,
                 imeAction = ImeAction.Done,
@@ -580,7 +585,7 @@ private fun MeasurementFieldCard(
             val withinFivePercent = goal != 0.0 && abs(deltaToGoal) / abs(goal) <= 0.05
             val goalLabelColor = if (withinFivePercent) colors.success else colors.muted
             val sign = if (deltaToGoal > 0) "+" else ""
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(appGapDp(4.dp)))
             Text(
                 "${sign}${deltaToGoal.roundToInt()} ${field.unit} to goal",
                 color = goalLabelColor,
@@ -665,8 +670,8 @@ private fun MeasurementTrendDialog(
                 .fillMaxWidth(0.96f)
                 .clip(RoundedCornerShape(16.dp))
                 .background(c.card)
-                .padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+                .appPadding(20.dp),
+            verticalArrangement = appSpacedBy(12.dp),
         ) {
             // Header
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -675,7 +680,7 @@ private fun MeasurementTrendDialog(
             }
 
             // Range filter chips
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(horizontalArrangement = appSpacedBy(8.dp)) {
                 rangeOptions.forEach { opt ->
                     val selected = opt == selectedRange
                     Box(
@@ -769,7 +774,7 @@ private fun AddMeasurementBottomSheet(
                 Row(
                     Modifier.fillMaxWidth()
                         .border(width = 1.dp, color = colors.faint, shape = RoundedCornerShape(0.dp))
-                        .padding(horizontal = 20.dp, vertical = 16.dp),
+                        .appPadding(horizontal = 20.dp, vertical = 16.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -793,12 +798,12 @@ private fun AddMeasurementBottomSheet(
                     Modifier
                         .weight(1f)
                         .verticalScroll(rememberScrollState())
-                        .padding(horizontal = 20.dp),
+                        .appPadding(horizontal = 20.dp),
                 ) {
                     MEASUREMENT_FIELDS.forEach { f ->
                         Row(
                             Modifier.fillMaxWidth()
-                                .padding(vertical = 12.dp),
+                                .appPadding(vertical = 12.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
@@ -815,16 +820,16 @@ private fun AddMeasurementBottomSheet(
                                 modifier = Modifier.width(100.dp),
                                 singleLine = true,
                                 placeholder = { Text("—", textAlign = TextAlign.End, modifier = Modifier.fillMaxWidth()) },
-                                textStyle = TextStyle(
+                                textStyle = typographyTextStyle(TextStyle(
                                     fontSize = IronLogType.section.fontSize.sp,
                                     fontWeight = FontWeight.Bold,
                                     textAlign = TextAlign.End,
-                                ),
+                                )),
                             )
                         }
                         HorizontalDivider(color = colors.faint)
                     }
-                    Spacer(Modifier.height(28.dp))
+                    Spacer(Modifier.height(appGapDp(28.dp)))
                     Button(
                         onClick = { onSave(values) },
                         modifier = Modifier.fillMaxWidth().height(50.dp),
@@ -832,7 +837,7 @@ private fun AddMeasurementBottomSheet(
                     ) {
                         Text("SAVE", fontSize = IronLogType.body.fontSize.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 2.sp)
                     }
-                    Spacer(Modifier.height(40.dp))
+                    Spacer(Modifier.height(appGapDp(40.dp)))
                 }
             }
         }

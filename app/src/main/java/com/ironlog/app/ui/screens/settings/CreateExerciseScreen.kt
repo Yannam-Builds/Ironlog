@@ -1,5 +1,7 @@
 ﻿package com.ironlog.app.ui.screens.settings
 
+import com.ironlog.app.ui.theme.appPadding
+import com.ironlog.app.ui.theme.appSpacedBy
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -27,7 +29,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
+import com.ironlog.app.ui.theme.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -108,9 +110,9 @@ fun CreateExerciseScreen(
         Row(
             Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 4.dp),
+                .appPadding(horizontal = 8.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            horizontalArrangement = appSpacedBy(4.dp),
         ) {
             if (onBack != null) {
                 IconButton(onClick = onBack) {
@@ -137,7 +139,7 @@ fun CreateExerciseScreen(
             ) {
                 Column(
                     Modifier.padding(horizontal = 16.dp).padding(bottom = 24.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = appSpacedBy(8.dp),
                 ) {
                     Text("Copy from Exercise", color = c.text, fontWeight = FontWeight.Bold, fontSize = IronLogType.section.fontSize.sp)
                     OutlinedTextField(
@@ -171,7 +173,7 @@ fun CreateExerciseScreen(
                                             difficulty = matchedDiff
                                             showCopyFrom = false
                                         }
-                                        .padding(vertical = 12.dp),
+                                        .appPadding(vertical = 12.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
                                     Column(Modifier.weight(1f)) {
@@ -195,7 +197,7 @@ fun CreateExerciseScreen(
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp),
+            verticalArrangement = appSpacedBy(20.dp),
         ) {
             // Name
             OutlinedTextField(
@@ -209,8 +211,8 @@ fun CreateExerciseScreen(
             // Primary muscle
             SelectorSection(label = "Primary Muscle") {
                 FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = appSpacedBy(8.dp),
+                    verticalArrangement = appSpacedBy(8.dp),
                 ) {
                     MUSCLE_OPTIONS.forEach { m ->
                         SelectChip(
@@ -225,8 +227,8 @@ fun CreateExerciseScreen(
             // Secondary muscles (GAP-05)
             SelectorSection(label = "Secondary Muscles (optional)") {
                 FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = appSpacedBy(8.dp),
+                    verticalArrangement = appSpacedBy(8.dp),
                 ) {
                     MUSCLE_OPTIONS.forEach { m ->
                         // Can't select same as primary; toggle off primary if selected as secondary
@@ -247,8 +249,8 @@ fun CreateExerciseScreen(
             // Equipment
             SelectorSection(label = "Equipment") {
                 FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = appSpacedBy(8.dp),
+                    verticalArrangement = appSpacedBy(8.dp),
                 ) {
                     EQUIPMENT_OPTIONS.forEach { e ->
                         SelectChip(
@@ -262,7 +264,7 @@ fun CreateExerciseScreen(
 
             // Tracking type
             SelectorSection(label = "Tracking Type") {
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                FlowRow(horizontalArrangement = appSpacedBy(8.dp), verticalArrangement = appSpacedBy(8.dp)) {
                     TRACKING_OPTIONS.forEach { opt ->
                         SelectChip(
                             label = opt.label,
@@ -275,7 +277,7 @@ fun CreateExerciseScreen(
 
             // Movement Pattern
             SelectorSection(label = "Movement Pattern (optional)") {
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                FlowRow(horizontalArrangement = appSpacedBy(8.dp), verticalArrangement = appSpacedBy(8.dp)) {
                     MOVEMENT_PATTERN_OPTIONS.forEach { pattern ->
                         SelectChip(
                             label = pattern,
@@ -288,7 +290,7 @@ fun CreateExerciseScreen(
 
             // Difficulty
             SelectorSection(label = "Difficulty (optional)") {
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                FlowRow(horizontalArrangement = appSpacedBy(8.dp), verticalArrangement = appSpacedBy(8.dp)) {
                     DIFFICULTY_OPTIONS.forEach { diff ->
                         SelectChip(
                             label = diff.replaceFirstChar { it.titlecase() },
@@ -342,7 +344,7 @@ fun CreateExerciseScreen(
 @Composable
 private fun SelectorSection(label: String, content: @Composable () -> Unit) {
     val c = useTheme()
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(verticalArrangement = appSpacedBy(8.dp)) {
         Text(label, color = c.muted, fontSize = IronLogType.meta.fontSize.sp, fontWeight = FontWeight.Medium, letterSpacing = 0.5.sp)
         content()
     }

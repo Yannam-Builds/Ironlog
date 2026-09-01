@@ -27,9 +27,13 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 
-class ExerciseRepository(private val context: Context? = null) {
-    private val exercisesBox get() = ObjectBox.store.boxFor(ExerciseEntity::class.java)
-    private val musclesBox get() = ObjectBox.store.boxFor(ExerciseMuscleEntity::class.java)
+class ExerciseRepository(
+    private val context: Context? = null,
+    private val boxStore: io.objectbox.BoxStore? = null,
+) {
+    private val store get() = boxStore ?: ObjectBox.store
+    private val exercisesBox get() = store.boxFor(ExerciseEntity::class.java)
+    private val musclesBox get() = store.boxFor(ExerciseMuscleEntity::class.java)
 
     suspend fun seedExercisesIfNeeded(): ExerciseSeed.SeedResult {
         val ctx = context ?: error("Context is required to seed exerciseLibrary.json")
@@ -42,7 +46,7 @@ class ExerciseRepository(private val context: Context? = null) {
     }
 
     private fun getExercisesFlow(filters: ExerciseFilters = ExerciseFilters()): Flow<List<ExerciseEntity>> =
-        exercisesBox.query().build().asFlow().map { rows -> filterRows(rows, filters) }
+        observeQuery { exercisesBox.query().build() }.map { rows -> filterRows(rows, filters) }
 
     suspend fun getExercisesSnapshot(filters: ExerciseFilters = ExerciseFilters()): List<LegacyExerciseShape> =
         withContext(Dispatchers.IO) { filterRows(exercisesBox.all, filters).map(::mapExerciseRowToLegacyShape) }
@@ -106,7 +110,7 @@ class ExerciseRepository(private val context: Context? = null) {
             difficulty = input.difficulty
             secondaryMusclesJson = input.secondaryMuscles?.let { org.json.JSONArray(it).toString() }
         }
-        ObjectBox.store.runInTx {
+        store.runInTx {
             exercisesBox.put(created)
             val muscleCreates = input.muscles.orEmpty().map { m ->
                 ExerciseMuscleEntity().apply {
@@ -149,12 +153,12 @@ class ExerciseRepository(private val context: Context? = null) {
 
     suspend fun deleteCustomExercise(id: String) = withContext(Dispatchers.IO) {
         requireNonEmpty(id, "id")
-        ObjectBox.store.runInTx {
+        store.runInTx {
             val exercise = findExerciseByUidOrThrow(id)
             if (!exercise.isCustom) error("Only custom exercises can be deleted.")
-            val planReferences = ObjectBox.store.boxFor(PlanExerciseEntity::class.java)
+            val planReferences = store.boxFor(PlanExerciseEntity::class.java)
                 .query(PlanExerciseEntity_.exerciseUid.equal(id)).build().use { it.count() }
-            val workoutReferences = ObjectBox.store.boxFor(WorkoutExerciseEntity::class.java)
+            val workoutReferences = store.boxFor(WorkoutExerciseEntity::class.java)
                 .query(WorkoutExerciseEntity_.exerciseUid.equal(id)).build().use { it.count() }
             if (planReferences > 0 || workoutReferences > 0) {
                 error("This exercise is used by a plan or workout and cannot be deleted. Edit it instead.")

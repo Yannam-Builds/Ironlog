@@ -1,5 +1,9 @@
 package com.ironlog.app.ui.components
 
+import com.ironlog.app.ui.theme.appGapDp
+import com.ironlog.app.ui.theme.appPadding
+import com.ironlog.app.ui.theme.appSpacedBy
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,7 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.Text
+import com.ironlog.app.ui.theme.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -40,12 +44,12 @@ fun EmptyState(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .padding(vertical = 40.dp, horizontal = 24.dp),
+            .appPadding(vertical = 40.dp, horizontal = 24.dp),
         contentAlignment = Alignment.Center,
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = appSpacedBy(10.dp),
         ) {
             Icon(
                 imageVector = icon,
@@ -67,7 +71,7 @@ fun EmptyState(
                 textAlign = TextAlign.Center,
             )
             if (ctaLabel != null && onCta != null) {
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(appGapDp(4.dp)))
                 Button(
                     onClick = onCta,
                     colors = ButtonDefaults.buttonColors(containerColor = c.accent),

@@ -25,7 +25,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Text
+import com.ironlog.app.ui.theme.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -60,12 +60,16 @@ fun RecoveryHeatmapCard(
     manualRecoveryInput: ManualRecoveryInput? = null,
     onTapExpand: () -> Unit,
     onOpenVolumeAnalytics: () -> Unit,
+    painFlags: Set<String> = emptySet(),
+    nowEpochMs: Long = System.currentTimeMillis(),
 ) {
     val c = useTheme()
     val context = LocalContext.current
-    val bodyMapDataset   = remember { loadBodyMapDataset(context) }
+    val bodyMapDataset = com.ironlog.app.ui.screens.body.rememberBodyMapDataset(context)
     val displayReadiness = remember(groupReadiness) { buildDisplayReadiness(groupReadiness) }
-    val recoveryScore = remember(groupReadiness) { RecoveryReadinessEngine.score(groupReadiness) }
+    val recoveryScore = remember(groupReadiness, manualRecoveryInput, nowEpochMs) {
+        RecoveryReadinessEngine.score(groupReadiness, manualRecoveryInput, nowEpochMs)
+    }
 
     // Fallback viewBox dimensions (actual values from the asset)
     val frontVb = bodyMapDataset?.front?.viewBox ?: ViewBox(-20f, 95f, 740f, 1300f)
@@ -114,17 +118,18 @@ fun RecoveryHeatmapCard(
             Spacer(Modifier.height(10.dp))
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
                 Text(
-                    "${recoveryScore.score}",
+                    recoveryScore.scoreOrNull?.toString() ?: "—",
                     color = when {
-                        recoveryScore.score >= 78 -> c.success
-                        recoveryScore.score >= 55 -> c.warning
+                        !recoveryScore.hasEvidence -> c.muted
+                        recoveryScore.score >= 85 -> c.success
+                        recoveryScore.score >= 60 -> c.warning
                         else -> c.danger
                     },
                     fontSize = IronLogType.display.fontSize.sp,
                     fontWeight = FontWeight.Black,
                 )
                 Text(
-                    recoveryScore.state.replaceFirstChar { it.titlecase() },
+                    if (painFlags.isNotEmpty()) "Pain flagged · review recovery" else recoveryScore.state.replaceFirstChar { it.titlecase() },
                     color = c.muted,
                     fontSize = IronLogType.meta.fontSize.sp,
                     fontWeight = FontWeight.Medium,
@@ -148,6 +153,7 @@ fun RecoveryHeatmapCard(
                         pieces = bodyMapDataset?.front?.pieces.orEmpty(),
                         alignmentBox = frontAlignVb,
                         readiness = displayReadiness,
+                        painFlags = painFlags,
                         fitWidth = fitWidth,
                         fitHeight = fitHeight,
                         aspect = sharedAspect,
@@ -165,6 +171,7 @@ fun RecoveryHeatmapCard(
                         pieces = bodyMapDataset?.back?.pieces.orEmpty(),
                         alignmentBox = backAlignVb,
                         readiness = displayReadiness,
+                        painFlags = painFlags,
                         fitWidth = fitWidth,
                         fitHeight = fitHeight,
                         aspect = sharedAspect,
@@ -206,6 +213,7 @@ private fun BodyMapFixedSlot(
     fitHeight: Float,
     aspect: Float,
     modifier: Modifier = Modifier,
+    painFlags: Set<String> = emptySet(),
 ) {
     BoxWithConstraints(
         modifier = modifier,
@@ -217,6 +225,7 @@ private fun BodyMapFixedSlot(
             pieces = pieces,
             viewBox = alignmentBox,
             readiness = readiness,
+            painFlags = painFlags,
             modifier = Modifier.size(canvasW, canvasH),
             fitWidth = fitWidth,
             fitHeight = fitHeight,

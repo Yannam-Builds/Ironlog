@@ -1,5 +1,8 @@
 package com.ironlog.app.ui.screens.onboarding.steps
 
+import com.ironlog.app.ui.theme.appGapDp
+import com.ironlog.app.ui.theme.appPadding
+import com.ironlog.app.ui.theme.appSpacedBy
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -19,7 +22,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
+import com.ironlog.app.ui.theme.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -84,7 +87,7 @@ fun Step3Baseline(
             .fillMaxSize()
             .background(OnboardingConfig.bgDark)
             .verticalScroll(rememberScrollState())
-            .padding(start = 24.dp, top = 32.dp, end = 24.dp, bottom = 64.dp),
+            .appPadding(start = 24.dp, top = 32.dp, end = 24.dp, bottom = 64.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         OnboardingPageHeader(
@@ -92,7 +95,7 @@ fun Step3Baseline(
             title = "Give IronLog a starting signal.",
             body = "These values personalize recovery, load suggestions and your provisional ledger. Verified workouts always outrank self-reported numbers.",
         )
-        Spacer(Modifier.height(26.dp))
+        Spacer(Modifier.height(appGapDp(26.dp)))
 
         BaselineCard("Profile") {
             PickerField("Birth year", "$yearOfBirth · ${ageFromBirthYear(yearOfBirth)} yrs") {
@@ -144,7 +147,7 @@ fun Step3Baseline(
                     fontSize = 13.sp,
                     lineHeight = 18.sp,
                 )
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(appGapDp(12.dp)))
                 OutlinedButton(
                     onClick = { showMovementChecks = true },
                     modifier = Modifier.fillMaxWidth(),
@@ -183,9 +186,9 @@ fun Step3Baseline(
         BaselineResultCard(grade = seededGrade, stats = seededStats)
 
         SetupReward("Your badge remains provisional until training evidence confirms it", Modifier.fillMaxWidth())
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(appGapDp(14.dp)))
         GlowButton(text = "Save baseline", onClick = onNext)
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(appGapDp(24.dp)))
     }
 
     picker?.let { active ->
@@ -205,12 +208,12 @@ private fun BaselineCard(title: String, content: @Composable () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(bottom = 14.dp)
+            .appPadding(bottom = 14.dp)
             .background(OnboardingConfig.surfaceDark, RoundedCornerShape(22.dp))
             .padding(18.dp),
     ) {
         Text(title, color = OnboardingConfig.textPrimary, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(appGapDp(12.dp)))
         content()
     }
 }
@@ -228,7 +231,7 @@ private fun PickerField(label: String, value: String, onClick: () -> Unit) {
     ) {
         Text(label, color = OnboardingConfig.textMuted, fontSize = 14.sp, modifier = Modifier.weight(1f))
         Text(value, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, textAlign = TextAlign.End)
-        Spacer(Modifier.width(8.dp))
+        Spacer(Modifier.width(appGapDp(8.dp)))
         Text("›", color = OnboardingConfig.accentBlue, fontSize = 22.sp, fontWeight = FontWeight.Bold)
     }
 }
@@ -238,8 +241,8 @@ private fun ToggleRow(label: String, selected: Boolean, onChange: (Boolean) -> U
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(bottom = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+            .appPadding(bottom = 12.dp),
+        horizontalArrangement = appSpacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(label, color = OnboardingConfig.textMuted, modifier = Modifier.weight(1f), fontSize = 14.sp)
@@ -273,30 +276,30 @@ private fun BaselineResultCard(grade: String, stats: Map<String, Int>) {
             fontSize = 24.sp,
             fontWeight = FontWeight.Black,
         )
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(appGapDp(6.dp)))
         Text(
             "Self-reported values are capped. Higher grades require verified sessions, consistency, and integrity.",
             color = OnboardingConfig.textMuted,
             fontSize = 13.sp,
             lineHeight = 18.sp,
         )
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(appGapDp(14.dp)))
         stats.entries.chunked(2).forEach { row ->
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = appSpacedBy(10.dp)) {
                 row.forEach { (label, value) ->
                     Column(
                         modifier = Modifier
                             .weight(1f)
                             .background(OnboardingConfig.bgDark.copy(alpha = 0.45f), RoundedCornerShape(16.dp))
-                            .padding(12.dp),
+                            .appPadding(12.dp),
                     ) {
-                        Text(label, color = OnboardingConfig.textMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Text(label, color = OnboardingConfig.textMuted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         Text(value.toString(), color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Black)
                     }
                 }
                 if (row.size == 1) Spacer(Modifier.weight(1f))
             }
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(appGapDp(10.dp)))
         }
     }
 }

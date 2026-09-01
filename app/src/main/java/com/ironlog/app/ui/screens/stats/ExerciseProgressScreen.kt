@@ -1,8 +1,16 @@
 ﻿package com.ironlog.app.ui.screens.stats
 
+import com.ironlog.app.ui.theme.appGapDp
+import com.ironlog.app.ui.theme.appPadding
+import com.ironlog.app.ui.theme.appSpacedBy
 import android.content.Intent
 import androidx.core.content.FileProvider
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.ironlog.app.domain.training.TrainingSetPolicy
+import com.ironlog.app.domain.training.PersonalBestPolicy
+import com.ironlog.app.domain.training.TrackingMode
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -19,7 +27,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.Text
+import com.ironlog.app.ui.theme.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -67,7 +75,6 @@ import java.util.Locale
 import java.io.File
 import kotlin.math.round
 
-private val TABS = listOf("E1RM", "LOAD", "REPS", "VOLUME", "CONSISTENCY", "HISTORY")
 private val RANGES = listOf("90D" to 90, "6M" to 180, "1Y" to 365, "ALL" to null)
 
 data class ExerciseTrendRow(
@@ -77,27 +84,37 @@ data class ExerciseTrendRow(
     val reps: Double,
     val volume: Double,
     val consistency: Double = 1.0,
+    val hasEstimate: Boolean = e1rm > 0.0,
+    val durationSeconds: Double? = null,
+    val loadAvailable: Boolean = true,
+    val volumeAvailable: Boolean = true,
 )
 
-private data class HistorySessionRow(
+internal data class HistorySessionRow(
     val date: String,
     val summary: String,
     val bestSetStr: String?,
     val volumeStr: String,
 )
 
-private data class MetricConfig(
+internal data class MetricConfig(
     val label: String,
     val unit: String,
     val values: List<Double>,
     val stat: Double,
     val isBar: Boolean = false,
+    val chartLabels: List<String>? = null,
 )
 
-fun filterExerciseRowsByRange(rows: List<ExerciseTrendRow>, days: Int?): List<ExerciseTrendRow> {
-    if (days == null) return rows
-    val cutoff = System.currentTimeMillis() - days * 86400000L
-    return rows.filter { runCatching { Instant.parse(it.date).toEpochMilli() >= cutoff }.getOrDefault(false) }
+fun filterExerciseRowsByRange(
+    rows: List<ExerciseTrendRow>, days: Int?,
+    now: Instant = Instant.now(), zone: ZoneId = ZoneId.systemDefault(),
+): List<ExerciseTrendRow> {
+    val cutoff = days?.let { now.atZone(zone).minusDays(it.toLong()).toInstant() }
+    return rows.filter {
+        val date = parseHistoryInstant(it.date, zone)
+        date != null && !date.isAfter(now) && (cutoff == null || !date.isBefore(cutoff))
+    }
 }
 
 fun roundMetric(value: Double, digits: Int = 1): Double {
@@ -106,52 +123,79 @@ fun roundMetric(value: Double, digits: Int = 1): Double {
     return round(value * mult) / mult
 }
 
-fun buildExerciseTrendLocal(history: List<HistoryEntry>, exerciseName: String): List<ExerciseTrendRow> {
+fun buildExerciseTrendLocal(
+    history: List<HistoryEntry>,
+    exerciseName: String,
+    prResetAt: Instant? = null,
+    zoneId: ZoneId = ZoneId.systemDefault(),
+): List<ExerciseTrendRow> {
     val target = exerciseName.lowercase(Locale.US).trim()
     return history.flatMap { h ->
         h.exercises.filter { it.name.lowercase(Locale.US).trim() == target }.mapNotNull { ex ->
-            val workingSets = ex.sets.filter { it.type != "warmup" }
-            if (workingSets.isEmpty()) null else {
-                val best = workingSets.maxByOrNull { it.weight * (1.0 + it.reps / 30.0) }!!
-                ExerciseTrendRow(
-                    date = h.date,
-                    e1rm = best.weight * (1.0 + best.reps / 30.0),
-                    load = workingSets.maxOf { it.weight },
-                    reps = workingSets.maxOf { it.reps },
-                    volume = workingSets.sumOf { it.weight * it.reps },
-                    consistency = workingSets.size.toDouble(),
-                )
-            }
+            val sets = ex.sets.filter { TrainingSetPolicy.isValidWorkingSet(ex, it) }
+            if (sets.isEmpty()) return@mapNotNull null
+            val mode = TrainingSetPolicy.tracking(ex)
+            val timed = mode in setOf(TrackingMode.DURATION, TrackingMode.WEIGHTED_DURATION, TrackingMode.DURATION_DISTANCE)
+            val estimate = sets
+                .filter { PersonalBestPolicy.isAfterReset(it, h.date, prResetAt, zoneId) }
+                .mapNotNull { TrainingSetPolicy.estimatedOneRm(ex, it) }
+                .maxOrNull()
+            val load = mode in setOf(TrackingMode.LOAD_REPS, TrackingMode.ADDED_LOAD_REPS, TrackingMode.ASSISTED_REPS, TrackingMode.WEIGHTED_DURATION) ||
+                (mode == TrackingMode.UNKNOWN && ex.trackingType.isNullOrBlank())
+            ExerciseTrendRow(
+                date = h.date, e1rm = estimate ?: 0.0, hasEstimate = estimate != null,
+                load = if (load) sets.maxOf { it.weight } else 0.0,
+                reps = if (timed) 0.0 else sets.map { it.reps }.average(),
+                volume = sets.sumOf { TrainingSetPolicy.externalLoadVolume(ex, it) },
+                consistency = sets.size.toDouble(),
+                durationSeconds = if (timed) sets.sumOf { it.reps } else null,
+                loadAvailable = load,
+                volumeAvailable = mode in setOf(TrackingMode.LOAD_REPS, TrackingMode.ADDED_LOAD_REPS) ||
+                    (mode == TrackingMode.UNKNOWN && ex.trackingType.isNullOrBlank() && !TrainingSetPolicy.isCardio(ex)),
+            )
         }
-    }.sortedBy { it.date }
+    }.sortedBy { parseHistoryInstant(it.date) }
 }
 
-private fun buildSessionHistoryRows(
-    history: List<HistoryEntry>,
-    exerciseName: String,
-    weightUnit: String,
-): List<HistorySessionRow> {
+internal fun exerciseProgressTabs(rows: List<ExerciseTrendRow>): List<String> = buildList {
+    if (rows.any { it.hasEstimate }) add("E1RM")
+    if (rows.any { it.loadAvailable }) add("LOAD")
+    if (rows.any { it.durationSeconds == null }) add("REPS")
+    if (rows.any { it.durationSeconds != null }) add("DURATION")
+    if (rows.any { it.volumeAvailable }) add("VOLUME")
+    add("CONSISTENCY")
+    add("HISTORY")
+}
+
+internal fun buildSessionHistoryRows(history: List<HistoryEntry>, exerciseName: String, weightUnit: String,
+    now: Instant = Instant.now(), zone: ZoneId = ZoneId.systemDefault()): List<HistorySessionRow> {
     val target = exerciseName.lowercase(Locale.US).trim()
     return history.mapNotNull { session ->
-        val exercise = session.exercises.find { it.name.lowercase(Locale.US).trim() == target }
-            ?: return@mapNotNull null
-        val workingSets = exercise.sets.filter { it.type != "warmup" }
-        val summary = if (workingSets.isEmpty()) "-" else
-            workingSets.joinToString(", ") { "${it.reps.toInt()}×${formatWeightFromKg(it.weight, weightUnit)}" }
-        val bestSet = workingSets.maxByOrNull { it.weight }
-        val bestSetStr = bestSet?.let { "${it.reps.toInt()} × ${formatWeightFromKg(it.weight, weightUnit)}" }
-        val volume = workingSets.sumOf { it.weight * it.reps }
-        HistorySessionRow(
-            date = session.date,
-            summary = summary,
-            bestSetStr = bestSetStr,
-            volumeStr = formatVolumeFromKg(volume, weightUnit),
-        )
-    }.sortedByDescending { it.date }
+        val occurredAt = parseHistoryInstant(session.date, zone) ?: return@mapNotNull null
+        if (occurredAt.isAfter(now)) return@mapNotNull null
+        val exercise = session.exercises.find { it.name.lowercase(Locale.US).trim() == target } ?: return@mapNotNull null
+        val sets = exercise.sets.filter { TrainingSetPolicy.isValidWorkingSet(exercise, it) }
+        if (sets.isEmpty()) return@mapNotNull null
+        val mode = TrainingSetPolicy.tracking(exercise)
+        fun label(set: com.ironlog.app.ui.model.HistoryExerciseSet): String = when (mode) {
+            TrackingMode.DURATION -> "${roundMetric(set.reps)} s"
+            TrackingMode.DURATION_DISTANCE -> "${roundMetric(set.reps)} s · ${roundMetric(set.weight)} km"
+            TrackingMode.WEIGHTED_DURATION -> "${roundMetric(set.reps)} s · ${formatWeightFromKg(set.weight, weightUnit)}"
+            TrackingMode.BODYWEIGHT_REPS -> "BW × ${roundMetric(set.reps)}"
+            TrackingMode.ADDED_LOAD_REPS -> "BW + ${formatWeightFromKg(set.weight, weightUnit)} × ${roundMetric(set.reps)}"
+            TrackingMode.ASSISTED_REPS -> "${formatWeightFromKg(set.weight, weightUnit)} assistance × ${roundMetric(set.reps)}"
+            else -> "${formatWeightFromKg(set.weight, weightUnit)} × ${roundMetric(set.reps)}"
+        }
+        val bestSet = sets.filter { TrainingSetPolicy.estimatedOneRm(exercise, it) != null }
+            .maxByOrNull { TrainingSetPolicy.estimatedOneRm(exercise, it)!! }
+        val volume = sets.sumOf { TrainingSetPolicy.externalLoadVolume(exercise, it) }
+        HistorySessionRow(session.date, sets.joinToString(", ", transform = ::label),
+            bestSet?.let(::label), if (volume > 0) formatVolumeFromKg(volume, weightUnit) else "${sets.size} working sets")
+    }.sortedByDescending { parseHistoryInstant(it.date) }
 }
 
-private fun computeMetricConfig(rows: List<ExerciseTrendRow>, activeTab: Int, weightUnit: String): MetricConfig =
-    when (TABS.getOrNull(activeTab)) {
+internal fun computeMetricConfig(rows: List<ExerciseTrendRow>, activeTab: String, weightUnit: String): MetricConfig =
+    when (activeTab) {
         "E1RM" -> {
             val values = rows.map { convertKgToUnit(it.e1rm, weightUnit, 1) }
             MetricConfig("BEST EST. 1RM", weightUnit, values, values.maxOrNull() ?: 0.0)
@@ -159,6 +203,10 @@ private fun computeMetricConfig(rows: List<ExerciseTrendRow>, activeTab: Int, we
         "LOAD" -> {
             val values = rows.map { convertKgToUnit(it.load, weightUnit, 1) }
             MetricConfig("TOP LOAD", weightUnit, values, values.maxOrNull() ?: 0.0)
+        }
+        "DURATION" -> {
+            val values = rows.map { it.durationSeconds ?: 0.0 }
+            MetricConfig("SESSION DURATION", "s", values, values.sum(), isBar = true)
         }
         "REPS" -> {
             val values = rows.map { it.reps }
@@ -181,7 +229,7 @@ private fun computeMetricConfig(rows: List<ExerciseTrendRow>, activeTab: Int, we
             val sortedWeeks = byWeek.keys.sorted()
             val values = sortedWeeks.map { byWeek[it]!!.size.toDouble() }
             val avgPerWeek = if (values.isEmpty()) 0.0 else values.average().let { if (it.isFinite()) it else 0.0 }
-            MetricConfig("SESSIONS / WEEK", "×", values, avgPerWeek, isBar = true)
+            MetricConfig("SESSIONS / ACTIVE WEEK", "×", values, avgPerWeek, isBar = true, chartLabels = sortedWeeks)
         }
         else -> MetricConfig("", "", emptyList(), 0.0)
     }
@@ -198,20 +246,40 @@ fun ExerciseProgressScreen(
     val colors = useTheme()
     val context = LocalContext.current
     val csvScope = rememberCoroutineScope()
-    val history by vm.history.collectAsState()
-    var activeTab by remember { mutableIntStateOf(0) }
+    val history by vm.history.collectAsStateWithLifecycle()
+    val prResetAtEpochMs by vm.prResetAtEpochMs.collectAsStateWithLifecycle()
+    val nowEpochMs by com.ironlog.app.ui.state.rememberPresentationTime()
+    var activeTab by remember { mutableStateOf("E1RM") }
     var range by remember { mutableStateOf("ALL") }
     var showTrainingMax by remember { mutableStateOf(false) }
 
-    val trend = remember(history, exerciseName) { buildExerciseTrendLocal(history, exerciseName) }
-    val rows = remember(trend, range) {
-        filterExerciseRowsByRange(trend, RANGES.first { it.first == range }.second)
+    val trend = remember(history, exerciseName, prResetAtEpochMs) {
+        buildExerciseTrendLocal(
+            history = history,
+            exerciseName = exerciseName,
+            prResetAt = prResetAtEpochMs?.let(Instant::ofEpochMilli),
+        )
     }
-    val historyRows = remember(history, exerciseName, weightUnit) {
-        buildSessionHistoryRows(history, exerciseName, weightUnit)
+    val rows = remember(trend, range, nowEpochMs) {
+        filterExerciseRowsByRange(trend, RANGES.first { it.first == range }.second, Instant.ofEpochMilli(nowEpochMs))
     }
-    val activeMetric = remember(rows, activeTab, weightUnit) {
-        computeMetricConfig(rows, activeTab, weightUnit)
+    val historyRows = remember(history, exerciseName, weightUnit, nowEpochMs) {
+        buildSessionHistoryRows(history, exerciseName, weightUnit, Instant.ofEpochMilli(nowEpochMs))
+    }
+    val tabs = remember(rows) { exerciseProgressTabs(rows) }
+    val selectedTab = activeTab.takeIf { it in tabs } ?: tabs.first()
+    val metricRows = remember(rows, selectedTab) {
+        rows.filter { when (selectedTab) {
+            "E1RM" -> it.hasEstimate
+            "LOAD" -> it.loadAvailable
+            "REPS" -> it.durationSeconds == null
+            "DURATION" -> it.durationSeconds != null
+            "VOLUME" -> it.volumeAvailable
+            else -> true
+        } }
+    }
+    val activeMetric = remember(metricRows, selectedTab, weightUnit) {
+        computeMetricConfig(metricRows, selectedTab, weightUnit)
     }
 
     Column(Modifier.fillMaxSize().background(colors.bg).statusBarsPadding()) {
@@ -238,23 +306,24 @@ fun ExerciseProgressScreen(
                 modifier = Modifier.weight(1f),
             )
             // TM Calculator button
-            TextButton(onClick = { showTrainingMax = true }) {
+            if (rows.any { it.hasEstimate }) TextButton(onClick = { showTrainingMax = true }) {
                 Text("CALC TM", color = colors.accent, fontSize = IronLogType.micro.fontSize.sp, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
             }
             // CSV export button
             IconButton(onClick = {
                 val snapshot = rows.toList()
                 csvScope.launch {
-                    val sb = StringBuilder("Date,Weight ($weightUnit),Reps,Volume ($weightUnit),e1RM ($weightUnit)\n")
+                    val sb = StringBuilder("Date,Load ($weightUnit),Mean reps,External volume ($weightUnit),e1RM ($weightUnit),Duration (s)\n")
                     snapshot.forEach { r ->
                         sb.append("${r.date.substringBefore('T')},")
-                        sb.append("${convertKgToUnit(r.load, weightUnit)},")
-                        sb.append("${r.reps.toInt()},")
-                        sb.append("${convertKgToUnit(r.volume, weightUnit)},")
-                        sb.append("${convertKgToUnit(r.e1rm, weightUnit)}\n")
+                        sb.append("${if (r.loadAvailable) convertKgToUnit(r.load, weightUnit).toString() else ""},")
+                        sb.append("${if (r.durationSeconds == null) r.reps.toString() else ""},")
+                        sb.append("${if (r.volumeAvailable) convertKgToUnit(r.volume, weightUnit).toString() else ""},")
+                        sb.append("${if (r.hasEstimate) convertKgToUnit(r.e1rm, weightUnit).toString() else ""},${r.durationSeconds ?: ""}\n")
                     }
                     val file = withContext(Dispatchers.IO) {
-                        File(context.cacheDir, "ironlog_${exerciseName.replace(" ", "_")}.csv")
+                        val exportDirectory = File(context.cacheDir, "exports").apply { mkdirs() }
+                        File(exportDirectory, "ironlog_exercise_progress.csv")
                             .also { it.writeText(sb.toString()) }
                     }
                     val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
@@ -278,8 +347,8 @@ fun ExerciseProgressScreen(
                     title = "Ironlog Exercise Progress",
                     headline = exerciseName,
                     metrics = listOf(
-                        ShareService.ShareMetric("Best e1RM", latest?.let { formatWeightFromKg(it.e1rm, weightUnit) } ?: "-"),
-                        ShareService.ShareMetric("Top load", latest?.let { formatWeightFromKg(it.load, weightUnit) } ?: "-"),
+                        ShareService.ShareMetric("Best e1RM", rows.filter { it.hasEstimate }.maxByOrNull { it.e1rm }?.let { formatWeightFromKg(it.e1rm, weightUnit) } ?: "Not estimated"),
+                        ShareService.ShareMetric("Top load", latest?.takeIf { it.loadAvailable }?.let { formatWeightFromKg(it.load, weightUnit) } ?: "Not applicable"),
                         ShareService.ShareMetric("Sessions", rows.size.toString()),
                     ),
                 )
@@ -292,15 +361,16 @@ fun ExerciseProgressScreen(
         Row(
             Modifier
                 .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
                 .border(width = 1.dp, color = colors.faint, shape = RoundedCornerShape(0.dp)),
         ) {
-            TABS.forEachIndexed { i, tab ->
-                val active = activeTab == i
+            tabs.forEach { tab ->
+                val active = selectedTab == tab
                 Box(
                     modifier = Modifier
-                        .weight(1f)
-                        .clickable { activeTab = i }
-                        .padding(vertical = 11.dp),
+                        .heightIn(min = 48.dp)
+                        .clickable { activeTab = tab }
+                        .padding(horizontal = 14.dp, vertical = 11.dp),
                     contentAlignment = Alignment.Center,
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -311,7 +381,7 @@ fun ExerciseProgressScreen(
                             fontWeight = FontWeight(if (active) 800 else 600),
                             letterSpacing = 0.6.sp,
                         )
-                        Spacer(Modifier.height(6.dp))
+                        Spacer(Modifier.height(appGapDp(6.dp)))
                         Box(
                             Modifier
                                 .fillMaxWidth(0.6f)
@@ -327,7 +397,7 @@ fun ExerciseProgressScreen(
         }
 
         // ── Content ─────────────────────────────────────────────────────────
-        if (TABS[activeTab] == "HISTORY") {
+        if (selectedTab == "HISTORY") {
             if (historyRows.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text("No data for this exercise yet.", color = colors.muted, fontSize = IronLogType.body.fontSize.sp)
@@ -335,7 +405,7 @@ fun ExerciseProgressScreen(
             } else {
                 LazyColumn(
                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 80.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = com.ironlog.app.ui.theme.appCardSpacedBy(8.dp),
                 ) {
                     items(historyRows) { row -> SessionHistoryRow(row) }
                 }
@@ -344,22 +414,22 @@ fun ExerciseProgressScreen(
             Column(
                 Modifier
                     .verticalScroll(rememberScrollState())
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                    .appPadding(16.dp),
+                verticalArrangement = appSpacedBy(12.dp),
             ) {
                 // Hero card
-                HeroMetricCard(activeMetric, rows.size)
+                HeroMetricCard(activeMetric, metricRows.size)
 
                 // Chart — bar for VOLUME, line for everything else
                 if (activeMetric.isBar) {
-                    BarChartCard(activeMetric.values, rows.map { it.date })
+                    BarChartCard(activeMetric.values, activeMetric.chartLabels ?: metricRows.map { it.date })
                 } else {
-                    val prIndices = remember(rows, activeTab) {
-                        if (TABS[activeTab] != "E1RM") emptySet()
+                    val prIndices = remember(metricRows, selectedTab) {
+                        if (selectedTab != "E1RM") emptySet()
                         else {
                             val prSet = mutableSetOf<Int>()
                             var maxSoFar = Double.MIN_VALUE
-                            rows.forEachIndexed { i, row ->
+                            metricRows.forEachIndexed { i, row ->
                                 if (row.e1rm > maxSoFar) {
                                     maxSoFar = row.e1rm
                                     prSet.add(i)
@@ -368,11 +438,11 @@ fun ExerciseProgressScreen(
                             prSet
                         }
                     }
-                    LineChartCard(activeMetric.values, rows.map { it.date }, prIndices)
+                    LineChartCard(activeMetric.values, metricRows.map { it.date }, prIndices)
                 }
 
                 // Range selector
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(horizontalArrangement = appSpacedBy(8.dp)) {
                     RANGES.forEach { (label, _) ->
                         FilterChip(
                             selected = range == label,
@@ -382,14 +452,14 @@ fun ExerciseProgressScreen(
                     }
                 }
 
-                Spacer(Modifier.height(16.dp).navigationBarsPadding())
+                Spacer(Modifier.height(appGapDp(16.dp)).navigationBarsPadding())
             }
         }
     }
 
     // ── Training Max dialog ─────────────────────────────────────────────────
     if (showTrainingMax) {
-        val latest = rows.lastOrNull()
+        val latest = rows.lastOrNull { it.hasEstimate }
         val baseKg = latest?.e1rm ?: 0.0
         AlertDialog(
             onDismissRequest = { showTrainingMax = false },
@@ -427,9 +497,9 @@ private fun HeroMetricCard(metric: MetricConfig, sessionCount: Int) {
             .fillMaxWidth()
             .background(c.card, RoundedCornerShape(IronLogRadius.lg.dp))
             .border(1.dp, c.cardBorder, RoundedCornerShape(IronLogRadius.lg.dp))
-            .padding(16.dp),
+            .appPadding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+        verticalArrangement = appSpacedBy(4.dp),
     ) {
         Text(metric.label, color = c.muted, fontSize = IronLogType.micro.fontSize.sp, letterSpacing = 2.6.sp)
         Text(statStr, color = c.accent, fontWeight = FontWeight.Black, fontSize = IronLogType.display.fontSize.sp)
@@ -541,11 +611,11 @@ private fun SessionHistoryRow(row: HistorySessionRow) {
             .fillMaxWidth()
             .background(c.card, RoundedCornerShape(IronLogRadius.lg.dp))
             .border(1.dp, c.cardBorder, RoundedCornerShape(IronLogRadius.lg.dp))
-            .padding(12.dp),
+            .appPadding(12.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Column(Modifier.weight(1f), verticalArrangement = appSpacedBy(3.dp)) {
             Text(
                 formatDateFull(row.date),
                 color = c.text,
@@ -556,7 +626,7 @@ private fun SessionHistoryRow(row: HistorySessionRow) {
             Text("Volume: ${row.volumeStr}", color = c.muted, fontSize = IronLogType.eyebrow.fontSize.sp)
         }
         if (row.bestSetStr != null) {
-            Spacer(Modifier.width(12.dp))
+            Spacer(Modifier.width(appGapDp(12.dp)))
             Column(
                 Modifier
                     .border(1.dp, c.accent, RoundedCornerShape(10.dp))
@@ -572,6 +642,6 @@ private fun SessionHistoryRow(row: HistorySessionRow) {
 
 private fun formatDateFull(dateStr: String): String = runCatching {
     DateTimeFormatter.ofPattern("MMM d, yyyy")
-        .format(Instant.parse(dateStr).atZone(ZoneId.systemDefault()))
+        .format(requireNotNull(parseHistoryInstant(dateStr)).atZone(ZoneId.systemDefault()))
 }.getOrDefault(dateStr)
 

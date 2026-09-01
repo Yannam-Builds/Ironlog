@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="onb_awakening_line1">Preparing your training workspace</string>
-    <string name="onb_awakening_line2">Calibrating local coaching signals...</string>
+    <string name="onb_awakening_line2">Calibrating local coaching signals…</string>
     <string name="onb_reg_header">Athlete profile</string>
     <string name="onb_reg_subtext">Tell Ironlog what to call you.</string>
     <string name="onb_reg_hint">Your name</string>
@@ -9,7 +9,6 @@
     <string name="onb_class_header">Choose your starting point</string>
     <string name="onb_class_subtext">This only tunes defaults. Real progress comes from verified workouts.</string>
     <string name="onb_quota_header">Set your weekly rhythm</string>
-    <string name="onb_quota_sessions">%d sessions per week</string>
     <string name="onb_quota_cta">Save rhythm</string>
     <string name="onb_goal_header">Choose your training focus</string>
     <string name="onb_goal_cta">Continue</string>
@@ -27,10 +26,8 @@
     <string name="onb_ai_skip">Skip cloud AI</string>
     <string name="onb_perm_header">Enable app features</string>
     <string name="onb_perm_subtext">Each permission improves the app. All are optional.</string>
-    <string name="onb_perm_camera_title">Camera for progress photos</string>
-    <string name="onb_perm_camera_desc">Capture private progress photos. They stay on your device unless you export them.</string>
-    <string name="onb_perm_health_title">Health Connect recovery data</string>
-    <string name="onb_perm_health_desc">Import sleep, HRV, and heart rate for better recovery scores.</string>
+    <string name="onb_perm_health_title">Health Connect context</string>
+    <string name="onb_perm_health_desc">Read recent sleep, HRV, and resting heart rate as context only. These values do not change your readiness score.</string>
     <string name="onb_perm_notif_title">Workout notifications</string>
     <string name="onb_perm_notif_desc">Rest timer, active workout, streak, and reminder alerts.</string>
     <string name="onb_perm_grant">Allow</string>

@@ -1,5 +1,7 @@
 ﻿package com.ironlog.app.ui.screens.settings
 
+import com.ironlog.app.ui.theme.appPadding
+import com.ironlog.app.ui.theme.appSpacedBy
 import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -23,7 +25,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Text
+import com.ironlog.app.ui.theme.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -106,7 +108,7 @@ fun DataPortabilityScreen(
     LazyColumn(
         modifier = Modifier.fillMaxSize().background(c.bg).statusBarsPadding(),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 80.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = com.ironlog.app.ui.theme.appCardSpacedBy(12.dp),
     ) {
         item { ScreenHeader(title = "DATA PORTABILITY", onBack = onBack) }
 
@@ -117,10 +119,10 @@ fun DataPortabilityScreen(
         }
         item {
             Card(colors = CardDefaults.cardColors(containerColor = c.card), border = BorderStroke(1.dp, c.cardBorder)) {
-                Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = appSpacedBy(10.dp)) {
                     Text("Share your data as a file. JSON is the full backup; CSV is compatible with spreadsheets.",
                         color = c.subtext, fontSize = IronLogType.body.fontSize.sp)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(horizontalArrangement = appSpacedBy(8.dp)) {
                         Button(
                             onClick = {
                                 isWorking = true
@@ -173,7 +175,7 @@ fun DataPortabilityScreen(
                 color = c.subtext, fontSize = IronLogType.body.fontSize.sp)
         }
         item {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(horizontalArrangement = appSpacedBy(8.dp), verticalArrangement = appSpacedBy(8.dp)) {
                 SOURCE_FORMATS.forEach { (id, label) ->
                     val sel = selectedSource == id
                     Text(
@@ -208,7 +210,7 @@ fun DataPortabilityScreen(
         preview?.let { pv ->
             item {
                 Card(colors = CardDefaults.cardColors(containerColor = c.card), border = BorderStroke(1.dp, c.cardBorder)) {
-                    Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Column(Modifier.fillMaxWidth().appPadding(14.dp), verticalArrangement = appSpacedBy(6.dp)) {
                         Text("Preview", color = c.text, fontSize = IronLogType.section.fontSize.sp, fontWeight = FontWeight.Bold)
                         Text("${pv.validRows} rows ready", color = c.subtext)
                         if (pv.domainCounts.isNotEmpty())
@@ -231,7 +233,16 @@ fun DataPortabilityScreen(
         if (status.isNotBlank()) item { Text(status, color = c.accent) }
     }
 
-    if (showConfirm) {
+    if (showConfirm && selectedSource == "ironlog_json") {
+        BackupRestoreDialog(pickedFileText, importExportRepo, onDismiss = { showConfirm = false }) { result ->
+            showConfirm = false
+            status = "Restored ${result.workouts} workouts and ${result.sets} sets." +
+                if (result.recoverySnapshot != null) " Pre-restore snapshot saved in Backup Center." else ""
+            preview = null
+            pickedFileText = ""
+            onRestoreComplete()
+        }
+    } else if (showConfirm) {
         AlertDialog(
             onDismissRequest = { showConfirm = false },
             title = { Text(if (selectedSource == "ironlog_json") "Restore backup?" else "Import data?") },
@@ -252,12 +263,12 @@ fun DataPortabilityScreen(
                     val text = pickedFileText
                     val src = selectedSource
                     scope.launch(Dispatchers.IO) {
-                        val replaceMode = src == "ironlog_json"
+                        val replaceMode = false
                         val res = runCatching { importText(text, repo, importExportRepo, pv, src, replaceMode) }
                         withContext(Dispatchers.Main) {
                             status = res.fold(
                                 {
-                                    if (src == "ironlog_json") onRestoreComplete()
+                                    onRestoreComplete()
                                     if (src == "ironlog_json") "Restored $it rows." else "Imported $it rows."
                                 },
                                 { "Failed: ${it.message}" },
@@ -286,7 +297,11 @@ private suspend fun buildJsonExportFile(context: android.content.Context, import
     val out = importExportRepo.exportDatabase()
     val fn = "ironlog_backup_${LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"))}.json"
     val dir = File(context.filesDir, "exports").also { it.mkdirs() }
-    return File(dir, fn).also { it.writeText(out.toString(2)) }
+    return File(dir, fn).also {
+        it.writeText(out.toString(2))
+        com.ironlog.app.data.repository.SettingsRepository()
+            .setString("last_successful_backup_ms", System.currentTimeMillis().toString())
+    }
 }
 
 private suspend fun buildCsvExportFile(context: android.content.Context, repo: WorkoutRepository): File {
@@ -304,7 +319,7 @@ private suspend fun buildCsvExportFile(context: android.content.Context, repo: W
             detail.sets.filter { it.workoutExerciseUid == we.uid }.forEach { s ->
                 sb.append(listOf(date, w.name.csvSafe(), (exNameByUid[we.exerciseUid].orEmpty()).csvSafe(),
                     s.setIndex.toString(), s.weight.toString(), s.reps.toString(),
-                    (s.rpe ?: "").toString(), "", "", "", w.notes.csvSafe()).joinToString(",")).append("\n")
+                    (s.rpe ?: "").toString(), "", "", "", w.notes.orEmpty().csvSafe()).joinToString(",")).append("\n")
             }
         }
     }
@@ -319,6 +334,7 @@ internal data class CsvPreview(
     val error: String?,
     val domainCounts: Map<String, Int> = emptyMap(),
     val warnings: List<String> = emptyList(),
+    val backupPreview: Boolean = false,
 )
 
 internal fun buildImportPreview(text: String, sourceHint: String): CsvPreview {
@@ -351,6 +367,7 @@ private fun buildIronlogBackupPreview(text: String): CsvPreview {
     
     return CsvPreview(
         validRows = totalRows,
+        backupPreview = true,
         samples = listOf("plans: ${p.plans}", "workouts: ${p.workouts}", "sets: ${p.sets}"),
         error = null,
         domainCounts = mapOf(
@@ -508,7 +525,7 @@ private suspend fun importIronlogBackup(text: String, importExportRepo: ImportEx
 }
 
 internal val CsvPreview.canImport: Boolean
-    get() = error == null && validRows > 0
+    get() = error == null && (validRows > 0 || backupPreview)
 
 private suspend fun importStrong(text: String, repo: WorkoutRepository, preview: CsvPreview): Int {
     require(preview.error == null) { preview.error ?: "Invalid CSV" }
@@ -576,6 +593,7 @@ private suspend fun importStrong(text: String, repo: WorkoutRepository, preview:
                 durationSeconds = 1800,
                 notes = first.workoutNote,
                 exerciseData = exercises,
+                imported = true,
             ),
         )
         imported++
@@ -627,6 +645,7 @@ private suspend fun importHevy(text: String, repo: WorkoutRepository, preview: C
                 startedAt = startedAt,
                 durationSeconds = 1800,
                 exerciseData = exercises,
+                imported = true,
             ),
         )
         imported++
@@ -673,6 +692,7 @@ private suspend fun importOpenWeight(text: String, repo: WorkoutRepository, prev
                 startedAt = w.optLong("startedAt", System.currentTimeMillis()),
                 durationSeconds = w.optInt("durationSeconds", 1800),
                 exerciseData = completed,
+                imported = true,
             )
         )
         imported++

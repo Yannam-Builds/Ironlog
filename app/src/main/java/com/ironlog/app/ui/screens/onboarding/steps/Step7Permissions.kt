@@ -1,5 +1,7 @@
 package com.ironlog.app.ui.screens.onboarding.steps
 
+import com.ironlog.app.ui.theme.appGapDp
+import com.ironlog.app.ui.theme.appPadding
 import android.Manifest
 import android.content.Intent
 import android.net.Uri
@@ -25,7 +27,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Text
+import com.ironlog.app.ui.theme.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -53,10 +55,8 @@ import com.ironlog.app.ui.screens.onboarding.SetupReward
 
 @Composable
 fun Step7Permissions(
-    cameraGranted: Boolean,
     healthConnectGranted: Boolean,
     notificationsGranted: Boolean,
-    onCameraGranted: (Boolean) -> Unit,
     onHealthConnectGranted: (Boolean) -> Unit,
     onNotificationsGranted: (Boolean) -> Unit,
     onNext: () -> Unit,
@@ -90,16 +90,12 @@ fun Step7Permissions(
             .onFailure { context.startActivity(webIntent) }
     }
 
-    val cameraLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted -> onCameraGranted(granted) }
-
     val hcLauncher = rememberLauncherForActivityResult(
         PermissionController.createRequestPermissionResultContract()
     ) { granted ->
         val ok = granted.containsAll(healthRepo.requiredPermissions)
         onHealthConnectGranted(ok)
-        healthStatus = if (ok) "Health Connect is connected." else "Health Connect was not granted. You can enable it later in Settings."
+        healthStatus = if (ok) "Read-only Health Connect context is connected." else "Health Connect was not granted. You can enable it later in Settings."
     }
 
     val notifLauncher = rememberLauncherForActivityResult(
@@ -118,7 +114,7 @@ fun Step7Permissions(
             }
         } else if (healthRepo.hasAllPermissions()) {
             onHealthConnectGranted(true)
-            healthStatus = "Health Connect is already connected."
+            healthStatus = "Read-only Health Connect context is already connected."
         }
     }
 
@@ -127,7 +123,7 @@ fun Step7Permissions(
             .fillMaxSize()
             .background(OnboardingConfig.bgDark)
             .verticalScroll(rememberScrollState())
-            .padding(start = 24.dp, top = 32.dp, end = 24.dp, bottom = 64.dp),
+            .appPadding(start = 24.dp, top = 32.dp, end = 24.dp, bottom = 64.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         OnboardingPageHeader(
@@ -135,15 +131,8 @@ fun Step7Permissions(
             title = "Enable benefits when you need them.",
             body = "Nothing here blocks training. IronLog asks the system only after you tap Allow, and every connection can be changed later.",
         )
-        Spacer(Modifier.height(22.dp))
+        Spacer(Modifier.height(appGapDp(22.dp)))
 
-        PermissionCard(
-            title = stringResource(R.string.onb_perm_camera_title),
-            description = stringResource(R.string.onb_perm_camera_desc),
-            granted = cameraGranted,
-            onGrant = { cameraLauncher.launch(Manifest.permission.CAMERA) },
-        )
-        Spacer(Modifier.height(12.dp))
         PermissionCard(
             title = stringResource(R.string.onb_perm_health_title),
             description = stringResource(R.string.onb_perm_health_desc),
@@ -166,7 +155,7 @@ fun Step7Permissions(
                 }
             },
         )
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(appGapDp(12.dp)))
         PermissionCard(
             title = stringResource(R.string.onb_perm_notif_title),
             description = stringResource(R.string.onb_perm_notif_desc),
@@ -180,9 +169,9 @@ fun Step7Permissions(
             },
         )
 
-        Spacer(Modifier.height(20.dp))
-        SetupReward("Health data improves recovery estimates; notifications protect planned-session streaks", Modifier.fillMaxWidth())
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(appGapDp(20.dp)))
+        SetupReward("Health signals remain context only; notifications protect planned-session streaks", Modifier.fillMaxWidth())
+        Spacer(Modifier.height(appGapDp(14.dp)))
         GlowButton(text = stringResource(R.string.onb_perm_cta), onClick = onNext)
     }
 }
@@ -206,19 +195,19 @@ private fun PermissionCard(
             .clip(RoundedCornerShape(22.dp))
             .background(OnboardingConfig.surfaceDark)
             .border(if (granted) 1.5.dp else 1.dp, borderColor, RoundedCornerShape(22.dp))
-            .padding(18.dp),
+            .appPadding(18.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(title, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold)
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(appGapDp(4.dp)))
             Text(description, color = OnboardingConfig.textMuted, fontSize = 13.sp, lineHeight = 18.sp)
             if (!status.isNullOrBlank()) {
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(appGapDp(6.dp)))
                 Text(status, color = if (granted) OnboardingConfig.grantedColor else OnboardingConfig.accentGold, fontSize = 12.sp)
             }
         }
-        Spacer(Modifier.width(12.dp))
+        Spacer(Modifier.width(appGapDp(12.dp)))
         OutlinedButton(
             onClick = onGrant,
             enabled = !granted,

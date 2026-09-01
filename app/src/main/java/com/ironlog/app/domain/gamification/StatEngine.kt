@@ -2,6 +2,7 @@
 package com.ironlog.app.domain.gamification
 
 import com.ironlog.app.ui.model.HistoryEntry
+import com.ironlog.app.domain.training.TrainingSetPolicy
 import kotlinx.serialization.Serializable
 import kotlin.math.ln
 import kotlin.math.roundToInt
@@ -37,10 +38,10 @@ class StatEngine {
         if (history.isEmpty()) return RpgStats()
 
         // STR - best estimated 1RM across all sets in all history.
-        val bestOrm: Double = history.flatMap { it.exercises }
-            .flatMap { it.sets }
-            .filter { it.type != "warmup" && it.reps > 0 && it.weight > 0 }
-            .maxOfOrNull { epley1rm(it.weight, it.reps) } ?: 0.0
+        val working = history.flatMap { it.exercises }.flatMap { ex ->
+            ex.sets.filter { TrainingSetPolicy.isValidWorkingSet(ex, it) }.map { ex to it }
+        }
+        val bestOrm = working.mapNotNull { (ex, set) -> TrainingSetPolicy.estimatedOneRm(ex, set) }.maxOrNull() ?: 0.0
 
         // END - average workout duration in minutes.
         val avgDurationMin = history.map { it.duration / 60.0 }.average()
@@ -52,20 +53,14 @@ class StatEngine {
         val vitRaw = streak * 5.0 + totalSessions.toDouble()
 
         // WIS - fraction of sets that have RPE logged, scaled to encourage consistent tracking.
-        val totalSets = history.sumOf { it.exercises.sumOf { ex -> ex.sets.size } }.toDouble()
-        val rpeTrackedSets = history.sumOf { entry ->
-            entry.exercises.sumOf { ex -> ex.sets.count { it.rpe != null } }
-        }.toDouble()
+        val totalSets = working.size.toDouble()
+        val rpeTrackedSets = working.count { (_, set) -> set.rpe != null || set.rir != null }.toDouble()
         val wisRaw = if (totalSets > 0) (rpeTrackedSets / totalSets) * 100.0 else 0.0
         val wis = toStat(wisRaw, scale = 20.0)
 
         // LUK - high-effort proof events, approximated as high-RPE sets for now.
         val luk = toStat(
-            value = history.sumOf { entry ->
-                entry.exercises.sumOf { ex ->
-                    ex.sets.count { it.rpe != null && (it.rpe ?: 0.0) >= 9.0 }.toDouble()
-                }
-            },
+            value = working.count { (_, set) -> set.rpe != null && set.rpe >= 9.0 }.toDouble(),
             scale = 20.0,
         )
 

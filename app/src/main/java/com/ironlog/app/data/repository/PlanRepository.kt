@@ -7,6 +7,7 @@ import com.ironlog.app.data.model.PlanExerciseInput
 import com.ironlog.app.data.model.PlanInput
 import com.ironlog.app.data.model.PlanSnapshot
 import com.ironlog.app.data.model.WorkoutPerformedExercise
+import com.ironlog.app.data.plan.PlanImportResult
 import com.ironlog.app.data.objectbox.ExerciseEntity
 import com.ironlog.app.data.objectbox.ExerciseEntity_
 import com.ironlog.app.data.objectbox.ObjectBox
@@ -19,19 +20,25 @@ import com.ironlog.app.data.objectbox.PlanExerciseEntity_
 import com.ironlog.app.util.requireNonEmpty
 import com.ironlog.app.util.requireNumberMin
 import com.ironlog.app.util.FuzzyExerciseMapper
+import com.ironlog.app.util.ExerciseTrackingTypeNormalizer
+import com.ironlog.app.util.normalizeExerciseName
+import com.ironlog.app.util.normalizeExerciseNameKey
+import io.objectbox.BoxStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
 import kotlin.math.max
 import kotlin.math.roundToInt
 
-class PlanRepository {
-    private val plansBox get() = ObjectBox.store.boxFor(PlanEntity::class.java)
-    private val daysBox get() = ObjectBox.store.boxFor(PlanDayEntity::class.java)
-    private val planExercisesBox get() = ObjectBox.store.boxFor(PlanExerciseEntity::class.java)
-    private val exercisesBox get() = ObjectBox.store.boxFor(ExerciseEntity::class.java)
+class PlanRepository(private val boxStore: BoxStore? = null) {
+    private val store get() = boxStore ?: ObjectBox.store
+    private val plansBox get() = store.boxFor(PlanEntity::class.java)
+    private val daysBox get() = store.boxFor(PlanDayEntity::class.java)
+    private val planExercisesBox get() = store.boxFor(PlanExerciseEntity::class.java)
+    private val exercisesBox get() = store.boxFor(ExerciseEntity::class.java)
 
     suspend fun createPlan(input: PlanInput): PlanEntity = withContext(Dispatchers.IO) {
         requireNonEmpty(input.name, "name")
@@ -63,6 +70,30 @@ class PlanRepository {
         plan
     }
 
+    /** Clears plan-owned notes without modifying reusable exercise-library notes. */
+    suspend fun clearPlanNotes(planId: String) = withContext(Dispatchers.IO) {
+        requireNonEmpty(planId, "planId")
+        store.runInTx {
+            val plan = findPlanByUidOrThrow(planId)
+            val dayIds = getPlanDaysSnapshot(planId).map { it.uid }
+            val planExercises = if (dayIds.isEmpty()) {
+                emptyList()
+            } else {
+                planExercisesBox.query(PlanExerciseEntity_.planDayUid.oneOf(dayIds.toTypedArray()))
+                    .build().use { it.find() }
+            }
+            val now = System.currentTimeMillis()
+            plan.description = ""
+            plan.updatedAt = now
+            planExercises.forEach { row ->
+                row.notes = ""
+                row.updatedAt = now
+            }
+            plansBox.put(plan)
+            if (planExercises.isNotEmpty()) planExercisesBox.put(planExercises)
+        }
+    }
+
     suspend fun deletePlan(planId: String) = withContext(Dispatchers.IO) {
         requireNonEmpty(planId, "planId")
         val plan = findPlanByUidOrThrow(planId)
@@ -79,7 +110,7 @@ class PlanRepository {
     }
 
     fun getPlansFlow(): Flow<List<PlanEntity>> =
-        plansBox.query().orderDesc(PlanEntity_.updatedAt).build().asFlow()
+        observeQuery { plansBox.query().orderDesc(PlanEntity_.updatedAt).build() }
 
     suspend fun ensureActivePlanIfNeeded(): PlanEntity? = withContext(Dispatchers.IO) {
         val plans = plansBox.query().orderDesc(PlanEntity_.updatedAt).build().use { it.find() }
@@ -100,17 +131,17 @@ class PlanRepository {
 
     fun getPlanFlow(planId: String): Flow<List<PlanEntity>> {
         requireNonEmpty(planId, "planId")
-        return plansBox.query(PlanEntity_.uid.equal(planId)).build().asFlow()
+        return observeQuery { plansBox.query(PlanEntity_.uid.equal(planId)).build() }
     }
 
     fun getPlanDaysFlow(planId: String): Flow<List<PlanDayEntity>> {
         requireNonEmpty(planId, "planId")
-        return daysBox.query(PlanDayEntity_.planUid.equal(planId)).order(PlanDayEntity_.orderIndex).build().asFlow()
+        return observeQuery { daysBox.query(PlanDayEntity_.planUid.equal(planId)).order(PlanDayEntity_.orderIndex).build() }
     }
 
     fun getPlanExercisesFlow(planDayId: String): Flow<List<PlanExerciseEntity>> {
         requireNonEmpty(planDayId, "planDayId")
-        return planExercisesBox.query(PlanExerciseEntity_.planDayUid.equal(planDayId)).order(PlanExerciseEntity_.orderIndex).build().asFlow()
+        return observeQuery { planExercisesBox.query(PlanExerciseEntity_.planDayUid.equal(planDayId)).order(PlanExerciseEntity_.orderIndex).build() }
     }
 
     fun getPlanBundleFlow(planId: String, activeDayId: String? = null): Flow<PlanBundle> {
@@ -287,61 +318,21 @@ class PlanRepository {
         if (toUpdate.isNotEmpty()) planExercisesBox.put(toUpdate)
     }
 
-    suspend fun importFullPlan(planObject: FullPlanObject): PlanEntity = withContext(Dispatchers.IO) {
-        requireNonEmpty(planObject.name, "plan name")
-        val now = System.currentTimeMillis()
-        val mapper = FuzzyExerciseMapper(exercisesBox.all)
-        val shouldActivate = plansBox.query(PlanEntity_.isActive.equal(true)).build().use { it.count() == 0L }
+    suspend fun importFullPlan(planObject: FullPlanObject): PlanEntity {
+        val result = importPlansAtomically(listOf(planObject))
+        return withContext(Dispatchers.IO) { findPlanByUidOrThrow(result.importedPlanIds.single()) }
+    }
 
-        val resolvedDays = planObject.days.mapIndexed { index, day ->
-            val resolved = day.exercises.map { ex -> ex to resolveExerciseId(ex, mapper) }
-            Triple(day, index, resolved)
-        }
-
-        val wmPlan = PlanEntity().apply {
-            name = planObject.name!!.trim()
-            goal = (planObject.goal ?: "General Fitness").trim()
-            description = (planObject.description ?: "").trim()
-            isActive = shouldActivate
-            createdAt = now
-            updatedAt = now
-        }
-        plansBox.put(wmPlan)
-
-        for ((day, index, resolvedExercises) in resolvedDays) {
-            val wmDay = PlanDayEntity().apply {
-                plan.target = wmPlan
-                planUid = wmPlan.uid
-                name = (day.name ?: "Day ${index + 1}").trim()
-                color = day.color ?: "#FF4500"
-                orderIndex = index
-                createdAt = now
-                updatedAt = now
-            }
-            daysBox.put(wmDay)
-            var exOrder = 0
-            for ((ex, resolvedId) in resolvedExercises) {
-                val exercise = resolvedId?.let(::findExerciseByUidOrNull) ?: continue
-                val row = PlanExerciseEntity().apply {
-                    planDay.target = wmDay
-                    planDayUid = wmDay.uid
-                    this.exercise.target = exercise
-                    exerciseUid = exercise.uid
-                    orderIndex = exOrder
-                    sets = ex.sets ?: 3
-                    reps = (ex.reps ?: "8-12").trim()
-                    restSeconds = ex.restSeconds ?: 90
-                    supersetGroup = ex.supersetGroup ?: ""
-                    isWarmup = ex.isWarmup == true
-                    notes = ex.notes ?: ""
-                    createdAt = now
-                    updatedAt = now
-                }
-                planExercisesBox.put(row)
-                exOrder++
-            }
-        }
-        wmPlan
+    /**
+     * Validates the complete batch before opening one ObjectBox transaction. Unknown named
+     * movements are recreated as custom exercises instead of being silently omitted.
+     */
+    suspend fun importPlansAtomically(
+        plans: List<FullPlanObject>,
+        initiallySkipped: Int = 0,
+    ): PlanImportResult = withContext(Dispatchers.IO) {
+        validateImportBatch(plans)
+        store.callInTx { writeImportedPlans(plans, initiallySkipped) }
     }
 
     suspend fun reorderPlans(orderedIds: List<String>) = withContext(Dispatchers.IO) {
@@ -352,42 +343,189 @@ class PlanRepository {
             val row = rowMap[id] ?: return@forEachIndexed
             // updatedAt ordering: first item gets highest value so orderDesc puts it first.
             row.updatedAt = now - (index * 1000L)
-            // Explicitly mark the top plan as active so that after a restart
-            // firstOrNull { it.isActive } reliably picks the right plan instead
-            // of relying on the fragile updatedAt ordering heuristic.
-            row.isActive = (index == 0)
             toUpdate.add(row)
         }
         if (toUpdate.isNotEmpty()) plansBox.put(toUpdate)
     }
 
-    suspend fun replaceAllPlans(nextPlans: List<FullPlanObject> = emptyList()) = withContext(Dispatchers.IO) {
-        val exerciseRows = planExercisesBox.all
-        val dayRows = daysBox.all
-        val planRows = plansBox.all
-        if (exerciseRows.isNotEmpty()) planExercisesBox.remove(exerciseRows)
-        if (dayRows.isNotEmpty()) daysBox.remove(dayRows)
-        if (planRows.isNotEmpty()) plansBox.remove(planRows)
-        nextPlans.forEach { plan ->
-            importFullPlan(
-                FullPlanObject(
-                    name = plan.name ?: "Plan",
-                    goal = plan.goal ?: "General Fitness",
-                    description = plan.description ?: "",
-                    days = plan.days,
-                )
-            )
+    suspend fun replaceAllPlans(nextPlans: List<FullPlanObject> = emptyList()): Unit = withContext(Dispatchers.IO) {
+        validateImportBatch(nextPlans)
+        store.runInTx {
+            val exerciseRows = planExercisesBox.all
+            val dayRows = daysBox.all
+            val planRows = plansBox.all
+            if (exerciseRows.isNotEmpty()) planExercisesBox.remove(exerciseRows)
+            if (dayRows.isNotEmpty()) daysBox.remove(dayRows)
+            if (planRows.isNotEmpty()) plansBox.remove(planRows)
+            writeImportedPlans(nextPlans, initiallySkipped = 0)
         }
     }
 
-    private fun resolveExerciseId(ex: PlanExerciseInput, mapper: FuzzyExerciseMapper? = null): String? {
-        ex.exerciseId?.let { if (findExerciseByUidOrNull(it) != null) return it }
-        ex.name?.let { name ->
-            val exact = exercisesBox.query(ExerciseEntity_.name.equal(name)).build().use { q -> q.findFirst()?.let { it.uid } }
-            if (exact != null) return exact
-            return mapper?.match(name)
+    private fun validateImportBatch(plans: List<FullPlanObject>) {
+        plans.forEachIndexed { planIndex, plan ->
+            requireNonEmpty(plan.name, "plan ${planIndex + 1} name")
+            plan.days.forEachIndexed { dayIndex, day ->
+                day.exercises.forEachIndexed { exerciseIndex, exercise ->
+                    val label = "plan ${planIndex + 1}, day ${dayIndex + 1}, exercise ${exerciseIndex + 1}"
+                    exercise.sets?.let { require(it >= 1) { "$label sets must be at least 1" } }
+                    exercise.restSeconds?.let { require(it >= 0) { "$label restSeconds cannot be negative" } }
+                }
+            }
         }
-        return null
+    }
+
+    private fun writeImportedPlans(
+        plans: List<FullPlanObject>,
+        initiallySkipped: Int,
+    ): PlanImportResult {
+        val now = System.currentTimeMillis()
+        val mapper = FuzzyExerciseMapper(exercisesBox.all)
+        var shouldActivate = plansBox.query(PlanEntity_.isActive.equal(true)).build().use { it.count() == 0L }
+        val importedPlanIds = mutableListOf<String>()
+        val unresolved = mutableListOf<String>()
+        var importedExercises = 0
+        var createdCustomExercises = 0
+        var skipped = initiallySkipped
+
+        plans.forEach { planObject ->
+            val plan = PlanEntity().apply {
+                name = planObject.name!!.trim()
+                goal = planObject.goal?.trim()?.ifBlank { "General Fitness" } ?: "General Fitness"
+                description = planObject.description.orEmpty().trim()
+                isActive = shouldActivate
+                createdAt = now
+                updatedAt = now
+            }
+            plansBox.put(plan)
+            importedPlanIds += plan.uid
+            shouldActivate = false
+
+            planObject.days.forEachIndexed { dayIndex, day ->
+                val planDay = PlanDayEntity().apply {
+                    this.plan.target = plan
+                    planUid = plan.uid
+                    name = day.name?.trim()?.ifBlank { "Day ${dayIndex + 1}" } ?: "Day ${dayIndex + 1}"
+                    color = day.color?.trim()?.ifBlank { "#FF4500" } ?: "#FF4500"
+                    orderIndex = dayIndex
+                    createdAt = now
+                    updatedAt = now
+                }
+                daysBox.put(planDay)
+                var storedOrder = 0
+
+                day.exercises.withIndex()
+                    .sortedWith(
+                        compareBy<IndexedValue<PlanExerciseInput>>(
+                            { indexed -> indexed.value.orderIndex ?: indexed.index },
+                            { indexed -> indexed.index },
+                        ),
+                    )
+                    .forEach exerciseLoop@ { indexed ->
+                        val input = indexed.value
+                        if (input.exerciseId.isNullOrBlank() && input.name.isNullOrBlank()) {
+                            skipped++
+                            return@exerciseLoop
+                        }
+                        val resolution = resolveOrCreateExercise(input, mapper, now)
+                        val exercise = resolution.exercise
+                        if (exercise == null) {
+                            unresolved += input.name?.trim().takeUnless { it.isNullOrBlank() }
+                                ?: input.exerciseId.orEmpty().trim()
+                            return@exerciseLoop
+                        }
+                        if (resolution.createdCustom) createdCustomExercises++
+
+                        val row = PlanExerciseEntity().apply {
+                            this.planDay.target = planDay
+                            planDayUid = planDay.uid
+                            this.exercise.target = exercise
+                            exerciseUid = exercise.uid
+                            orderIndex = storedOrder
+                            sets = input.sets ?: 3
+                            reps = input.reps?.trim()?.ifBlank { "8-12" } ?: "8-12"
+                            restSeconds = input.restSeconds ?: 90
+                            supersetGroup = input.supersetGroup.orEmpty()
+                            isWarmup = input.isWarmup == true
+                            notes = input.notes.orEmpty()
+                            createdAt = now
+                            updatedAt = now
+                        }
+                        planExercisesBox.put(row)
+                        storedOrder++
+                        importedExercises++
+                    }
+            }
+        }
+
+        return PlanImportResult(
+            importedPlanIds = importedPlanIds,
+            importedExercises = importedExercises,
+            createdCustomExercises = createdCustomExercises,
+            unresolvedExercises = unresolved,
+            skipped = skipped,
+        )
+    }
+
+    private data class ExerciseResolution(
+        val exercise: ExerciseEntity?,
+        val createdCustom: Boolean = false,
+    )
+
+    private fun resolveOrCreateExercise(
+        input: PlanExerciseInput,
+        mapper: FuzzyExerciseMapper,
+        now: Long,
+    ): ExerciseResolution {
+        input.exerciseId?.trim()?.takeIf { it.isNotBlank() }?.let { uid ->
+            findExerciseByUidOrNull(uid)?.let { return ExerciseResolution(it) }
+        }
+
+        val requestedName = normalizeExerciseName(input.name).takeIf { it.isNotBlank() }
+            ?: return ExerciseResolution(null)
+        findExerciseByNormalizedName(requestedName)?.let { return ExerciseResolution(it) }
+
+        if (input.definition?.isCustom != true) {
+            mapper.match(requestedName)?.let(::findExerciseByUidOrNull)?.let { return ExerciseResolution(it) }
+        }
+
+        val definition = input.definition
+        val equipment = definition?.equipment?.trim()?.ifBlank { "other" } ?: "other"
+        val category = definition?.category?.trim()?.ifBlank { "strength" } ?: "strength"
+        val isBodyweight = definition?.isBodyweight ?: equipment.equals("bodyweight", ignoreCase = true)
+        val trackingType = ExerciseTrackingTypeNormalizer.normalize(
+            name = requestedName,
+            category = category,
+            equipment = equipment,
+            explicitTrackingType = definition?.trackingType,
+        )
+        val created = ExerciseEntity().apply {
+            input.exerciseId?.trim()?.takeIf { it.isNotBlank() }?.let { uid = it }
+            name = requestedName
+            normalizedName = normalizeExerciseNameKey(requestedName)
+            primaryMuscle = definition?.primaryMuscle?.trim()?.ifBlank { "other" } ?: "other"
+            this.equipment = equipment
+            this.category = category
+            isCustom = true
+            source = "plan_import"
+            notes = definition?.notes.orEmpty()
+            createdAt = now
+            updatedAt = now
+            this.isBodyweight = isBodyweight
+            requiresExternalLoad = !isBodyweight && trackingType in setOf("weight_reps", "duration_weight")
+            this.trackingType = trackingType
+            movementPattern = definition?.movementPattern?.trim()?.ifBlank { null }
+            difficulty = definition?.difficulty?.trim()?.ifBlank { null }
+            secondaryMusclesJson = definition?.secondaryMuscles?.takeIf { it.isNotEmpty() }
+                ?.let { JSONArray(it).toString() }
+        }
+        exercisesBox.put(created)
+        return ExerciseResolution(created, createdCustom = true)
+    }
+
+    private fun findExerciseByNormalizedName(name: String): ExerciseEntity? {
+        val normalized = normalizeExerciseNameKey(name)
+        return exercisesBox.query(ExerciseEntity_.normalizedName.equal(normalized)).build().use { it.findFirst() }
+            ?: exercisesBox.query(ExerciseEntity_.name.equal(name)).build().use { it.findFirst() }
     }
 
     internal fun getPlanDaysSnapshot(planId: String): List<PlanDayEntity> =

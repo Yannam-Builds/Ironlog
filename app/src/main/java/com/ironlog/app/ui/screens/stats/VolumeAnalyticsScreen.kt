@@ -1,5 +1,8 @@
 ﻿package com.ironlog.app.ui.screens.stats
 
+import com.ironlog.app.ui.theme.appGapDp
+import com.ironlog.app.ui.theme.appPadding
+import com.ironlog.app.ui.theme.appSpacedBy
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -35,10 +38,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Text
+import com.ironlog.app.ui.theme.Text
+import com.ironlog.app.ui.theme.rememberTypographyPaint
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -54,6 +57,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -101,8 +105,8 @@ fun VolumeAnalyticsScreen(
 ) {
     val c = useTheme()
     val context = LocalContext.current
-    val state by vm.state.collectAsState()
-    val appState by appVm.state.collectAsState()
+    val state by vm.state.collectAsStateWithLifecycle()
+    val appState by appVm.state.collectAsStateWithLifecycle()
 
     var activeTab by remember { mutableStateOf(MuscleTab.DAYS30) }
     var drillMuscle by remember { mutableStateOf<String?>(null) }
@@ -144,7 +148,13 @@ fun VolumeAnalyticsScreen(
     val previousGranularMuscles = remember(previousFiltered) { computeGranularVolume(previousFiltered) }
     val previousVolumeByMuscle = remember(previousGranularMuscles) { foldGranularToRadar(previousGranularMuscles, MUSCLE_AXES) }
     val weeklyVolume = remember(filtered) { computeWeeklyVolume(filtered) }
-    val snapshot = remember(filtered) { TrainingIntelligenceEngine.build(filtered, 0) }
+    val snapshot = remember(filtered, state.prResetAtEpochMs) {
+        TrainingIntelligenceEngine.build(
+            history = filtered,
+            prCount = 0,
+            prResetAt = state.prResetAtEpochMs?.let(Instant::ofEpochMilli),
+        )
+    }
 
     val currentTotalSets = volumeByMuscle.values.sum()
     val weeksInRange = (rangeDays / 7f).coerceAtLeast(1f)
@@ -197,7 +207,7 @@ fun VolumeAnalyticsScreen(
     LazyColumn(
         modifier = Modifier.fillMaxSize().background(c.bg).statusBarsPadding(),
         contentPadding = PaddingValues(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 100.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = com.ironlog.app.ui.theme.appCardSpacedBy(12.dp),
     ) {
 
         // ── 1. Header ──────────────────────────────────────────────────────
@@ -207,7 +217,7 @@ fun VolumeAnalyticsScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = appSpacedBy(8.dp)) {
                     IconButton(onClick = onBack, modifier = Modifier.size(44.dp)) {
                         Icon(
                             Icons.AutoMirrored.Outlined.ArrowBack, "Back",
@@ -256,7 +266,7 @@ fun VolumeAnalyticsScreen(
         item {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = appSpacedBy(8.dp),
             ) {
                 MuscleTab.entries.forEach { tab ->
                     val active = activeTab == tab
@@ -290,9 +300,9 @@ fun VolumeAnalyticsScreen(
                 shape = RoundedCornerShape(IronLogRadius.lg.dp),
             ) {
                 Column(
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    modifier = Modifier.fillMaxWidth().appPadding(16.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalArrangement = appSpacedBy(4.dp),
                 ) {
                     Text(
                         "IRONLOG",
@@ -315,7 +325,7 @@ fun VolumeAnalyticsScreen(
                             fontSize = IronLogType.meta.fontSize.sp,
                         )
                     }
-                    Spacer(Modifier.height(4.dp))
+                    Spacer(Modifier.height(appGapDp(4.dp)))
                     Text(
                         if (filtered.isEmpty()) "Log training to unlock your volume interpretation."
                         else "${currentTotalSets} working sets logged across ${sessionCount} sessions.",
@@ -335,7 +345,7 @@ fun VolumeAnalyticsScreen(
                 shape = RoundedCornerShape(IronLogRadius.lg.dp),
             ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 14.dp),
+                    modifier = Modifier.fillMaxWidth().appPadding(horizontal = 8.dp, vertical = 14.dp),
                     horizontalArrangement = Arrangement.SpaceEvenly,
                 ) {
                     // GAP-07: convert to user's weight unit before display
@@ -366,7 +376,7 @@ fun VolumeAnalyticsScreen(
 
         // ── 5. Performance Signals ─────────────────────────────────────────
         item {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(verticalArrangement = appSpacedBy(10.dp)) {
                 Text(
                     "PERFORMANCE SIGNALS",
                     color = c.muted,
@@ -376,7 +386,7 @@ fun VolumeAnalyticsScreen(
                 )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    horizontalArrangement = appSpacedBy(10.dp),
                 ) {
                     // Volume trend card
                     Card(
@@ -385,7 +395,7 @@ fun VolumeAnalyticsScreen(
                         border = androidx.compose.foundation.BorderStroke(1.dp, c.cardBorder),
                         shape = RoundedCornerShape(IronLogRadius.lg.dp),
                     ) {
-                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Column(Modifier.appPadding(12.dp), verticalArrangement = appSpacedBy(4.dp)) {
                             Text("Volume trend", color = c.muted, fontSize = IronLogType.meta.fontSize.sp)
                             val trendColor = when (trendLabel) {
                                 "Progressing" -> c.success
@@ -413,7 +423,7 @@ fun VolumeAnalyticsScreen(
                         border = androidx.compose.foundation.BorderStroke(1.dp, c.cardBorder),
                         shape = RoundedCornerShape(IronLogRadius.lg.dp),
                     ) {
-                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Column(Modifier.appPadding(12.dp), verticalArrangement = appSpacedBy(4.dp)) {
                             Text("Workout consistency", color = c.muted, fontSize = IronLogType.meta.fontSize.sp)
                             Text(
                                 if (sessionCount == 0) "Program baseline only" else "$sessionCount sessions",
@@ -440,7 +450,7 @@ fun VolumeAnalyticsScreen(
                     shape = RoundedCornerShape(IronLogRadius.md.dp),
                 ) {
                     Icon(Icons.Outlined.BarChart, null, tint = c.accent, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(6.dp))
+                    Spacer(Modifier.width(appGapDp(6.dp)))
                     Text("Open body composition stats", color = c.accent, fontSize = IronLogType.body.fontSize.sp)
                 }
             }
@@ -475,10 +485,10 @@ fun VolumeAnalyticsScreen(
                 // Legend
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalArrangement = appSpacedBy(12.dp),
                 ) {
                     listOf("0-9" to 0.35f, "10-20" to 0.6f, "21-25" to 0.85f, "25+" to 1f).forEach { (label, alpha) ->
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = appSpacedBy(4.dp)) {
                             Box(
                                 Modifier
                                     .size(8.dp)
@@ -496,13 +506,13 @@ fun VolumeAnalyticsScreen(
         item {
             AnalyticsCard("PUSH / PULL / LEGS BALANCE") {
                 BalanceBar(pushPct, pullPct, legsPct)
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(horizontalArrangement = appSpacedBy(12.dp)) {
                     listOf(
                         Triple("Push", pushWeekly, c.chartPrimary),
                         Triple("Pull", pullWeekly, c.chartSecondary),
                         Triple("Legs", legsWeekly, c.accent),
                     ).forEach { (label, weekly, color) ->
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = appSpacedBy(4.dp)) {
                             Box(Modifier.size(8.dp).clip(CircleShape).background(color))
                             Text(
                                 "$label ${String.format(Locale.US, "%.1f", weekly)}",
@@ -546,7 +556,7 @@ fun VolumeAnalyticsScreen(
                 if (insights.isEmpty())
                     insights += "Muscle balance looks good. No major imbalances detected."
                 AnalyticsCard("IMBALANCE INSIGHTS") {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Column(verticalArrangement = appSpacedBy(6.dp)) {
                         insights.forEach { tip ->
                             Text("• $tip", color = c.subtext, fontSize = IronLogType.body.fontSize.sp)
                         }
@@ -558,9 +568,9 @@ fun VolumeAnalyticsScreen(
         // ── 10. Next Week Actions ──────────────────────────────────────────
         item {
             AnalyticsCard("NEXT WEEK ACTIONS") {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(verticalArrangement = appSpacedBy(8.dp)) {
                     actions.forEachIndexed { i, action ->
-                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(horizontalArrangement = appSpacedBy(10.dp)) {
                             Box(
                                 modifier = Modifier
                                     .size(22.dp)
@@ -585,7 +595,7 @@ fun VolumeAnalyticsScreen(
                                     action,
                                     color = c.text,
                                     fontSize = IronLogType.body.fontSize.sp,
-                                    modifier = Modifier.padding(10.dp),
+                                    modifier = Modifier.appPadding(10.dp),
                                 )
                             }
                         }
@@ -620,8 +630,8 @@ fun VolumeAnalyticsScreen(
                     shape = cardShape,
                 ) {
                     Column(
-                        modifier = Modifier.fillMaxWidth().padding(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.fillMaxWidth().appPadding(14.dp),
+                        verticalArrangement = appSpacedBy(10.dp),
                     ) {
                         granularMuscles.entries.toList().forEach { (muscle, setsF) ->
                             val ratio = setsF / maxVal
@@ -637,7 +647,7 @@ fun VolumeAnalyticsScreen(
                                     .clickable { drillMuscle = muscle }
                                     .padding(vertical = 2.dp),
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                horizontalArrangement = appSpacedBy(8.dp),
                             ) {
                                 Box(Modifier.size(8.dp).clip(CircleShape).background(dotColor))
                                 Text(
@@ -673,7 +683,7 @@ fun VolumeAnalyticsScreen(
             }
         }
 
-        item { Spacer(Modifier.height(24.dp)) }
+        item { Spacer(Modifier.height(appGapDp(24.dp))) }
     }
 
     // ── Muscle Drill-Down Sheet ────────────────────────────────────────────
@@ -727,9 +737,9 @@ fun VolumeAnalyticsScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 20.dp)
-                    .padding(bottom = 32.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                    .appPadding(horizontal = 20.dp)
+                    .appPadding(bottom = 32.dp),
+                verticalArrangement = appSpacedBy(12.dp),
             ) {
                 Text(
                     displayName.uppercase(),
@@ -753,7 +763,7 @@ fun VolumeAnalyticsScreen(
                     // Column header
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalArrangement = appSpacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
@@ -781,7 +791,7 @@ fun VolumeAnalyticsScreen(
                     drillExercises.forEach { (name, sets, volume) ->
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            horizontalArrangement = appSpacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Text(
@@ -827,7 +837,7 @@ private fun AnalyticsCard(title: String, content: @Composable () -> Unit) {
         border = androidx.compose.foundation.BorderStroke(1.dp, c.cardBorder),
         shape = RoundedCornerShape(IronLogRadius.lg.dp),
     ) {
-        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(Modifier.fillMaxWidth().appPadding(14.dp), verticalArrangement = appSpacedBy(10.dp)) {
             Text(
                 title,
                 color = c.muted,
@@ -862,16 +872,11 @@ private fun EffectiveSetsChart(muscles: Map<String, Float>) {
     fun toArgb(col: androidx.compose.ui.graphics.Color) = android.graphics.Color.argb(
         (col.alpha * 255).toInt(), (col.red * 255).toInt(), (col.green * 255).toInt(), (col.blue * 255).toInt()
     )
-    val valuePaint = remember(c) {
-        android.graphics.Paint().apply {
+    val valuePaint = rememberTypographyPaint(700).apply {
             textSize = 26f; textAlign = android.graphics.Paint.Align.CENTER; isAntiAlias = true
-            typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
-        }
     }.also { it.color = toArgb(c.text) }
-    val labelPaint = remember(c) {
-        android.graphics.Paint().apply {
+    val labelPaint = rememberTypographyPaint().apply {
             textSize = 22f; textAlign = android.graphics.Paint.Align.CENTER; isAntiAlias = true
-        }
     }.also { it.color = toArgb(c.muted) }
 
     val barW = 44.dp
@@ -892,11 +897,11 @@ private fun EffectiveSetsChart(muscles: Map<String, Float>) {
                 )
             }
         }
-        Spacer(Modifier.width(4.dp))
+        Spacer(Modifier.width(appGapDp(4.dp)))
         // Scrollable bars
         Row(
             modifier = Modifier.weight(1f).height(chartH).horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = appSpacedBy(8.dp),
         ) {
             sortedData.forEach { (muscle, rawVal) ->
                 val ratio = (rawVal / yMax).coerceIn(0f, 1f)
@@ -972,16 +977,11 @@ private fun RadarChart(data: Map<String, Int>, previousData: Map<String, Int>? =
     fun toArgb(col: androidx.compose.ui.graphics.Color) = android.graphics.Color.argb(
         255, (col.red * 255).toInt(), (col.green * 255).toInt(), (col.blue * 255).toInt()
     )
-    val labelPaint = remember(c) {
-        android.graphics.Paint().apply {
+    val labelPaint = rememberTypographyPaint(700).apply {
             textSize = 34f; textAlign = android.graphics.Paint.Align.CENTER; isAntiAlias = true
-            typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
-        }
     }.also { it.color = toArgb(c.text) }
-    val valuePaint = remember(c) {
-        android.graphics.Paint().apply {
+    val valuePaint = rememberTypographyPaint().apply {
             textSize = 28f; textAlign = android.graphics.Paint.Align.CENTER; isAntiAlias = true
-        }
     }.also { it.color = toArgb(c.muted) }
 
     Canvas(Modifier.fillMaxWidth().height(280.dp)) {
@@ -1050,7 +1050,7 @@ private fun RadarChart(data: Map<String, Int>, previousData: Map<String, Int>? =
 
     // GAP-22: Legend row (only shown when previous period data is available)
     if (previousData != null) {
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(appGapDp(6.dp)))
         Row(
             Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.Center,
@@ -1058,16 +1058,16 @@ private fun RadarChart(data: Map<String, Int>, previousData: Map<String, Int>? =
         ) {
             // Current period swatch
             Box(Modifier.size(width = 20.dp, height = 3.dp).background(c.chartPrimary))
-            Spacer(Modifier.width(4.dp))
+            Spacer(Modifier.width(appGapDp(4.dp)))
             Text("Current", color = c.muted, fontSize = IronLogType.meta.fontSize.sp)
-            Spacer(Modifier.width(16.dp))
+            Spacer(Modifier.width(appGapDp(16.dp)))
             // Previous period dashed swatch (simulated with two boxes)
-            Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+            Row(horizontalArrangement = appSpacedBy(2.dp)) {
                 repeat(3) {
                     Box(Modifier.size(width = 5.dp, height = 2.dp).background(c.muted.copy(alpha = 0.6f)))
                 }
             }
-            Spacer(Modifier.width(4.dp))
+            Spacer(Modifier.width(appGapDp(4.dp)))
             Text("Previous period", color = c.muted, fontSize = IronLogType.meta.fontSize.sp)
         }
     }
@@ -1095,7 +1095,7 @@ private fun WeeklyLineChart(points: List<Int>) {
                 Text(formatVolumeAxisValue(v), color = c.muted, fontSize = IronLogType.micro.fontSize.sp)
             }
         }
-        Spacer(Modifier.width(6.dp))
+        Spacer(Modifier.width(appGapDp(6.dp)))
         Canvas(Modifier.weight(1f).height(160.dp)) {
             val pad = 6f
             val w = size.width - pad * 2
@@ -1178,9 +1178,9 @@ private fun buildNextWeekActions(
         else -> list.add("Pull is far ahead. Add more pressing movements (bench, overhead).")
     }
     if (legsPct < 20) list.add("Leg volume is low ($legsPct%). Consider adding leg sessions next week.")
-    if (pushW < 10f) list.add("Push volume (${String.format(Locale.US, "%.1f", pushW)} sets/wk) is below MEV of 10. Aim higher.")
-    if (pullW < 10f) list.add("Pull volume (${String.format(Locale.US, "%.1f", pullW)} sets/wk) is below MEV of 10. Aim higher.")
-    if (legsW < 12f) list.add("Leg volume (${String.format(Locale.US, "%.1f", legsW)} sets/wk) is below MEV of 12. Add leg work.")
+    if (pushW < 10f) list.add("Push volume is ${String.format(Locale.US, "%.1f", pushW)} sets/wk, below the 10-set reference target. Add work only if recovery is good.")
+    if (pullW < 10f) list.add("Pull volume is ${String.format(Locale.US, "%.1f", pullW)} sets/wk, below the 10-set reference target. Add work only if recovery is good.")
+    if (legsW < 12f) list.add("Leg volume is ${String.format(Locale.US, "%.1f", legsW)} sets/wk, below the 12-set reference target. Add work only if recovery is good.")
     if (list.size == 1 && diff <= 5 && pushW >= 10f && pullW >= 10f && legsW >= 12f) {
         list.add("All muscle groups are in productive ranges. Consider progressive overload.")
     }

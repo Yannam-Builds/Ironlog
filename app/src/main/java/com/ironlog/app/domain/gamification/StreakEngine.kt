@@ -4,11 +4,13 @@ package com.ironlog.app.domain.gamification
 import com.ironlog.app.ui.model.HistoryEntry
 import java.time.DayOfWeek
 import java.time.LocalDate
+import java.time.Instant
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.temporal.TemporalAdjusters
 import java.time.temporal.WeekFields
 
-class StreakEngine {
+class StreakEngine(private val zoneId: ZoneId = ZoneId.systemDefault()) {
 
     private val isoWeek = WeekFields.ISO
 
@@ -39,16 +41,19 @@ class StreakEngine {
         history: List<HistoryEntry>,
         weeklyGoal: Int,
         recoveryCircuitCompletions: Map<String, Int>,
-        asOfDate: LocalDate = LocalDate.now(),
+        asOfDate: LocalDate? = null,
+        now: Instant = Instant.now(),
     ): Int {
         if (history.isEmpty()) return 0
 
         // Group workouts by ISO week key
-        val fmt = DateTimeFormatter.ISO_LOCAL_DATE
+        // Explicit date is a historical end-of-day query; live callers use the exact instant.
+        val evaluationDate = asOfDate ?: now.atZone(zoneId).toLocalDate()
+        val asOfInstant = asOfDate?.plusDays(1)?.atStartOfDay(zoneId)?.toInstant()?.minusMillis(1) ?: now
         val sessionsByWeek: Map<String, Int> = history
+            .filter { CreditedProof.qualifies(it, asOfInstant, zoneId) }
             .mapNotNull { entry ->
-                runCatching { LocalDate.parse(entry.date.take(10), fmt) }.getOrNull()
-                    ?.isoWeekKey()
+                parseHistoryLocalDate(entry.date, zoneId)?.isoWeekKey()
             }
             .groupingBy { it }
             .eachCount()
@@ -57,7 +62,7 @@ class StreakEngine {
 
         // Start from the most recent week that has any sessions
         val goal = weeklyGoal.coerceAtLeast(1)
-        val currentMonday = asOfDate.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+        val currentMonday = evaluationDate.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
         fun qualifies(monday: LocalDate): Boolean {
             val weekKey = monday.isoWeekKey()
             val sessions = sessionsByWeek[weekKey] ?: 0

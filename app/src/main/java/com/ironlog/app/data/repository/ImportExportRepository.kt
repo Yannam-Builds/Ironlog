@@ -1,5 +1,7 @@
 package com.ironlog.app.data.repository
 
+import com.ironlog.app.data.history.HistoricalExerciseSnapshotCodec
+import com.ironlog.app.data.history.captureHistoricalExerciseSnapshot
 import com.ironlog.app.data.objectbox.AppSettingEntity
 import com.ironlog.app.data.objectbox.AppSettingEntity_
 import com.ironlog.app.data.objectbox.AthleteCalibrationEntity
@@ -107,36 +109,64 @@ data class ImportPreview(
     val duplicateExerciseNames: List<String> = emptyList(),
     val relationshipWarnings: List<String> = emptyList(),
     val unsupportedRows: Int = 0,
+    val replacementSafe: Boolean = false,
+    val recoverySnapshot: String? = null,
 )
 
 class ImportExportRepository(
+    private val boxStore: io.objectbox.BoxStore? = null,
+    private val recoveryDirectory: java.io.File? = null,
+    private val localSnapshotStore: com.ironlog.app.data.photos.LocalRestoreSnapshotStore? = null,
+    private val appearanceBackupStore: AppearanceBackupStore? = AppearanceBackupRegistry.currentOrNull(),
 ) {
+    private val store get() = boxStore ?: ObjectBox.store
+    private fun snapshotStore(): com.ironlog.app.data.photos.LocalRestoreSnapshotStore = localSnapshotStore
+        ?: com.ironlog.app.data.photos.LocalRestoreSnapshotStore(
+            recoveryDirectory?.parentFile ?: ObjectBox.filesDirectory,
+            recoveryDirectory ?: java.io.File(ObjectBox.filesDirectory, "restore-recovery"),
+            "${com.ironlog.app.BuildConfig.APPLICATION_ID}.fileprovider",
+        )
     companion object {
         const val EXPORT_TYPE = "ironlog_watermelon_export"
         const val EXPORT_VERSION = 1
     }
 
     suspend fun exportDatabase(): JSONObject = withContext(Dispatchers.IO) {
-        ObjectBox.store.callInReadTx {
-        val exercises = ObjectBox.store.boxFor(ExerciseEntity::class.java).all
-        val exerciseMuscles = ObjectBox.store.boxFor(ExerciseMuscleEntity::class.java).all
-        val plans = ObjectBox.store.boxFor(PlanEntity::class.java).all
-        val planDays = ObjectBox.store.boxFor(PlanDayEntity::class.java).all
-        val planExercises = ObjectBox.store.boxFor(PlanExerciseEntity::class.java).all
-        val workouts = ObjectBox.store.boxFor(WorkoutEntity::class.java).all
-        val workoutExercises = ObjectBox.store.boxFor(WorkoutExerciseEntity::class.java).all
-        val workoutSets = ObjectBox.store.boxFor(WorkoutSetEntity::class.java).all
-        val body = ObjectBox.store.boxFor(BodyMeasurementEntity::class.java).all
-        val photos = ObjectBox.store.boxFor(ProgressPhotoEntity::class.java).all
-        val settings = ObjectBox.store.boxFor(AppSettingEntity::class.java).all
-        val athleteCalibrations = ObjectBox.store.boxFor(AthleteCalibrationEntity::class.java).all
-        val gamificationProfiles = ObjectBox.store.boxFor(GamificationProfileEntity::class.java).all
-        val ironLedgerEvents = ObjectBox.store.boxFor(IronLedgerEventEntity::class.java).all
+        store.callInReadTx { exportRows() }
+    }
 
-        JSONObject()
+    private fun exportRows(): JSONObject {
+        val exercises = store.boxFor(ExerciseEntity::class.java).all
+        val exerciseMuscles = store.boxFor(ExerciseMuscleEntity::class.java).all
+        val plans = store.boxFor(PlanEntity::class.java).all
+        val planDays = store.boxFor(PlanDayEntity::class.java).all
+        val planExercises = store.boxFor(PlanExerciseEntity::class.java).all
+        val workouts = store.boxFor(WorkoutEntity::class.java).all
+            .filter { isTransferableBackupWorkoutStatus(it.status) }
+        val transferableWorkoutIds = workouts.mapTo(mutableSetOf(), WorkoutEntity::uid)
+        val workoutExercises = store.boxFor(WorkoutExerciseEntity::class.java).all
+            .filter { it.workoutUid in transferableWorkoutIds }
+        val transferableWorkoutExerciseIds = workoutExercises
+            .mapTo(mutableSetOf(), WorkoutExerciseEntity::uid)
+        val workoutSets = store.boxFor(WorkoutSetEntity::class.java).all
+            .filter { it.workoutExerciseUid in transferableWorkoutExerciseIds }
+        val body = store.boxFor(BodyMeasurementEntity::class.java).all
+        val photos = store.boxFor(ProgressPhotoEntity::class.java).all
+        val settings = store.boxFor(AppSettingEntity::class.java).all
+            .filterNot { isTransientBackupRuntimeSetting(it.key) }
+        val athleteCalibrations = store.boxFor(AthleteCalibrationEntity::class.java).all
+        val gamificationProfiles = store.boxFor(GamificationProfileEntity::class.java).all
+        val ironLedgerEvents = store.boxFor(IronLedgerEventEntity::class.java).all
+
+        return JSONObject()
             .put("version", EXPORT_VERSION)
             .put("type", EXPORT_TYPE)
             .put("exportedAt", java.time.Instant.now().toString())
+            .also { payload ->
+                appearanceBackupStore?.snapshot()?.let { snapshot ->
+                    payload.put("appearance", AppearanceBackupCodec.encode(snapshot))
+                }
+            }
             .put(
                 "data",
                 JSONObject()
@@ -146,8 +176,8 @@ class ImportExportRepository(
                     .put("plan_days", JSONArray().apply { planDays.forEach { put(JSONObject().put("id", it.uid).put("plan_id", it.planUid).put("name", it.name).put("color", it.color).put("order_index", it.orderIndex).put("created_at", it.createdAt).put("updated_at", it.updatedAt)) } })
                     .put("plan_exercises", JSONArray().apply { planExercises.forEach { put(JSONObject().put("id", it.uid).put("plan_day_id", it.planDayUid).put("exercise_id", it.exerciseUid).put("order_index", it.orderIndex).put("sets", it.sets).put("reps", it.reps).put("rest_seconds", it.restSeconds).put("superset_group", it.supersetGroup).put("is_warmup", it.isWarmup).put("notes", it.notes).put("created_at", it.createdAt).put("updated_at", it.updatedAt)) } })
                     .put("workouts", JSONArray().apply { workouts.forEach { put(JSONObject().put("id", it.uid).put("plan_id", it.planUid ?: "").put("plan_day_id", it.planDayUid ?: "").put("name", it.name).put("started_at", it.startedAt).put("completed_at", it.completedAt ?: JSONObject.NULL).put("duration_seconds", it.durationSeconds).put("rating", it.rating ?: JSONObject.NULL).put("notes", it.notes).put("status", it.status).put("imported", it.imported).put("created_at", it.createdAt).put("updated_at", it.updatedAt)) } })
-                    .put("workout_exercises", JSONArray().apply { workoutExercises.forEach { put(JSONObject().put("id", it.uid).put("workout_id", it.workoutUid).put("exercise_id", it.exerciseUid).put("order_index", it.orderIndex).put("superset_group", it.supersetGroup).put("notes", it.notes).put("created_at", it.createdAt).put("updated_at", it.updatedAt)) } })
-                    .put("workout_sets", JSONArray().apply { workoutSets.forEach { put(JSONObject().put("id", it.uid).put("workout_exercise_id", it.workoutExerciseUid).put("set_index", it.setIndex).put("weight", it.weight).put("reps", it.reps).put("rpe", it.rpe ?: JSONObject.NULL).put("rir", it.rir ?: JSONObject.NULL).put("rest_seconds", it.restSeconds).put("is_warmup", it.isWarmup).put("is_dropset", it.isDropset).put("is_amrap", it.isAmrap).put("to_failure", it.toFailure).put("completed_at", it.completedAt ?: JSONObject.NULL).put("created_at", it.createdAt).put("updated_at", it.updatedAt)) } })
+                    .put("workout_exercises", JSONArray().apply { workoutExercises.forEach { put(JSONObject().put("id", it.uid).put("workout_id", it.workoutUid).put("exercise_id", it.exerciseUid).put("order_index", it.orderIndex).put("superset_group", it.supersetGroup).put("notes", it.notes).put("exercise_snapshot_json", it.exerciseSnapshotJson ?: JSONObject.NULL).put("created_at", it.createdAt).put("updated_at", it.updatedAt)) } })
+                    .put("workout_sets", JSONArray().apply { workoutSets.forEach { put(JSONObject().put("id", it.uid).put("workout_exercise_id", it.workoutExerciseUid).put("set_index", it.setIndex).put("weight", it.weight).put("reps", it.reps).put("rpe", it.rpe ?: JSONObject.NULL).put("rir", it.rir ?: JSONObject.NULL).put("rest_seconds", it.restSeconds).put("is_warmup", it.isWarmup).put("is_dropset", it.isDropset).put("is_amrap", it.isAmrap).put("to_failure", it.toFailure).put("notes", it.notes.orEmpty()).put("completed_at", it.completedAt ?: JSONObject.NULL).put("created_at", it.createdAt).put("updated_at", it.updatedAt)) } })
                     .put("body_measurements", JSONArray().apply { body.forEach { put(JSONObject().put("id", it.uid).put("measured_at", it.measuredAt).put("bodyweight", it.bodyweight ?: JSONObject.NULL).put("waist", it.waist ?: JSONObject.NULL).put("chest", it.chest ?: JSONObject.NULL).put("arm", it.arm ?: JSONObject.NULL).put("thigh", it.thigh ?: JSONObject.NULL).put("notes", it.notes).put("created_at", it.createdAt).put("updated_at", it.updatedAt)) } })
                     .put("progress_photos", JSONArray().apply { photos.forEach { put(JSONObject().put("id", it.uid).put("file_uri", it.fileUri).put("taken_at", it.takenAt).put("bodyweight", it.bodyweight ?: JSONObject.NULL).put("notes", it.notes).put("created_at", it.createdAt).put("updated_at", it.updatedAt)) } })
                     .put("app_settings", JSONArray().apply { settings.forEach { put(JSONObject().put("id", it.key).put("key", it.key).put("value", it.value).put("value_type", it.valueType).put("updated_at", it.updatedAt)) } })
@@ -192,6 +222,8 @@ class ImportExportRepository(
                                     .put("streak_weeks", it.streakWeeks)
                                     .put("recovery_circuit_completions_json", it.makeupCompletionsJson)
                                     .put("unlocked_badges", it.unlockedBadges)
+                                    .put("badge_unlocks_json", it.badgeUnlocksJson ?: "{}")
+                                    .put("updated_at", it.updatedAt)
                             )
                         }
                     })
@@ -214,11 +246,11 @@ class ImportExportRepository(
                         }
                     }),
             )
-        }
     }
 
     private fun isIronLogExport(payload: JSONObject): Boolean {
-        return payload.optString("type") == EXPORT_TYPE && payload.optInt("version") == 1
+        val version = payload.opt("version")
+        return payload.optString("type") == EXPORT_TYPE && version is Number && version.toDouble() == 1.0
     }
 
     private fun isLegacySQLiteBundle(payload: JSONObject): Boolean {
@@ -228,6 +260,7 @@ class ImportExportRepository(
 
     private fun detectImportFormat(payload: JSONObject): String {
         if (isIronLogExport(payload)) return "ironlog_v1"
+        if (payload.has("type") || payload.has("schema") && payload.optString("schema") != "IRONLOG_SQLITE_EXPORT_V1") return "unknown"
         if (isLegacySQLiteBundle(payload)) return "sqlite_v1"
         if (payload.has("domains") || payload.has("plans") || payload.has("history") || payload.has("bodyWeight") || payload.has("customExercises") || payload.optJSONObject("payload")?.has("plans") == true) {
             return "legacy_async"
@@ -324,7 +357,7 @@ class ImportExportRepository(
         return count
     }
 
-    fun previewImportPayload(text: String): ImportPreview {
+    fun previewImportPayload(text: String, existingData: JSONObject? = null): ImportPreview {
         val raw = runCatching { JSONObject(text) }
             .onFailure { Timber.w(it, "previewImportPayload: invalid JSON") }
             .getOrNull() ?: return ImportPreview(valid = false, format = "invalid_json", reason = "Invalid JSON", errors = listOf("Invalid JSON"))
@@ -349,12 +382,21 @@ class ImportExportRepository(
         if (normalizedPayload.optString("type") != EXPORT_TYPE || normalizedPayload.optInt("version") != EXPORT_VERSION) {
             return ImportPreview(valid = false, format = format, reason = "Unsupported backup format", errors = listOf("Unsupported backup format"))
         }
-        val data = normalizedPayload.optJSONObject("data") ?: return ImportPreview(valid = false, format = format, reason = "Missing data object", errors = listOf("Missing data object"))
+        val rawData = normalizedPayload.optJSONObject("data") ?: return ImportPreview(valid = false, format = format, reason = "Missing data object", errors = listOf("Missing data object"))
+        val appearancePayload = normalizedPayload.optJSONObject("appearance")
+        if (appearancePayload != null && AppearanceBackupCodec.decode(appearancePayload) == null) {
+            warnings.add("Appearance settings use a newer format and will be ignored; training data can still be restored.")
+        } else if (appearancePayload != null && appearanceBackupStore == null) {
+            warnings.add("Appearance settings are included but cannot be applied in this process.")
+        }
+        val runtimeSanitization = sanitizeBackupRuntimeData(rawData)
+        val data = runtimeSanitization.data
         
-        val counts = buildImportCounts(data)
+        val validation = validateBackupData(data, existingData)
+        val counts = buildImportCounts(validation.data)
         val duplicateExerciseNames = findDuplicateExerciseNames(data.optJSONArray("exercises"))
-        val relationshipWarnings = buildRelationshipWarnings(data)
-        val unsupportedRows = getUnsupportedRows(data)
+        val relationshipWarnings = if (existingData == null) buildRelationshipWarnings(data) else emptyList()
+        val unsupportedRows = getUnsupportedRows(data) + runtimeSanitization.skippedRows
         
         val customExercisesArr = data.optJSONArray("exercises") ?: JSONArray()
         val customExercises = mutableListOf<String>()
@@ -368,14 +410,17 @@ class ImportExportRepository(
 
         if (duplicateExerciseNames.isNotEmpty()) warnings.add("${duplicateExerciseNames.size} duplicate exercise name group${if (duplicateExerciseNames.size == 1) "" else "s"} detected in this file.")
         warnings.addAll(relationshipWarnings)
+        warnings.addAll(validation.warnings)
+        if (counts.progressPhotos > 0) warnings.add("Photo metadata only: image files are not included in JSON backups. Existing local images are retained only when merging matching IDs.")
+        if (runtimeSanitization.skippedRows > 0) warnings.add("${runtimeSanitization.skippedRows} live-session or runtime row${if (runtimeSanitization.skippedRows == 1) "" else "s"} will be excluded for safety.")
         if (unsupportedRows > 0) warnings.add("$unsupportedRows unsupported data section${if (unsupportedRows == 1) "" else "s"} will be ignored.")
 
         return ImportPreview(
-            valid = true,
+            valid = validation.errors.isEmpty(),
             format = format,
             convertedFrom = convertedFrom,
-            reason = null,
-            errors = emptyList(),
+            reason = validation.errors.firstOrNull(),
+            errors = validation.errors,
             warnings = warnings,
             counts = counts,
             workouts = counts.workouts,
@@ -386,36 +431,108 @@ class ImportExportRepository(
             customExercises = customExercises.take(20),
             duplicateExerciseNames = duplicateExerciseNames,
             relationshipWarnings = relationshipWarnings,
-            unsupportedRows = unsupportedRows
+            unsupportedRows = unsupportedRows + validation.skipped,
+            replacementSafe = validation.replacementSafe && (format == "ironlog_v1" || FULL_BACKUP_DATA_SECTIONS.any { countRows(data, it) > 0 }),
         )
     }
 
-    suspend fun runConfirmedImport(text: String, mode: String = "replace"): ImportPreview = withContext(Dispatchers.IO) {
+    suspend fun previewRestore(text: String, mode: String): RestoreImpact = withContext(Dispatchers.IO) {
+        require(mode in setOf("merge", "append", "replace")) { "Unknown restore mode" }
+        val normalized = normalizePayloadForImport(JSONObject(text)).also { payload ->
+            val sanitized = sanitizeBackupRuntimeData(payload.getJSONObject("data"))
+            payload.put("data", sanitized.data)
+        }
+        store.callInReadTx {
+            val existing = exportRows()
+            val preview = previewImportPayload(text, existing.getJSONObject("data").takeIf { mode != "replace" })
+            RestoreImpact(preview, backupFingerprint(existing), replacementRemovals(
+                existing.getJSONObject("data"), normalized.getJSONObject("data"), mode == "replace"
+            ), mode)
+        }
+    }
+
+    suspend fun runConfirmedImport(
+        text: String,
+        mode: String = "merge",
+        expectedDatabaseFingerprint: String? = null,
+        trustedRecoveryFile: java.io.File? = null,
+    ): ImportPreview = withContext(Dispatchers.IO) {
+        require(mode in setOf("merge", "append", "replace")) { "Unknown restore mode" }
         val raw = runCatching { JSONObject(text) }
             .onFailure { Timber.e(it, "runConfirmedImport: failed to parse backup JSON") }
             .getOrElse { throw IllegalArgumentException("Corrupt or empty backup file: ${it.message}", it) }
-        val preview = previewImportPayload(text)
+        var preview = previewImportPayload(text)
         require(preview.valid) { preview.reason ?: "Invalid payload" }
+        require(mode != "replace" || preview.replacementSafe) { "Replacement blocked: fix invalid or orphan rows first. Use merge to import valid rows." }
+        require(mode != "replace" || expectedDatabaseFingerprint != null) { "Preview and confirm replacement first." }
         val normalized = normalizePayloadForImport(raw)
-        backfillMissingAthleteStateRows(normalized.getJSONObject("data"))
+        val runtimeSanitization = sanitizeBackupRuntimeData(normalized.getJSONObject("data"))
+        normalized.put("data", runtimeSanitization.data)
+        val importedAppearance = AppearanceBackupCodec.decode(normalized.optJSONObject("appearance"))
+        val previousAppearance = if (importedAppearance != null) appearanceBackupStore?.snapshot() else null
+        var appearanceMutationStarted = false
+        val sanitizedPayloadText = normalized.toString()
         val hasImportedExercises = (normalized.optJSONObject("data")?.optJSONArray("exercises")?.length() ?: 0) > 0
-        ObjectBox.store.runInTx {
+        var skippedRelationshipRows = 0
+        var recoveryPath: String? = null
+        var recoveredPhotos: Map<String, String> = emptyMap()
+        val snapshots by lazy { snapshotStore() }
+        try {
+        store.runInTx {
+            val existing = exportRows()
+            if (expectedDatabaseFingerprint != null) check(backupFingerprint(existing) == expectedDatabaseFingerprint) { "Data changed since preview. Review the restore again." }
+            val mergeData = existing.getJSONObject("data").takeIf { mode != "replace" }
+            preview = previewImportPayload(sanitizedPayloadText, mergeData)
+            require(preview.valid) { preview.reason ?: "Invalid payload" }
+            normalized.put("data", validateBackupData(normalized.getJSONObject("data"), mergeData).data)
+            backfillMissingAthleteStateRows(normalized.getJSONObject("data"))
+            check(store.boxFor(WorkoutEntity::class.java).query(WorkoutEntity_.status.equal("active")).build().use { it.count() } == 0L) {
+                "Finish or discard your active workout before restoring data."
+            }
+            if (mode == "replace") {
+                val before = existing
+                check(backupFingerprint(before) == expectedDatabaseFingerprint) { "Data changed since preview. Review the restore again." }
+                check(previewImportPayload(before.toString()).replacementSafe) { "Current data cannot be checkpointed safely. Nothing was replaced." }
+                val checkpoint = snapshots.save(before)
+                check(previewImportPayload(checkpoint.readText()).replacementSafe) { "Recovery snapshot validation failed. Nothing was replaced." }
+                recoveryPath = checkpoint.absolutePath
+            }
+            if (trustedRecoveryFile != null) recoveredPhotos = snapshots.restorePhotoReferences(trustedRecoveryFile, text)
             if (mode == "replace") clearUserDataTables(clearExercises = hasImportedExercises)
-            importData(normalized.getJSONObject("data"), mergeSingletons = mode != "replace")
+            skippedRelationshipRows = importData(normalized.getJSONObject("data"), mergeSingletons = mode != "replace", recoveredPhotos = recoveredPhotos)
+            // Imported history and the local athlete snapshot are one fact. Resolve them before
+            // the restore transaction commits so intelligence/widgets never observe stale profile
+            // bodyweight between the import result and the first UI refresh.
+            reconcileCurrentAthleteBodyweightInTransaction(store)
+            if (preview.workouts > 0) markLedgerImportedHistory()
+            if (importedAppearance != null && appearanceBackupStore != null) {
+                appearanceMutationStarted = true
+                appearanceBackupStore.replace(importedAppearance)
+            }
         }
-        // Only flag as imported-history when actual workout rows were present
-        val importedWorkouts = (normalized.optJSONObject("data")?.optJSONArray("workouts")?.length() ?: 0)
-        if (importedWorkouts > 0) {
-            ObjectBox.store.runInTx { markLedgerImportedHistory() }
+        } catch (error: Throwable) {
+            if (appearanceMutationStarted && previousAppearance != null && appearanceBackupStore != null) {
+                runCatching { appearanceBackupStore.replace(previousAppearance) }
+                    .exceptionOrNull()
+                    ?.let(error::addSuppressed)
+            }
+            if (recoveredPhotos.isNotEmpty()) runCatching { snapshots.discardRestoredPhotos(recoveredPhotos) }.exceptionOrNull()?.let(error::addSuppressed)
+            throw error
         }
-        WorkoutImportProvenanceMigration.run()
-        preview
+        preview.copy(
+            recoverySnapshot = recoveryPath,
+            warnings = preview.warnings +
+                (if (runtimeSanitization.skippedRows > 0) listOf("${runtimeSanitization.skippedRows} live-session or runtime row${if (runtimeSanitization.skippedRows == 1) "" else "s"} excluded safely.") else emptyList()) +
+                (if (skippedRelationshipRows > 0) listOf("$skippedRelationshipRows orphan rows skipped safely.") else emptyList()),
+            unsupportedRows = preview.unsupportedRows + runtimeSanitization.skippedRows + skippedRelationshipRows,
+        )
     }
 
     private fun markLedgerImportedHistory() {
         val now = System.currentTimeMillis()
-        val settingsBox = ObjectBox.store.boxFor(AppSettingEntity::class.java)
-        settingsBox.put(AppSettingEntity().apply {
+        val settingsBox = store.boxFor(AppSettingEntity::class.java)
+        val setting = settingsBox.query(AppSettingEntity_.key.equal("ledger_imported_history")).build().use { it.findFirst() } ?: AppSettingEntity()
+        settingsBox.put(setting.apply {
             key = "ledger_imported_history"
             value = "true"
             valueType = "boolean"
@@ -447,6 +564,7 @@ class ImportExportRepository(
             .put("iron_ledger_events", JSONArray())
 
         val (snapshot, appState) = extractLegacySnapshot(raw)
+        validateLegacySnapshot(snapshot)
         val exerciseByNorm = linkedMapOf<String, String>()
         var exCounter = 0
         var planCounter = 0
@@ -515,7 +633,7 @@ class ImportExportRepository(
             val days = if (plan.optJSONArray("days") != null) plan.optJSONArray("days")!! else (plan.optJSONArray("workoutDays") ?: JSONArray())
             for (dIdx in 0 until days.length()) {
                 val day = days.optJSONObject(dIdx) ?: continue
-                val dayId = stableId("plan_day", day.optString("id"), dIdx + 1)
+                val dayId = stableId("plan_day", "${planId}_${day.optString("id").ifBlank { (dIdx + 1).toString() }}", dIdx + 1)
                 data.getJSONArray("plan_days").put(
                     JSONObject()
                         .put("id", dayId)
@@ -532,7 +650,7 @@ class ImportExportRepository(
                     val exId = ensureExercise(ex)
                     data.getJSONArray("plan_exercises").put(
                         JSONObject()
-                            .put("id", stableId("plan_exercise", ex.optString("id"), eIdx + 1))
+                            .put("id", stableId("plan_exercise", "${dayId}_${ex.optString("id").ifBlank { (eIdx + 1).toString() }}", eIdx + 1))
                             .put("plan_day_id", dayId)
                             .put("exercise_id", exId)
                             .put("order_index", eIdx)
@@ -578,7 +696,7 @@ class ImportExportRepository(
             val wExercises = if (workout.optJSONArray("exercises") != null) workout.optJSONArray("exercises")!! else (workout.optJSONArray("items") ?: JSONArray())
             for (eIdx in 0 until wExercises.length()) {
                 val ex = wExercises.optJSONObject(eIdx) ?: continue
-                val workoutExerciseId = stableId("workout_exercise", ex.optString("id"), eIdx + 1)
+                val workoutExerciseId = stableId("workout_exercise", "${workoutId}_${ex.optString("id").ifBlank { (eIdx + 1).toString() }}", eIdx + 1)
                 val exerciseId = ensureExercise(ex)
                 data.getJSONArray("workout_exercises").put(
                     JSONObject()
@@ -596,7 +714,7 @@ class ImportExportRepository(
                     val set = sets.optJSONObject(sIdx) ?: continue
                     data.getJSONArray("workout_sets").put(
                         JSONObject()
-                            .put("id", stableId("workout_set", set.optString("id"), sIdx + 1))
+                            .put("id", stableId("workout_set", "${workoutExerciseId}_${set.optString("id").ifBlank { (sIdx + 1).toString() }}", sIdx + 1))
                             .put("workout_exercise_id", workoutExerciseId)
                             .put("set_index", sIdx + 1)
                             .put("weight", max(0.0, set.optDouble("weight", 0.0)))
@@ -707,6 +825,7 @@ class ImportExportRepository(
         val direct = root.opt(rootKey)
         if (direct is JSONArray) return direct
         if (direct is String) runCatching { JSONArray(direct) }.getOrNull()?.let { return it }
+        require(direct == null) { "$rootKey must be an array." }
         return legacyDomainItem(raw, domainKey) ?: JSONArray()
     }
 
@@ -736,50 +855,60 @@ class ImportExportRepository(
             if (v is String) {
                 runCatching { JSONArray(v) }.getOrNull()?.let { return it }
             }
+            error("$key must be an array.")
         }
         return null
     }
 
     private fun clearUserDataTables(clearExercises: Boolean) {
-        ObjectBox.store.boxFor(WorkoutSetEntity::class.java).removeAll()
-        ObjectBox.store.boxFor(WorkoutExerciseEntity::class.java).removeAll()
-        ObjectBox.store.boxFor(WorkoutEntity::class.java).removeAll()
-        ObjectBox.store.boxFor(PlanExerciseEntity::class.java).removeAll()
-        ObjectBox.store.boxFor(PlanDayEntity::class.java).removeAll()
-        ObjectBox.store.boxFor(PlanEntity::class.java).removeAll()
+        store.boxFor(WorkoutSetEntity::class.java).removeAll()
+        store.boxFor(WorkoutExerciseEntity::class.java).removeAll()
+        store.boxFor(WorkoutEntity::class.java).removeAll()
+        store.boxFor(PlanExerciseEntity::class.java).removeAll()
+        store.boxFor(PlanDayEntity::class.java).removeAll()
+        store.boxFor(PlanEntity::class.java).removeAll()
         if (clearExercises) {
-            ObjectBox.store.boxFor(ExerciseMuscleEntity::class.java).removeAll()
-            ObjectBox.store.boxFor(ExerciseEntity::class.java).removeAll()
+            store.boxFor(ExerciseMuscleEntity::class.java).removeAll()
+            store.boxFor(ExerciseEntity::class.java).removeAll()
         }
-        ObjectBox.store.boxFor(BodyMeasurementEntity::class.java).removeAll()
-        ObjectBox.store.boxFor(ProgressPhotoEntity::class.java).removeAll()
-        ObjectBox.store.boxFor(AppSettingEntity::class.java).removeAll()
-        ObjectBox.store.boxFor(AthleteCalibrationEntity::class.java).removeAll()
-        ObjectBox.store.boxFor(GamificationProfileEntity::class.java).removeAll()
-        ObjectBox.store.boxFor(IronLedgerEventEntity::class.java).removeAll()
+        store.boxFor(BodyMeasurementEntity::class.java).removeAll()
+        store.boxFor(ProgressPhotoEntity::class.java).removeAll()
+        store.boxFor(AppSettingEntity::class.java).removeAll()
+        store.boxFor(AthleteCalibrationEntity::class.java).removeAll()
+        store.boxFor(GamificationProfileEntity::class.java).removeAll()
+        store.boxFor(IronLedgerEventEntity::class.java).removeAll()
     }
 
-    private fun importData(data: JSONObject, mergeSingletons: Boolean) {
-        val exercisesBox = ObjectBox.store.boxFor(ExerciseEntity::class.java)
-        val exerciseMusclesBox = ObjectBox.store.boxFor(ExerciseMuscleEntity::class.java)
-        val plansBox = ObjectBox.store.boxFor(PlanEntity::class.java)
-        val planDaysBox = ObjectBox.store.boxFor(PlanDayEntity::class.java)
-        val planExercisesBox = ObjectBox.store.boxFor(PlanExerciseEntity::class.java)
-        val workoutsBox = ObjectBox.store.boxFor(WorkoutEntity::class.java)
-        val workoutExercisesBox = ObjectBox.store.boxFor(WorkoutExerciseEntity::class.java)
-        val workoutSetsBox = ObjectBox.store.boxFor(WorkoutSetEntity::class.java)
-        val bodyBox = ObjectBox.store.boxFor(BodyMeasurementEntity::class.java)
-        val photosBox = ObjectBox.store.boxFor(ProgressPhotoEntity::class.java)
-        val settingsBox = ObjectBox.store.boxFor(AppSettingEntity::class.java)
-        val athleteCalibrationsBox = ObjectBox.store.boxFor(AthleteCalibrationEntity::class.java)
-        val gamificationProfilesBox = ObjectBox.store.boxFor(GamificationProfileEntity::class.java)
-        val ironLedgerEventsBox = ObjectBox.store.boxFor(IronLedgerEventEntity::class.java)
+    private fun importData(data: JSONObject, mergeSingletons: Boolean, recoveredPhotos: Map<String, String> = emptyMap()): Int {
+        val exercisesBox = store.boxFor(ExerciseEntity::class.java)
+        val exerciseMusclesBox = store.boxFor(ExerciseMuscleEntity::class.java)
+        val plansBox = store.boxFor(PlanEntity::class.java)
+        val planDaysBox = store.boxFor(PlanDayEntity::class.java)
+        val planExercisesBox = store.boxFor(PlanExerciseEntity::class.java)
+        val workoutsBox = store.boxFor(WorkoutEntity::class.java)
+        val workoutExercisesBox = store.boxFor(WorkoutExerciseEntity::class.java)
+        val workoutSetsBox = store.boxFor(WorkoutSetEntity::class.java)
+        val bodyBox = store.boxFor(BodyMeasurementEntity::class.java)
+        val photosBox = store.boxFor(ProgressPhotoEntity::class.java)
+        val settingsBox = store.boxFor(AppSettingEntity::class.java)
+        val athleteCalibrationsBox = store.boxFor(AthleteCalibrationEntity::class.java)
+        val gamificationProfilesBox = store.boxFor(GamificationProfileEntity::class.java)
+        val ironLedgerEventsBox = store.boxFor(IronLedgerEventEntity::class.java)
 
         val planByUid = mutableMapOf<String, PlanEntity>()
         val dayByUid = mutableMapOf<String, PlanDayEntity>()
         val exerciseByUid = mutableMapOf<String, ExerciseEntity>()
         val workoutByUid = mutableMapOf<String, WorkoutEntity>()
         val workoutExerciseByUid = mutableMapOf<String, WorkoutExerciseEntity>()
+        var skippedRelationshipRows = 0
+
+        if (mergeSingletons) {
+            exercisesBox.all.associateByTo(exerciseByUid, ExerciseEntity::uid)
+            plansBox.all.associateByTo(planByUid, PlanEntity::uid)
+            planDaysBox.all.associateByTo(dayByUid, PlanDayEntity::uid)
+            workoutsBox.all.associateByTo(workoutByUid, WorkoutEntity::uid)
+            workoutExercisesBox.all.associateByTo(workoutExerciseByUid, WorkoutExerciseEntity::uid)
+        }
 
         (data.optJSONArray("exercises") ?: JSONArray()).forEachObject { o ->
             val uid = o.optString("id").trim()
@@ -857,10 +986,14 @@ class ImportExportRepository(
             val uid = o.optString("id").trim()
             if (uid.isBlank()) return@forEachObject
             val planUid = o.optString("plan_id")
+            val parentPlan = planByUid[planUid] ?: run {
+                skippedRelationshipRows++
+                return@forEachObject
+            }
             val row = PlanDayEntity().apply {
                 this.uid = uid
                 this.planUid = planUid
-                planByUid[planUid]?.let { plan.target = it }
+                plan.target = parentPlan
                 name = o.optString("name")
                 color = o.optString("color", "#FF4500")
                 orderIndex = o.optInt("order_index", 0)
@@ -879,12 +1012,18 @@ class ImportExportRepository(
             if (uid.isBlank()) return@forEachObject
             val dayUid = o.optString("plan_day_id")
             val exerciseUid = o.optString("exercise_id")
+            val parentDay = dayByUid[dayUid]
+            val parentExercise = exerciseByUid[exerciseUid]
+            if (parentDay == null || parentExercise == null) {
+                skippedRelationshipRows++
+                return@forEachObject
+            }
             val row = PlanExerciseEntity().apply {
                 this.uid = uid
                 this.planDayUid = dayUid
-                dayByUid[dayUid]?.let { planDay.target = it }
+                planDay.target = parentDay
                 this.exerciseUid = exerciseUid
-                exerciseByUid[exerciseUid]?.let { exercise.target = it }
+                exercise.target = parentExercise
                 orderIndex = o.optInt("order_index", 0)
                 sets = max(1, o.optInt("sets", 1))
                 reps = o.optString("reps")
@@ -937,20 +1076,39 @@ class ImportExportRepository(
             if (uid.isBlank()) return@forEachObject
             val workoutUid = o.optString("workout_id")
             val exerciseUid = o.optString("exercise_id")
+            val parentWorkout = workoutByUid[workoutUid]
+            val parentExercise = exerciseByUid[exerciseUid]
+            if (parentWorkout == null || parentExercise == null) {
+                skippedRelationshipRows++
+                return@forEachObject
+            }
+            val existingRow = workoutExercisesBox.query(WorkoutExerciseEntity_.uid.equal(uid))
+                .build().use { it.findFirst() }
+            val importedSnapshot = o.optNullableString("exercise_snapshot_json")
+                ?.takeIf { HistoricalExerciseSnapshotCodec.decode(it) != null }
+            val existingSnapshot = existingRow?.exerciseSnapshotJson
+                ?.takeIf { HistoricalExerciseSnapshotCodec.decode(it) != null }
             val row = WorkoutExerciseEntity().apply {
+                existingRow?.let { objectBoxId = it.objectBoxId }
                 this.uid = uid
                 this.workoutUid = workoutUid
-                workoutByUid[workoutUid]?.let { workout.target = it }
+                workout.target = parentWorkout
                 this.exerciseUid = exerciseUid
-                exerciseByUid[exerciseUid]?.let { exercise.target = it }
+                exercise.target = parentExercise
                 orderIndex = o.optInt("order_index", 0)
                 supersetGroup = o.optString("superset_group")
                 notes = o.optString("notes")
+                exerciseSnapshotJson = importedSnapshot
+                    ?: existingSnapshot
+                    ?: if (parentWorkout.status == "completed") {
+                        val muscles = exerciseMusclesBox.query(ExerciseMuscleEntity_.exerciseUid.equal(parentExercise.uid))
+                            .build().use { it.find() }
+                        HistoricalExerciseSnapshotCodec.encode(captureHistoricalExerciseSnapshot(parentExercise, muscles))
+                    } else {
+                        null
+                    }
                 createdAt = o.optLong("created_at", 0L)
                 updatedAt = o.optLong("updated_at", createdAt)
-            }
-            workoutExercisesBox.query(WorkoutExerciseEntity_.uid.equal(uid)).build().use { q ->
-                q.findFirst()?.let { row.objectBoxId = it.objectBoxId }
             }
             workoutExercisesBox.put(row)
             workoutExerciseByUid[row.uid] = row
@@ -960,10 +1118,14 @@ class ImportExportRepository(
             val uid = o.optString("id").trim()
             if (uid.isBlank()) return@forEachObject
             val workoutExerciseUid = o.optString("workout_exercise_id")
+            val parentWorkoutExercise = workoutExerciseByUid[workoutExerciseUid] ?: run {
+                skippedRelationshipRows++
+                return@forEachObject
+            }
             val row = WorkoutSetEntity().apply {
                 this.uid = uid
                 this.workoutExerciseUid = workoutExerciseUid
-                workoutExerciseByUid[workoutExerciseUid]?.let { workoutExercise.target = it }
+                workoutExercise.target = parentWorkoutExercise
                 setIndex = o.optInt("set_index", 1)
                 weight = o.optDouble("weight", 0.0)
                 reps = o.optDouble("reps", 0.0)
@@ -974,6 +1136,7 @@ class ImportExportRepository(
                 isDropset = o.optBoolean("is_dropset", false)
                 isAmrap = o.optBoolean("is_amrap", false)
                 toFailure = o.optBoolean("to_failure", false)
+                notes = o.optString("notes")
                 completedAt = if (o.isNull("completed_at")) null else o.optLong("completed_at")
                 createdAt = o.optLong("created_at", 0L)
                 updatedAt = o.optLong("updated_at", createdAt)
@@ -1010,7 +1173,8 @@ class ImportExportRepository(
             if (uid.isBlank()) return@forEachObject
             val row = ProgressPhotoEntity().apply {
                 this.uid = uid
-                fileUri = o.optString("file_uri")
+                // A JSON reference is not proof of ownership or a transferable image.
+                fileUri = recoveredPhotos[uid] ?: com.ironlog.app.data.photos.importedProgressPhotoReference(o.optString("file_uri"))
                 takenAt = o.optLong("taken_at", 0L)
                 bodyweight = if (o.isNull("bodyweight")) null else o.optDouble("bodyweight")
                 notes = o.optString("notes")
@@ -1018,7 +1182,10 @@ class ImportExportRepository(
                 updatedAt = o.optLong("updated_at", createdAt)
             }
             photosBox.query(ProgressPhotoEntity_.uid.equal(uid)).build().use { q ->
-                q.findFirst()?.let { row.objectBoxId = it.objectBoxId }
+                q.findFirst()?.let {
+                    row.objectBoxId = it.objectBoxId
+                    if (mergeSingletons && uid !in recoveredPhotos) row.fileUri = it.fileUri
+                }
             }
             photosBox.put(row)
         }
@@ -1107,6 +1274,8 @@ class ImportExportRepository(
                     o.optString("makeup_completions_json", "{}"),
                 )
                 unlockedBadges = o.optString("unlocked_badges")
+                badgeUnlocksJson = o.optString("badge_unlocks_json", "{}")
+                updatedAt = o.optLong("updated_at", 0L)
             }
             gamificationProfilesBox.query(GamificationProfileEntity_.offlineUserId.equal(offlineUserId)).build().use { q ->
                 q.findFirst()?.let { existing ->
@@ -1135,6 +1304,8 @@ class ImportExportRepository(
                             .filter(String::isNotEmpty)
                             .distinct()
                             .joinToString(",")
+                        row.badgeUnlocksJson = mergeLongJsonMaps(existing.badgeUnlocksJson.orEmpty(), row.badgeUnlocksJson.orEmpty())
+                        row.updatedAt = maxOf(existing.updatedAt, row.updatedAt)
                     }
                 }
             }
@@ -1164,9 +1335,9 @@ class ImportExportRepository(
         }
 
         // keep seed flag for first app open consistency after restore
-        ObjectBox.store.boxFor(AppSettingEntity::class.java).query(AppSettingEntity_.key.equal("exercise_seed_complete")).build().use { q ->
+        store.boxFor(AppSettingEntity::class.java).query(AppSettingEntity_.key.equal("exercise_seed_complete")).build().use { q ->
             if (q.findFirst() == null) {
-                ObjectBox.store.boxFor(AppSettingEntity::class.java).put(AppSettingEntity().apply {
+                store.boxFor(AppSettingEntity::class.java).put(AppSettingEntity().apply {
                     key = "exercise_seed_complete"
                     value = "true"
                     valueType = "boolean"
@@ -1174,6 +1345,7 @@ class ImportExportRepository(
                 })
             }
         }
+        return skippedRelationshipRows
     }
 }
 
@@ -1235,6 +1407,8 @@ internal fun backfillMissingAthleteStateRows(
                 .put("streak_weeks", profile.streakWeeks)
                 .put("recovery_circuit_completions_json", profile.recoveryCircuitCompletionsJson)
                 .put("unlocked_badges", profile.unlockedBadges)
+                .put("badge_unlocks_json", profile.badgeUnlocksJson ?: "{}")
+                .put("updated_at", profile.updatedAt)
         )
     }
 }
@@ -1273,6 +1447,8 @@ internal data class FallbackGamificationProfileRow(
     val streakWeeks: Int = 0,
     val recoveryCircuitCompletionsJson: String = "{}",
     val unlockedBadges: String = "",
+    val badgeUnlocksJson: String = "{}",
+    val updatedAt: Long = 0L,
 )
 
 internal fun deriveFallbackAthleteCalibration(
@@ -1325,6 +1501,18 @@ private fun mergeIntJsonMaps(first: String, second: String): String {
         val json = runCatching { JSONObject(raw) }.getOrNull() ?: return@forEach
         json.keys().forEach { key ->
             merged[key] = maxOf(merged[key] ?: 0, json.optInt(key, 0))
+        }
+    }
+    return JSONObject(merged as Map<*, *>).toString()
+}
+
+private fun mergeLongJsonMaps(first: String, second: String): String {
+    val merged = linkedMapOf<String, Long>()
+    listOf(first, second).forEach { raw ->
+        val json = runCatching { JSONObject(raw) }.getOrNull() ?: return@forEach
+        json.keys().forEach { key ->
+            val value = json.optLong(key, 0L)
+            if (value > 0L) merged[key] = minOf(merged[key] ?: value, value)
         }
     }
     return JSONObject(merged as Map<*, *>).toString()

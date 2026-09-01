@@ -13,6 +13,12 @@ Email **ironlogsupport@gmail.com** with:
 
 You should receive an acknowledgement within seven days. Please allow time for validation and a coordinated fix before publishing details.
 
+## Reports are not contribution approval
+
+You do not need contribution approval to report a vulnerability. Keep any proof of concept minimal and remove personal or sensitive data.
+
+A security report, acknowledgement, or coordinated-disclosure discussion does not grant permission to submit code, patches, designs, artwork, or other project assets. Do not send a remediation implementation unless the maintainer first approves that specific work in writing and both parties sign the required contribution and IP assignment agreement. Reporting a vulnerability also grants no rights to the IronLog source, name, branding, store identity, signing material, or other project assets.
+
 ## Supported code
 
 Security fixes target the current default branch and the latest published build when one exists. Historical branches and untagged artifacts are not supported releases.

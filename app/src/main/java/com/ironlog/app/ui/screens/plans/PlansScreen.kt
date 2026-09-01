@@ -1,5 +1,8 @@
 ﻿package com.ironlog.app.ui.screens.plans
 
+import com.ironlog.app.ui.theme.appGapDp
+import com.ironlog.app.ui.theme.appPadding
+import com.ironlog.app.ui.theme.appSpacedBy
 import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -17,6 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
+import com.ironlog.app.ui.theme.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -26,17 +30,21 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ironlog.app.data.model.FullPlanDay
 import com.ironlog.app.data.model.FullPlanObject
 import com.ironlog.app.data.model.LegacyExerciseShape
 import com.ironlog.app.data.model.PlanExerciseInput
+import com.ironlog.app.data.plan.PlanJsonCodec
 import com.ironlog.app.services.ShareService
 import com.ironlog.app.ui.components.PageHeader
+import com.ironlog.app.ui.components.IronLogDropdownMenu
 import com.ironlog.app.ui.context.useTheme
 import com.ironlog.app.ui.model.HistoryEntry
 import com.ironlog.app.ui.model.UiPlan
@@ -67,8 +75,8 @@ fun PlansScreen(
     val c = useTheme()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val rawPlans by vm.plans.collectAsState()
-    val statsState by statsVm.state.collectAsState()
+    val rawPlans by vm.plans.collectAsStateWithLifecycle()
+    val statsState by statsVm.state.collectAsStateWithLifecycle()
     val history = statsState.history
 
     // Local state for dragging overrides.
@@ -104,13 +112,26 @@ fun PlansScreen(
                 withContext(Dispatchers.Main) { status = "Could not read file: ${e.message}" }
                 return@launch
             }
-            val result = runCatching { parsePlansJson(text) }
+            val result = runCatching {
+                val decoded = PlanJsonCodec.decodeWithReport(text)
+                vm.importPlansNow(decoded.plans, decoded.skipped)
+            }
             withContext(Dispatchers.Main) {
                 result
                     .onFailure { status = "Import failed: ${it.message}" }
-                    .onSuccess { list ->
-                        if (list.isEmpty()) status = "No valid plans found in file."
-                        else { vm.importPlans(list); showImport = false; status = "Imported ${list.size} plan(s)." }
+                    .onSuccess { imported ->
+                        if (imported.imported == 0) {
+                            status = "No valid plans found (${imported.skipped} skipped)."
+                        } else {
+                            showImport = false
+                            status = buildString {
+                                append("Imported ${imported.imported} plan(s) and ${imported.importedExercises} exercise(s)")
+                                if (imported.createdCustomExercises > 0) append("; added ${imported.createdCustomExercises} custom")
+                                if (imported.unresolved > 0) append("; ${imported.unresolved} unresolved")
+                                if (imported.skipped > 0) append("; ${imported.skipped} skipped")
+                                append('.')
+                            }
+                        }
                     }
             }
         }
@@ -146,7 +167,7 @@ fun PlansScreen(
             state = lazyListState,
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 120.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = com.ironlog.app.ui.theme.appCardSpacedBy(12.dp)
         ) {
             // FIXED: 6 — PageHeader for tab screen
             item {
@@ -158,14 +179,14 @@ fun PlansScreen(
             }
             // Header actions
             item {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(bottom = 4.dp)) {
+                Column(verticalArrangement = appSpacedBy(10.dp), modifier = Modifier.appPadding(bottom = 4.dp)) {
                     ActionTile("BROWSE PROGRAMS", Icons.Outlined.LibraryBooks, c, onOpenProgramPicker)
                     ActionTile("IMPORT PLAN", Icons.Outlined.Download, c) { showImport = !showImport }
                     ActionTile("CREATE WITH AI", Icons.Outlined.AutoAwesome, c, onOpenAIPlan)
                 }
 
                 if (showImport) {
-                    Spacer(Modifier.height(10.dp))
+                    Spacer(Modifier.height(appGapDp(10.dp)))
                     Button(
                         modifier = Modifier.fillMaxWidth(),
                         onClick = { planImportPicker.launch(arrayOf("application/json", "text/plain", "*/*")) },
@@ -182,20 +203,16 @@ fun PlansScreen(
                     Column(
                         Modifier.fillMaxWidth().padding(40.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                        verticalArrangement = appSpacedBy(8.dp)
                     ) {
                         Icon(Icons.Outlined.List, null, tint = c.muted, modifier = Modifier.size(24.dp))
                         Text("No plans yet", color = c.text, fontWeight = FontWeight.Bold, fontSize = IronLogType.section.fontSize.sp)
-                        Text("Pick a template or build your own routine.", color = c.muted, fontSize = IronLogType.body.fontSize.sp)
-                        Spacer(Modifier.height(8.dp))
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(c.accentSoft)
-                                .border(1.dp, c.accentBorder, RoundedCornerShape(10.dp))
-                                .clickable(onClick = onOpenProgramPicker)
-                                .padding(horizontal = 16.dp, vertical = 10.dp)
-                        ) { Text("BROWSE TEMPLATES", color = c.accent, fontWeight = FontWeight.Bold, fontSize = IronLogType.body.fontSize.sp) }
+                        Text(
+                            "Browse a program above, import one, or create a routine with AI.",
+                            color = c.muted,
+                            fontSize = IronLogType.body.fontSize.sp,
+                            textAlign = TextAlign.Center,
+                        )
                     }
                 }
             }
@@ -213,7 +230,7 @@ fun PlansScreen(
                         onSetActive = { vm.setActivePlan(plan.id) },
                         onShare = {
                             scope.launch(Dispatchers.IO) {
-                                val json = uiPlanToJson(plan).toString(2)
+                                val json = PlanJsonCodec.encode(plan).toString(2)
                                 val safeName = plan.name.replace(Regex("[^a-zA-Z0-9_\\-]"), "_")
                                 val dir = java.io.File(context.filesDir, "plan_exports").also { it.mkdirs() }
                                 val file = java.io.File(dir, "$safeName.json").also { it.writeText(json) }
@@ -278,7 +295,7 @@ fun PlansScreen(
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
                         )
-                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 20.dp)) {
+                        Row(horizontalArrangement = appSpacedBy(10.dp), modifier = Modifier.padding(top = 20.dp)) {
                             Box(Modifier.weight(1f).clip(RoundedCornerShape(14.dp)).border(1.dp, c.faint, RoundedCornerShape(14.dp)).clickable { showNew = false }.padding(14.dp), contentAlignment = Alignment.Center) {
                                 Text("Cancel", color = c.muted)
                             }
@@ -309,7 +326,7 @@ fun PlansScreen(
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
                         )
-                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 20.dp)) {
+                        Row(horizontalArrangement = appSpacedBy(10.dp), modifier = Modifier.padding(top = 20.dp)) {
                             Box(Modifier.weight(1f).clip(RoundedCornerShape(14.dp)).border(1.dp, c.faint, RoundedCornerShape(14.dp)).clickable { showRenamePlan = null }.padding(14.dp), contentAlignment = Alignment.Center) {
                                 Text("Cancel", color = c.muted)
                             }
@@ -384,9 +401,9 @@ private fun PlanCard(
                 shape = RoundedCornerShape(20.dp),
             ),
     ) {
-        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Column(Modifier.appPadding(18.dp), verticalArrangement = appSpacedBy(14.dp)) {
             // Header: play icon + plan name + menu/drag
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = appSpacedBy(12.dp)) {
                 // Play icon button
                 Box(
                     Modifier
@@ -401,25 +418,29 @@ private fun PlanCard(
                 }
                 // Plan info — fills remaining space
                 Column(Modifier.weight(1f).clickable(onClick = onOpen)) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(plan.name, color = c.text, fontWeight = FontWeight.Black, fontSize = IronLogType.section.fontSize.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
-                        if (plan.isActive) {
-                            Box(
-                                Modifier
-                                    .clip(RoundedCornerShape(IronLogRadius.full.dp))
-                                    .background(c.accent.copy(alpha = 0.15f))
-                                    .border(1.dp, c.accent.copy(alpha = 0.4f), RoundedCornerShape(IronLogRadius.full.dp))
-                                    .padding(horizontal = 8.dp, vertical = 3.dp),
-                            ) {
-                                Text("ACTIVE", color = c.accent, fontSize = IronLogType.micro.fontSize.sp, fontWeight = FontWeight(IronLogType.button.fontWeight), letterSpacing = IronLogType.micro.letterSpacing.sp)
-                            }
-                        }
+                    Text(
+                        plan.name,
+                        color = c.text,
+                        fontWeight = FontWeight.Black,
+                        fontSize = IronLogType.section.fontSize.sp,
+                        maxLines = 2,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    )
+                    if (plan.isActive) {
+                        Text(
+                            "ACTIVE PROGRAM",
+                            color = c.accent,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.sp,
+                            modifier = Modifier.appPadding(top = 2.dp),
+                        )
                     }
                     Text(
                         "${plan.days.size} days · $exCount exercises",
                         color = c.subtext,
                         fontSize = IronLogType.meta.fontSize.sp,
-                        modifier = Modifier.padding(top = 2.dp),
+                        modifier = Modifier.appPadding(top = 2.dp),
                     )
                     // GAP-19: session stats sub-label
                     val statsLabel = if (sessionCount == 0) {
@@ -437,7 +458,7 @@ private fun PlanCard(
                         statsLabel,
                         color = c.muted,
                         fontSize = IronLogType.micro.fontSize.sp,
-                        modifier = Modifier.padding(top = 1.dp),
+                        modifier = Modifier.appPadding(top = 1.dp),
                     )
                 }
                 // 3-dot menu
@@ -452,7 +473,7 @@ private fun PlanCard(
                     ) {
                         Icon(Icons.Filled.MoreVert, contentDescription = "Menu", tint = c.accent.copy(alpha = 0.7f), modifier = Modifier.size(16.dp))
                     }
-                    DropdownMenu(expandedMenu, { expandedMenu = false }, modifier = Modifier.background(c.surface)) {
+                IronLogDropdownMenu(expandedMenu, { expandedMenu = false }) {
                         DropdownMenuItem(text = { Text("Edit Plan", color = c.text) }, onClick = { expandedMenu = false; onOpen() })
                         DropdownMenuItem(text = { Text("Rename", color = c.text) }, onClick = { expandedMenu = false; onRename() })
                         if (!plan.isActive) {
@@ -471,7 +492,7 @@ private fun PlanCard(
 
             // Colored day chips
             @OptIn(ExperimentalLayoutApi::class)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            FlowRow(horizontalArrangement = appSpacedBy(6.dp), verticalArrangement = appSpacedBy(6.dp)) {
                 plan.days.forEach { d ->
                     val safeColorStr = if (d.color.startsWith("#") && d.color.length == 7) d.color else "#E53935"
                     val parsedColor = Color(android.graphics.Color.parseColor(safeColorStr))
@@ -480,7 +501,7 @@ private fun PlanCard(
                             .clip(RoundedCornerShape(999.dp))
                             .background(parsedColor.copy(alpha = 0.16f))
                             .border(1.dp, parsedColor.copy(alpha = 0.30f), RoundedCornerShape(999.dp))
-                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                            .appPadding(horizontal = 10.dp, vertical = 8.dp),
                     ) {
                         Text(d.name, color = parsedColor, fontWeight = FontWeight.Bold, fontSize = IronLogType.eyebrow.fontSize.sp, letterSpacing = 1.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
@@ -498,7 +519,7 @@ private fun PlanCard(
                         .padding(vertical = 11.dp),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = appSpacedBy(6.dp)) {
                         Icon(Icons.Outlined.PlayArrow, null, tint = c.textOnAccent, modifier = Modifier.size(14.dp))
                         Text("START WORKOUT", color = c.textOnAccent, fontWeight = FontWeight.ExtraBold, fontSize = IronLogType.meta.fontSize.sp, letterSpacing = 1.sp)
                     }
@@ -513,7 +534,7 @@ private fun PlanCard(
                         .padding(vertical = 11.dp),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = appSpacedBy(6.dp)) {
                         Icon(Icons.Outlined.PlayArrow, null, tint = c.textOnAccent, modifier = Modifier.size(14.dp))
                         Text(
                             if (showDayPicker) "CHOOSE SESSION ▲" else "START WORKOUT ▼",
@@ -525,7 +546,7 @@ private fun PlanCard(
                     }
                 }
                 if (showDayPicker) {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Column(verticalArrangement = appSpacedBy(6.dp)) {
                         plan.days.forEach { day ->
                             Row(
                                 Modifier
@@ -538,7 +559,7 @@ private fun PlanCard(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween,
                             ) {
-                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = appSpacedBy(8.dp)) {
                                     Icon(Icons.Outlined.PlayArrow, null, tint = c.accent, modifier = Modifier.size(13.dp))
                                     Text(day.name, color = c.text, fontWeight = FontWeight.Bold, fontSize = IronLogType.body.fontSize.sp)
                                 }
@@ -569,7 +590,7 @@ private fun ActionTile(
             .padding(14.dp),
         contentAlignment = Alignment.Center
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = appSpacedBy(8.dp)) {
             Icon(icon, contentDescription = null, tint = if (label == "CREATE WITH AI") c.text else c.accent, modifier = Modifier.size(18.dp))
             Text(label, color = if (label == "CREATE WITH AI") c.text else c.accent, fontWeight = FontWeight.Black, fontSize = IronLogType.meta.fontSize.sp, letterSpacing = 2.sp)
         }
@@ -588,7 +609,7 @@ private fun DashedNewPlanButton(c: IronLogThemeTokens, onClick: () -> Unit) {
         contentAlignment = Alignment.Center,
     ) {
         // Draw dashed border natively using Modifier.drawBehind if wanted, or just standard border
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = appSpacedBy(8.dp)) {
             Icon(Icons.Outlined.Add, contentDescription = null, tint = c.accent, modifier = Modifier.size(20.dp))
             Text("NEW PLAN", color = c.accent, fontWeight = FontWeight.Bold, fontSize = IronLogType.meta.fontSize.sp, letterSpacing = 2.sp)
         }

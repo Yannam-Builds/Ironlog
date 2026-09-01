@@ -1,3 +1,13 @@
+> [!IMPORTANT]
+> Pull requests are accepted only after the maintainer has approved the specific scope in writing and the required contribution/IP assignment agreement has been signed. This template is not approval and does not replace that agreement. Unsolicited code, patches, designs, artwork, media, datasets, copy, or other assets may be closed without review.
+
+## Authorization
+
+- Written approval reference and date (do not attach confidential agreements):
+- [ ] The required contribution and IP agreement was signed before submission
+- [ ] This pull request stays within the approved scope
+- [ ] Every third-party dependency or asset is identified with its source and license
+
 ## Outcome
 
 What user-visible problem does this change solve?

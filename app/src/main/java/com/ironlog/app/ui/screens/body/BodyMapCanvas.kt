@@ -10,6 +10,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.asAndroidPath
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.vector.PathParser
 import com.ironlog.app.ui.context.useTheme
@@ -128,25 +129,23 @@ internal fun computeBodyTransform(
 
 // ── Readiness normalisation (group keys → body-map region keys) ───────────────
 
-internal fun buildDisplayReadiness(groupReadiness: Map<String, Double>): Map<String, Double> {
-    val push      = groupReadiness["Push"]
-    val pull      = groupReadiness["Pull"]
-    val shoulders = groupReadiness["Shoulders"]
-    val arms      = groupReadiness["Arms"]
-    val core      = groupReadiness["Core"]
-    val legs      = groupReadiness["Legs"]
-    return mapOf(
-        "chest"      to (push ?: 1.0),
-        "shoulders"  to (shoulders ?: 1.0),
-        "rearDelts"  to (shoulders ?: pull ?: 1.0),
-        "arms"       to (arms ?: 1.0),
-        "core"       to (core ?: 1.0),
-        "quads"      to (legs ?: 1.0),
-        "hamstrings" to (legs ?: 1.0),
-        "calves"     to (legs ?: 1.0),
-        "back"       to (pull ?: 1.0),
-    )
-}
+internal fun buildDisplayReadiness(groupReadiness: Map<String, Double>): Map<String, Double> =
+    BODY_REGIONS.mapNotNull { region ->
+        groupReadiness[region.group]?.takeIf(Double::isFinite)?.coerceIn(0.0, 1.0)?.let { region.key to it }
+    }.toMap()
+
+@Volatile private var cachedBodyMapDataset: BodyMapDataset? = null
+private val bodyMapLoadLock = Any()
+
+@Composable
+internal fun rememberBodyMapDataset(context: Context): BodyMapDataset? =
+    androidx.compose.runtime.produceState<BodyMapDataset?>(cachedBodyMapDataset, context.applicationContext) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+            synchronized(bodyMapLoadLock) {
+                cachedBodyMapDataset ?: loadBodyMapDataset(context.applicationContext)?.also { cachedBodyMapDataset = it }
+            }
+        }
+    }.value
 
 // ── Asset loader ─────────────────────────────────────────────────────────────
 
@@ -242,7 +241,7 @@ internal fun BodyHalfCanvas(
         )
         pieces.forEach { piece ->
             val value = readiness[piece.region]
-            val isPainFlagged = piece.region in painFlags
+            val isPainFlagged = piece.region in bodyPainRegions(painFlags)
             withTransform({
                 // Correct SVG-viewBox → canvas mapping (see comment at top of file)
                 val horizontalShiftPx = viewBox.width * t.scale * horizontalShiftFraction
@@ -269,7 +268,7 @@ internal fun BodyHalfCanvas(
                             moveTo(bounds.left, y)
                             lineTo(bounds.right, y + bounds.width())
                         }
-                        drawPath(linePath, painColor.copy(alpha = 0.25f), style = Stroke(1.2f))
+                        clipPath(piece.path) { drawPath(linePath, painColor.copy(alpha = 0.25f), style = Stroke(1.2f)) }
                         y += step
                     }
                 } else if (value == null) {

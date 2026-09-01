@@ -1,5 +1,9 @@
 ﻿package com.ironlog.app.ui.screens.stats
 
+import com.ironlog.app.ui.theme.appGapDp
+import com.ironlog.app.ui.theme.appPadding
+import com.ironlog.app.ui.theme.appSpacedBy
+import android.content.Context
 import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -46,13 +50,12 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
+import com.ironlog.app.ui.theme.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -68,6 +71,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ironlog.app.data.repository.HistoryRepository
 import com.ironlog.app.ui.components.EmptyState
 import com.ironlog.app.ui.context.useTheme
@@ -83,12 +87,28 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.ZoneId
+import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
+import timber.log.Timber
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
+
+private suspend fun dismissReminderAfterHistoryMutation(context: Context) {
+    try {
+        com.ironlog.app.services.WorkoutNotificationBridge
+            .cancelReminderAfterDataMutation(context.applicationContext)
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (error: Exception) {
+        // The history write is already authoritative. Do not report it as failed only
+        // because Android could not immediately remove a now-stale reminder.
+        Timber.w(error, "Could not dismiss stale reminder after history mutation")
+    }
+}
 
 @OptIn(ExperimentalFoundationApi::class, androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
@@ -99,11 +119,12 @@ fun HistoryScreen(
 ) {
     val c = useTheme()
     val context = LocalContext.current
-    val state by vm.state.collectAsState()
+    val state by vm.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     val historyRepository = remember { HistoryRepository() }
     val weightUnit = state.weightUnit
     var editingLog by remember { mutableStateOf<HistoryEntry?>(null) }
+    var historicalDate by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<String?>(null) }
     var searchQuery by remember { mutableStateOf("") }
     var activeExerciseFilter by remember { mutableStateOf<String?>(null) }
     var showExerciseFilterSheet by remember { mutableStateOf(false) }
@@ -134,9 +155,9 @@ fun HistoryScreen(
         state.history.flatMap { it.exercises.map { ex -> ex.name } }.distinct().sorted()
     }
 
-    LazyColumn(Modifier.fillMaxSize().background(c.bg).statusBarsPadding().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 120.dp)) {
+    LazyColumn(Modifier.fillMaxSize().background(c.bg).statusBarsPadding().padding(horizontal = 16.dp), verticalArrangement = com.ironlog.app.ui.theme.appCardSpacedBy(12.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 120.dp)) {
         item {
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(appGapDp(16.dp)))
             Text(
                 "WORKOUT LOG",
                 color = c.accent,
@@ -157,11 +178,14 @@ fun HistoryScreen(
                 color = c.muted,
                 fontSize = IronLogType.body.fontSize.sp,
             )
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(appGapDp(12.dp)))
+            TextButton(onClick = { historicalDate = LocalDate.now().toString() }) {
+                Text("Log past workout", color = c.accent)
+            }
             // Search bar
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = appSpacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 OutlinedTextField(
@@ -199,7 +223,7 @@ fun HistoryScreen(
             }
             // Active exercise filter chip
             activeExerciseFilter?.let { filter ->
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(appGapDp(4.dp)))
                 Row(
                     modifier = Modifier
                         .clip(androidx.compose.foundation.shape.RoundedCornerShape(IronLogRadius.full.dp))
@@ -208,13 +232,13 @@ fun HistoryScreen(
                         .clickable { activeExerciseFilter = null }
                         .padding(horizontal = 10.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    horizontalArrangement = appSpacedBy(4.dp),
                 ) {
                     Text(filter, color = c.accent, fontSize = IronLogType.meta.fontSize.sp, fontWeight = FontWeight.Medium)
                     Icon(Icons.Outlined.Close, contentDescription = "Remove filter", tint = c.accent, modifier = Modifier.size(14.dp))
                 }
             }
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(appGapDp(8.dp)))
             // Progress Photos — styled card row
             Row(
                 Modifier
@@ -226,13 +250,13 @@ fun HistoryScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = appSpacedBy(10.dp)) {
                     Icon(Icons.Outlined.CameraAlt, contentDescription = null, tint = c.accent, modifier = Modifier.size(20.dp))
                     Text("PROGRESS PHOTOS", color = c.text, fontWeight = FontWeight(IronLogType.body.fontWeight), fontSize = IronLogType.body.fontSize.sp, letterSpacing = 0.8.sp)
                 }
                 Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = c.muted, modifier = Modifier.size(16.dp))
             }
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(appGapDp(4.dp)))
         }
         if (filteredHistory.isEmpty()) {
             item {
@@ -254,7 +278,7 @@ fun HistoryScreen(
         grouped.forEach { (monthLabel, unsortedEntries) ->
             val entries = unsortedEntries.sortedByDescending { it.date }
             stickyHeader(key = "header_$monthLabel") {
-                Box(Modifier.fillMaxWidth().background(c.bg).padding(horizontal = 16.dp, vertical = 8.dp)) {
+                Box(Modifier.fillMaxWidth().background(c.bg).appPadding(horizontal = 16.dp, vertical = 8.dp)) {
                     Text(
                         monthLabel.uppercase(),
                         color = c.muted,
@@ -320,7 +344,7 @@ fun HistoryScreen(
                     fontSize = IronLogType.body.fontSize.sp,
                 )
                 TextButton(onClick = { showBulkDeleteConfirm = true }) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = appSpacedBy(6.dp)) {
                         Icon(Icons.Filled.Delete, contentDescription = null, tint = c.textOnAccent, modifier = Modifier.size(18.dp))
                         Text("DELETE (${selectedIds.size})", color = c.textOnAccent, fontWeight = FontWeight.Bold, fontSize = IronLogType.body.fontSize.sp)
                     }
@@ -342,6 +366,7 @@ fun HistoryScreen(
                     scope.launch {
                         try {
                             historyRepository.deleteWorkouts(toDelete)
+                            dismissReminderAfterHistoryMutation(context)
                             vm.refresh()
                         } finally {
                             // Always clear selection — even if delete throws —
@@ -362,6 +387,13 @@ fun HistoryScreen(
         )
     }
 
+    historicalDate?.let { selectedDate ->
+        com.ironlog.app.ui.screens.history.HistoricalWorkoutEntryHost(
+            initialDate = selectedDate, weightUnit = weightUnit,
+            onDismiss = { historicalDate = null },
+        )
+    }
+
     editingLog?.let { entry ->
         EditHistoryPanel(
             entry,
@@ -373,8 +405,11 @@ fun HistoryScreen(
                         startedAt = parseHistoryDateTimeMillis(updated.date),
                         durationSeconds = updated.duration,
                         rating = updated.rating,
+                        updateRating = true,
                         notes = updated.summaryText,
+                        updateNotes = true,
                     )
+                    dismissReminderAfterHistoryMutation(context)
                     editingLog = null
                     vm.refresh()
                 }
@@ -382,6 +417,7 @@ fun HistoryScreen(
             onDelete = {
                 scope.launch {
                     historyRepository.deleteWorkout(entry.id)
+                    dismissReminderAfterHistoryMutation(context)
                     editingLog = null
                     vm.refresh()
                 }
@@ -400,9 +436,9 @@ fun HistoryScreen(
             Column(
                 Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 20.dp)
-                    .padding(bottom = 32.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+                    .appPadding(horizontal = 20.dp)
+                    .appPadding(bottom = 32.dp),
+                verticalArrangement = appSpacedBy(4.dp),
             ) {
                 Text(
                     "FILTER BY EXERCISE",
@@ -411,7 +447,7 @@ fun HistoryScreen(
                     fontWeight = FontWeight(IronLogType.eyebrow.fontWeight),
                     letterSpacing = IronLogType.eyebrow.letterSpacing.sp,
                 )
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(appGapDp(8.dp)))
                 if (allExerciseNames.isEmpty()) {
                     Text("No exercises in history yet.", color = c.muted, fontSize = IronLogType.body.fontSize.sp)
                 } else {
@@ -473,8 +509,8 @@ private fun HistoryCard(
         Column(
             Modifier
                 .weight(1f)
-                .padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+                .appPadding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = appSpacedBy(4.dp),
         ) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
                 Column(Modifier.weight(1f)) {
@@ -493,7 +529,7 @@ private fun HistoryCard(
                         fontSize = IronLogType.meta.fontSize.sp,
                     )
                     // Volume + delta
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = appSpacedBy(4.dp)) {
                         Text(
                             formatVolumeFromKg(h.volume, weightUnit),
                             color = c.subtext,
@@ -510,7 +546,7 @@ private fun HistoryCard(
                         }
                     }
                 }
-                Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(verticalAlignment = Alignment.Top, horizontalArrangement = appSpacedBy(4.dp)) {
                     if (isSelectionMode) {
                         Box(
                             Modifier
@@ -565,7 +601,7 @@ private fun HistoryCard(
             }
             // Exercise breakdown: all exercises with set details
             if (h.exercises.isNotEmpty()) {
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(appGapDp(4.dp)))
                 h.exercises.forEach { ex ->
                     val setsSummary = ex.sets.joinToString(", ") { s ->
                         val w = if (s.weight > 0) formatWeightFromKg(s.weight, weightUnit) else "BW"
@@ -597,8 +633,9 @@ private fun EditHistoryPanel(
     onDelete: () -> Unit = {},
 ) {
     val c = useTheme()
-    var date by remember(entry.id) { mutableStateOf(entry.date.substringBefore('T')) }
-    var time by remember(entry.id) { mutableStateOf(entry.date.substringAfter('T', "00:00").take(5)) }
+    val initialLocalFields = remember(entry.id) { historyEditLocalFields(entry.date) }
+    var date by remember(entry.id) { mutableStateOf(initialLocalFields.date) }
+    var time by remember(entry.id) { mutableStateOf(initialLocalFields.time) }
     var durationMinutes by remember(entry.id) { mutableStateOf(max(0, (entry.duration / 60.0).roundToInt()).toString()) }
     var rating by remember(entry.id) { mutableStateOf(entry.rating?.toString().orEmpty()) }
     var summaryText by remember(entry.id) { mutableStateOf(entry.summaryText.orEmpty()) }
@@ -612,8 +649,8 @@ private fun EditHistoryPanel(
         containerColor = c.card,
         title = { Text("EDIT LOG", color = c.text, fontWeight = FontWeight.Bold, fontSize = IronLogType.section.fontSize.sp) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(verticalArrangement = appSpacedBy(8.dp)) {
+                Row(horizontalArrangement = appSpacedBy(8.dp)) {
                     OutlinedTextField(
                         value = date,
                         onValueChange = { date = it; dateTimeError = null },
@@ -646,12 +683,12 @@ private fun EditHistoryPanel(
                 dateTimeError?.let {
                     Text(it, color = c.danger, fontSize = IronLogType.meta.fontSize.sp)
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(horizontalArrangement = appSpacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     OutlinedTextField(durationMinutes, { durationMinutes = it }, label = { Text("MIN") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.weight(1f))
                     // Star rating selector
                     Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("Rating", color = c.muted, fontSize = IronLogType.meta.fontSize.sp)
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(horizontalArrangement = appSpacedBy(4.dp)) {
                             val currentRating = rating.toIntOrNull() ?: 0
                             (1..5).forEach { star ->
                                 Text(
@@ -665,7 +702,7 @@ private fun EditHistoryPanel(
                     }
                 }
                 OutlinedTextField(summaryText, { summaryText = it }, label = { Text("Summary") }, modifier = Modifier.fillMaxWidth())
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(appGapDp(4.dp)))
                 // DELETE LOG — destructive, prominent
                 Row(
                     Modifier
@@ -733,7 +770,7 @@ private fun EditHistoryPanel(
         val initialMillis = remember(date) {
             runCatching {
                 LocalDate.parse(date)
-                    .atStartOfDay(ZoneId.systemDefault())
+                    .atStartOfDay(ZoneOffset.UTC)
                     .toInstant()
                     .toEpochMilli()
             }.getOrDefault(parseHistoryDateTimeMillis(entry.date))
@@ -745,7 +782,7 @@ private fun EditHistoryPanel(
                 TextButton(onClick = {
                     datePickerState.selectedDateMillis?.let { millis ->
                         date = Instant.ofEpochMilli(millis)
-                            .atZone(ZoneId.systemDefault())
+                            .atZone(ZoneOffset.UTC)
                             .toLocalDate()
                             .toString()
                         dateTimeError = null
@@ -787,12 +824,32 @@ private fun EditHistoryPanel(
     }
 }
 
-internal fun parseHistoryEditTimestampOrNull(date: String, time: String): String? =
+internal data class HistoryEditLocalFields(val date: String, val time: String)
+
+internal fun historyEditLocalFields(
+    timestamp: String,
+    zoneId: ZoneId = ZoneId.systemDefault(),
+): HistoryEditLocalFields {
+    parseHistoryInstant(timestamp, zoneId)?.atZone(zoneId)?.let { local ->
+        return HistoryEditLocalFields(local.toLocalDate().toString(), local.toLocalTime().withSecond(0).withNano(0).toString())
+    }
+    val local = runCatching { LocalDateTime.parse(timestamp.replace(" ", "T")) }.getOrNull()
+    return HistoryEditLocalFields(
+        date = local?.toLocalDate()?.toString() ?: LocalDate.now(zoneId).toString(),
+        time = local?.toLocalTime()?.withSecond(0)?.withNano(0)?.toString() ?: "00:00",
+    )
+}
+
+internal fun parseHistoryEditTimestampOrNull(
+    date: String,
+    time: String,
+    zoneId: ZoneId = ZoneId.systemDefault(),
+): String? =
     runCatching {
         val parsedDate = LocalDate.parse(date.trim())
         val parsedTime = LocalTime.parse(time.trim())
         LocalDateTime.of(parsedDate, parsedTime)
-            .atZone(ZoneId.systemDefault())
+            .atZone(zoneId)
             .toInstant()
             .toString()
     }.getOrNull()

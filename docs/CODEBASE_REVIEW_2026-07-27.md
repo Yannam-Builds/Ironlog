@@ -40,7 +40,7 @@ Current local gate:
 
 - Keep `docs/superpowers/` as historical engineering evidence, with old checklist documents clearly labeled superseded rather than presented as the live backlog.
 - Keep ObjectBox's generated model files in source control and review model IDs/UIDs as migration-critical data whenever entities change.
-- Keep the personal-use license from the existing public repository unless the owner explicitly chooses a different distribution model.
+- Historical note: this recommendation was superseded on 2 September 2026, when the owner adopted the current proprietary license for new versions.
 - Keep public screenshots sanitized and generated from a clean test profile.
 - Keep release signing local; public CI should test, lint, and assemble only the unsigned/debug path.
 

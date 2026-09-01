@@ -54,9 +54,18 @@ class BodyMeasurementsViewModel(
         }
     }
 
-    fun add(input: BodyMeasurementInput) = viewModelScope.launch { repository.addBodyMeasurement(input) }
+    fun add(input: BodyMeasurementInput) = viewModelScope.launch { addAndAwait(input) }
     fun update(id: String, input: BodyMeasurementInput) = viewModelScope.launch { repository.updateBodyMeasurement(id, input) }
-    fun remove(id: String) = viewModelScope.launch { repository.deleteBodyMeasurement(id) }
+    fun remove(id: String) = viewModelScope.launch { removeAndAwait(id) }
+
+    /** Awaitable variants for UI mutations that must run follow-up work only after persistence. */
+    suspend fun addAndAwait(input: BodyMeasurementInput) {
+        repository.addBodyMeasurement(input)
+    }
+
+    suspend fun removeAndAwait(id: String) {
+        repository.deleteBodyMeasurement(id)
+    }
 }
 
 class BodyMeasurementsViewModelFactory(
@@ -82,4 +91,3 @@ private fun BodyMeasurementEntity.toUiRow(): BodyMeasurementUiRow = BodyMeasurem
     thigh = thigh,
     notes = notes,
 )
-

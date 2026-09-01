@@ -3,7 +3,7 @@ package com.ironlog.app.data.repository
 import com.ironlog.app.data.objectbox.BodyMeasurementEntity
 import com.ironlog.app.data.objectbox.BodyMeasurementEntity_
 import com.ironlog.app.data.objectbox.ObjectBox
-import io.objectbox.Box
+import io.objectbox.BoxStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -22,14 +22,21 @@ data class BodyMeasurementInput(
 )
 
 class BodyMeasurementRepository(
-    private val bodyBox: Box<BodyMeasurementEntity> = ObjectBox.store.boxFor(BodyMeasurementEntity::class.java),
+    private val store: BoxStore = ObjectBox.store,
 ) {
+    private val bodyBox get() = store.boxFor(BodyMeasurementEntity::class.java)
+
     fun getBodyMeasurementsFlow() =
-        bodyBox.query().orderDesc(BodyMeasurementEntity_.measuredAt).build().asFlow()
+        observeQuery { bodyBox.query().orderDesc(BodyMeasurementEntity_.measuredAt).build() }
+
+    /** The current local athlete bodyweight in canonical kilograms. */
+    fun getCurrentBodyweightKgFlow() = currentAthleteBodyweightKgFlow(store)
 
     suspend fun addBodyMeasurement(input: BodyMeasurementInput = BodyMeasurementInput()): BodyMeasurementEntity =
         withContext(Dispatchers.IO) {
-            input.bodyweight?.let { require(it >= 0.0) { "bodyweight must be >= 0" } }
+            input.bodyweight?.let {
+                require(isCanonicalAthleteBodyweightKg(it)) { "bodyweight must be finite and in (0, 1000] kg" }
+            }
             val now = System.currentTimeMillis()
             val row = BodyMeasurementEntity().apply {
                 measuredAt = input.measuredAt ?: now
@@ -42,38 +49,62 @@ class BodyMeasurementRepository(
                 createdAt = now
                 updatedAt = now
             }
-            bodyBox.put(row)
+            store.runInTx {
+                bodyBox.put(row)
+                if (row.bodyweight != null) {
+                    syncCurrentAthleteBodyweightFromHistoryInTransaction(store, clearWhenNoHistory = true, nowMs = now)
+                }
+            }
             row
         }
 
     suspend fun updateBodyMeasurement(slug: String, input: BodyMeasurementInput = BodyMeasurementInput()): BodyMeasurementEntity =
         withContext(Dispatchers.IO) {
-            val row = bodyBox.query(BodyMeasurementEntity_.uid.equal(slug)).build().use { it.findFirst() }
-                ?: error("Body measurement not found: $slug")
-            input.measuredAt?.let { row.measuredAt = it }
-            // JS updates nullable values when property is present. Kotlin input cannot represent undefined separately;
-            // call clearBodyWeight/explicit nullable variants if that distinction is needed during integration.
-            if (input.bodyweight != null) row.bodyweight = input.bodyweight
-            if (input.waist != null) row.waist = input.waist
-            if (input.chest != null) row.chest = input.chest
-            if (input.arm != null) row.arm = input.arm
-            if (input.thigh != null) row.thigh = input.thigh
-            if (input.notes != null) row.notes = input.notes.takeIf { it.isNotEmpty() } ?: ""
-            row.updatedAt = System.currentTimeMillis()
-            bodyBox.put(row)
-            row
+            input.bodyweight?.let {
+                require(isCanonicalAthleteBodyweightKg(it)) { "bodyweight must be finite and in (0, 1000] kg" }
+            }
+            store.callInTx {
+                val row = bodyBox.query(BodyMeasurementEntity_.uid.equal(slug)).build().use { it.findFirst() }
+                    ?: error("Body measurement not found: $slug")
+                input.measuredAt?.let { row.measuredAt = it }
+                // JS updates nullable values when property is present. Kotlin input cannot represent undefined separately;
+                // call clearBodyWeight/explicit nullable variants if that distinction is needed during integration.
+                if (input.bodyweight != null) row.bodyweight = input.bodyweight
+                if (input.waist != null) row.waist = input.waist
+                if (input.chest != null) row.chest = input.chest
+                if (input.arm != null) row.arm = input.arm
+                if (input.thigh != null) row.thigh = input.thigh
+                if (input.notes != null) row.notes = input.notes.takeIf { it.isNotEmpty() } ?: ""
+                row.updatedAt = System.currentTimeMillis()
+                bodyBox.put(row)
+                if (row.bodyweight != null) {
+                    syncCurrentAthleteBodyweightFromHistoryInTransaction(store, clearWhenNoHistory = true, nowMs = row.updatedAt)
+                }
+                row
+            }
         }
 
     suspend fun deleteBodyMeasurement(slug: String) = withContext(Dispatchers.IO) {
-        val row = bodyBox.query(BodyMeasurementEntity_.uid.equal(slug)).build().use { it.findFirst() } ?: return@withContext
-        bodyBox.remove(row)
-    }
-
-    suspend fun getLatestBodyweight(): Double? = withContext(Dispatchers.IO) {
-        bodyBox.query().orderDesc(BodyMeasurementEntity_.measuredAt).build().use { query ->
-            query.find().firstOrNull { (it.bodyweight ?: 0.0) > 0.0 }?.bodyweight
+        store.runInTx {
+            val row = bodyBox.query(BodyMeasurementEntity_.uid.equal(slug)).build().use { it.findFirst() }
+                ?: return@runInTx
+            bodyBox.remove(row)
+            if (row.bodyweight != null) {
+                syncCurrentAthleteBodyweightFromHistoryInTransaction(
+                    store,
+                    clearWhenNoHistory = true,
+                    nowMs = System.currentTimeMillis(),
+                )
+            }
         }
     }
+
+    suspend fun getCurrentBodyweightKg(): Double? = withContext(Dispatchers.IO) {
+        store.callInReadTx { currentAthleteBodyweightKg(store) }
+    }
+
+    @Deprecated("Use getCurrentBodyweightKg; values are canonical kg")
+    suspend fun getLatestBodyweight(): Double? = getCurrentBodyweightKg()
 
     /** Returns the date of the latest body weight entry as a formatted string (e.g. "May 3"). */
     suspend fun getLatestBodyweightDate(): String? = withContext(Dispatchers.IO) {

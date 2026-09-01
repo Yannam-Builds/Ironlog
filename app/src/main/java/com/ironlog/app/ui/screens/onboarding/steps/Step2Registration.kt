@@ -1,11 +1,14 @@
 package com.ironlog.app.ui.screens.onboarding.steps
 
+import com.ironlog.app.ui.theme.appGapDp
+import com.ironlog.app.ui.theme.appPadding
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
+import com.ironlog.app.ui.theme.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -34,7 +37,7 @@ fun Step2Registration(
             .fillMaxSize()
             .background(OnboardingConfig.bgDark)
             .imePadding()
-            .padding(horizontal = 24.dp, vertical = 24.dp),
+            .appPadding(horizontal = 24.dp, vertical = 24.dp),
         verticalArrangement = Arrangement.SpaceBetween,
     ) {
         Column(
@@ -46,7 +49,7 @@ fun Step2Registration(
                 body = "This stays on your device and appears on your training summaries. A nickname works perfectly.",
             )
 
-            Spacer(Modifier.height(36.dp))
+            Spacer(Modifier.height(appGapDp(36.dp)))
 
             OutlinedTextField(
                 value         = userName,
@@ -69,7 +72,7 @@ fun Step2Registration(
                     .fillMaxWidth(),
                 shape = RoundedCornerShape(18.dp),
             )
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(appGapDp(14.dp)))
             Text("You can change this later in Settings.", color = OnboardingConfig.textFaint, fontSize = 12.sp)
         }
 
@@ -78,7 +81,7 @@ fun Step2Registration(
                 text = "Profile setup unlocks your personal Iron Ledger",
                 modifier = Modifier.fillMaxWidth(),
             )
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(appGapDp(14.dp)))
             GlowButton(
                 text    = if (userName.isBlank()) "Enter a name to continue" else "Continue as ${userName.trim()}",
                 onClick = onNext,

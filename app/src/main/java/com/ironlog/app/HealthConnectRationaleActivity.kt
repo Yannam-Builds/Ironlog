@@ -1,19 +1,25 @@
 package com.ironlog.app
 
 import android.app.Activity
-import android.content.Intent
 import android.graphics.Color
-import android.net.Uri
 import android.os.Bundle
 import android.view.Gravity
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
+import com.ironlog.app.ui.theme.TypographyRuntime
+import com.ironlog.app.ui.theme.resourceId
 
 class HealthConnectRationaleActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        val typography = TypographyRuntime.store(this).selection.value
+        fun TextView.applyAppTypography(weight: Int) {
+            typeface = resources.getFont(typography.font.resourceId())
+            fontVariationSettings = "'wght' ${typography.weightFor(weight)}"
+        }
 
         val density = resources.displayMetrics.density
         fun dp(value: Int): Int = (value * density).toInt()
@@ -30,35 +36,29 @@ class HealthConnectRationaleActivity : Activity() {
         }
 
         val title = TextView(this).apply {
-            text = "Ironlog + Health Connect"
+            text = getString(R.string.health_connect_rationale_title)
             setTextColor(Color.WHITE)
             textSize = 28f
-            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            applyAppTypography(700)
         }
 
         val body = TextView(this).apply {
-            text = "Ironlog uses Health Connect only to improve recovery, readiness, body-weight sync, and workout history sync. Your data stays under Android Health Connect permission controls, and you can revoke access at any time."
+            text = getString(R.string.health_connect_rationale_body)
             setTextColor(Color.rgb(190, 190, 190))
             textSize = 17f
+            applyAppTypography(400)
             setLineSpacing(dp(4).toFloat(), 1f)
             setPadding(0, dp(18), 0, dp(26))
         }
 
-        val privacy = Button(this).apply {
-            text = "Open Privacy Policy"
-            setOnClickListener {
-                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://ironlogpro.app/privacy")))
-            }
-        }
-
         val done = Button(this).apply {
-            text = "Done"
+            text = getString(R.string.action_done)
+            applyAppTypography(500)
             setOnClickListener { finish() }
         }
 
         root.addView(title)
         root.addView(body)
-        root.addView(privacy)
         root.addView(done)
         setContentView(root)
     }

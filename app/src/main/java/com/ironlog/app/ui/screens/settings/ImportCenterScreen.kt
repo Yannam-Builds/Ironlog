@@ -1,5 +1,7 @@
 ﻿package com.ironlog.app.ui.screens.settings
 
+import com.ironlog.app.ui.theme.appPadding
+import com.ironlog.app.ui.theme.appSpacedBy
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -22,7 +24,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Text
+import com.ironlog.app.ui.theme.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -90,7 +92,7 @@ fun ImportCenterScreen(
     LazyColumn(
         modifier = Modifier.fillMaxSize().background(c.bg).statusBarsPadding(),
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 80.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+        verticalArrangement = com.ironlog.app.ui.theme.appCardSpacedBy(14.dp),
     ) {
         item { ScreenHeader(title = "IMPORT", onBack = onBack) }
 
@@ -105,7 +107,7 @@ fun ImportCenterScreen(
                 fontWeight = FontWeight(IronLogType.eyebrow.fontWeight), letterSpacing = IronLogType.eyebrow.letterSpacing.sp)
         }
         item {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(verticalArrangement = appSpacedBy(8.dp)) {
                 IMPORT_SOURCES.forEach { (id, label, _) ->
                     val sel = selected == id
                     Row(
@@ -141,7 +143,7 @@ fun ImportCenterScreen(
         preview?.let { pv ->
             item {
                 Card(colors = CardDefaults.cardColors(containerColor = c.card), border = BorderStroke(1.dp, c.cardBorder)) {
-                    Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Column(Modifier.fillMaxWidth().appPadding(14.dp), verticalArrangement = appSpacedBy(6.dp)) {
                         Text("Preview", color = c.text, fontSize = IronLogType.section.fontSize.sp, fontWeight = FontWeight.Bold)
                         Text("${pv.validRows} rows ready to import", color = c.subtext)
                         if (pv.domainCounts.isNotEmpty())
@@ -165,7 +167,16 @@ fun ImportCenterScreen(
         if (status.isNotBlank()) item { Text(status, color = c.accent) }
     }
 
-    if (showConfirm) {
+    if (showConfirm && selected == "ironlog_json") {
+        BackupRestoreDialog(pickedText, importExportRepo, onDismiss = { showConfirm = false }) { result ->
+            showConfirm = false
+            status = "Restored ${result.workouts} workouts and ${result.sets} sets." +
+                if (result.recoverySnapshot != null) " Pre-restore snapshot saved in Backup Center." else ""
+            preview = null
+            pickedText = ""
+            onRestoreComplete()
+        }
+    } else if (showConfirm) {
         AlertDialog(
             onDismissRequest = { showConfirm = false },
             title = { Text(if (selected == "ironlog_json") "Restore backup?" else "Import data?") },
@@ -186,7 +197,7 @@ fun ImportCenterScreen(
                     val text = pickedText
                     val src = selected
                     scope.launch(Dispatchers.IO) {
-                        val replaceMode = src == "ironlog_json"
+                        val replaceMode = false
                         val res = runCatching { importText(text, repo, importExportRepo, pv, src, replaceMode) }
                         withContext(Dispatchers.Main) {
                             status = res.fold(
