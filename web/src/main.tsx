@@ -12,6 +12,27 @@ import { initializeTypography } from "./ui/typography";
 initializeTypography();
 import { initializeSpacing } from "./ui/spacing";
 initializeSpacing();
+function Splash() {
+  const base = import.meta.env.BASE_URL;
+  return (
+    <main className="native-splash" aria-label="IronLog is opening">
+      <div className="native-splash-lockup">
+        <div className="native-splash-logo" aria-label="IRONLOG">
+          <img className="native-splash-iron" src={`${base}assets/logo_iron.png`} alt="" />
+          <span
+            className="native-splash-log"
+            aria-hidden="true"
+            style={{
+              maskImage: `url(${base}assets/logo_log.png)`,
+              WebkitMaskImage: `url(${base}assets/logo_log.png)`,
+            }}
+          />
+        </div>
+        <div className="native-splash-dots" aria-hidden="true"><i /><i /><i /></div>
+      </div>
+    </main>
+  );
+}
 class Boundary extends Component<{ children: ReactNode }, { error: string }> {
   state = { error: "" };
   static getDerivedStateFromError(error: unknown) {
@@ -32,15 +53,15 @@ class Boundary extends Component<{ children: ReactNode }, { error: string }> {
 }
 applyTheme(currentTheme());
 const root = createRoot(document.getElementById("root")!);
-root.render(
-  <main className="app-shell">
-    <h1>IronLog</h1>
-    <p>Opening your local training log…</p>
-  </main>,
-);
+let showSplash = true;
+try { showSplash = sessionStorage.getItem("ironlog-splash-seen") !== "1"; } catch {}
+const splashStarted = performance.now();
+root.render(showSplash ? <Splash /> : (
+  <main className="app-shell"><h1>IronLog</h1><p>Opening your local training log…</p></main>
+));
 async function start() {
   const catalog = await loadCatalog();
-  root.render(
+  if (!showSplash) root.render(
     <main className="app-shell">
       <h1>IronLog</h1>
       <p>Preparing local storage…</p>
@@ -48,13 +69,18 @@ async function start() {
   );
   await bootstrap(catalog);
   await saveProfile({ theme: currentTheme() });
-  root.render(
+  if (!showSplash) root.render(
     <main className="app-shell">
       <h1>IronLog</h1>
       <p>Updating your training snapshot…</p>
     </main>,
   );
   await reconcileBadges();
+  if (showSplash) {
+    const remaining = Math.max(0, 1550 - (performance.now() - splashStarted));
+    if (remaining) await new Promise((resolve) => window.setTimeout(resolve, remaining));
+    try { sessionStorage.setItem("ironlog-splash-seen", "1"); } catch {}
+  }
   root.render(
     <Boundary>
       <App />

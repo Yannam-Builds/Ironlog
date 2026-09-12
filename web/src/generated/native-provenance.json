@@ -1,5 +1,5 @@
 {
-  "revision": "b5a9806b9d4f6982c0a0680df48db25b1fcab53d",
+  "revision": "3eac6d447ca97b05275ed3476d526e9c7ce2172d",
   "reference": "Native working tree (file hashes are authoritative)",
   "files": [
     {
@@ -289,6 +289,14 @@
     {
       "path": "app/src/main/res/drawable-nodpi/recovery_circuit_emblem.png",
       "sha256": "900ce192db3f6c91d5a8c0e58c5219bbf834256c5cfe07ea192a7ab75f2aa969"
+    },
+    {
+      "path": "app/src/main/res/drawable/logo_iron.png",
+      "sha256": "036004b05f6558647364f77796374de94323202cfb68782be390c8e96c72274d"
+    },
+    {
+      "path": "app/src/main/res/drawable/logo_log.png",
+      "sha256": "90c4f98dcf8e4d837542146d7e63403bc7c5cc360860a73948d0f04f46c80852"
     },
     {
       "path": "app/src/main/res/font/assistant_variable.ttf",

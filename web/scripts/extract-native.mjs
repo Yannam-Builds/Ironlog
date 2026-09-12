@@ -190,6 +190,8 @@ function extract(source) {
   );
   const paths = [
     ...artwork.map((n) => art + n),
+    prefix + "res/drawable/logo_iron.png",
+    prefix + "res/drawable/logo_log.png",
     ...fonts.map((n) => prefix + "res/font/" + n),
   ];
   for (const path of paths) {
@@ -213,7 +215,7 @@ function extract(source) {
   writeFileSync(resolve(root, "public/assets/ironlog-logo.svg"), logo);
   output("src/generated/native-provenance.json", manifest);
   console.log(
-    `Extracted ${Object.keys(themes).length} themes, ${templates.length} templates, ${exercises.length} exercises, ${artwork.length} artwork files and ${fonts.length} native fonts. No user data read.`,
+    `Extracted ${Object.keys(themes).length} themes, ${templates.length} templates, ${exercises.length} exercises, ${artwork.length + 2} artwork files and ${fonts.length} native fonts. No user data read.`,
   );
 }
 if (

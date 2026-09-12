@@ -15,19 +15,25 @@ describe("native extraction contracts", () => {
     const nativeArt = readdirSync(resolve("../app/src/main/res/drawable-nodpi"))
       .filter((name) => name.endsWith(".png"))
       .sort();
+    const expectedArt = [...nativeArt, "logo_iron.png", "logo_log.png"].sort();
     const webArt = [
       ...readdirSync(resolve("public/assets")).filter((name) =>
         name.endsWith(".png") && !name.startsWith("icon-"),
       ),
       ...readdirSync(resolve("public/assets/badges")),
     ].sort();
-    expect(webArt).toEqual(nativeArt);
+    expect(webArt).toEqual(expectedArt);
     for (const name of nativeArt) {
       const webPath = name.startsWith("ic_badge_")
         ? resolve("public/assets/badges", name)
         : resolve("public/assets", name);
       expect(hash(webPath)).toBe(
         hash(resolve("../app/src/main/res/drawable-nodpi", name)),
+      );
+    }
+    for (const name of ["logo_iron.png", "logo_log.png"]) {
+      expect(hash(resolve("public/assets", name))).toBe(
+        hash(resolve("../app/src/main/res/drawable", name)),
       );
     }
     const nativeFonts = readdirSync(resolve("../app/src/main/res/font"))
