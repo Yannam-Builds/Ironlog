@@ -184,7 +184,7 @@ test("cached app resumes and finishes with its HTTP origin stopped", async ({
       .getByRole("button", { name: "Save completed workout", exact: true })
       .click();
     await expect(
-      resumed.getByRole("heading", { name: "Training log" }),
+      resumed.getByRole("heading", { name: "History" }),
     ).toBeVisible();
     await resumed.getByRole("button", { name: /Freestyle workout/ }).click();
     await expect(resumed.locator(".set-row")).toHaveCount(2);
