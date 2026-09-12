@@ -222,7 +222,7 @@ test("cached offline startup resumes pending warmups and saves with its origin u
     .getByRole("button", { name: "Save completed workout", exact: true })
     .click();
   await expect(
-    resumed.getByRole("heading", { name: "Training log" }),
+    resumed.getByRole("heading", { name: "History", exact: true }),
   ).toBeVisible();
   await resumed.getByRole("button", { name: /Freestyle workout/ }).click();
   await expect(resumed.locator(".set-row")).toHaveCount(2);
@@ -279,7 +279,7 @@ test("two tabs share one active session and retain writes, deletion, and complet
     .getByRole("button", { name: "Save completed workout", exact: true })
     .click();
   await expect(
-    second.getByRole("heading", { name: "Training log" }),
+    second.getByRole("heading", { name: "History", exact: true }),
   ).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "No active workout" }),

@@ -9,6 +9,7 @@ import type {
 import { isoWeekKey, localDateKey, previousDay } from "./dates";
 import { calculateOnboardingBaseline } from "./onboarding-baseline";
 import muscles from "../data/native-muscles.json";
+import { isTimed, isCardio, validWorkingSet, estimatedOneRm, externalLoadVolume, trackingMode, cardioSeconds } from "./tracking";
 
 // Ported from CreditedProof.kt, IronLedgerEngine.kt, GamificationSummary.kt,
 // RecoveryReadinessEngine.kt and MuscleContributionEngine.kt. No biometric inputs on web.
@@ -21,22 +22,8 @@ export const workoutDurationSeconds = (w: Workout) =>
   w.durationSeconds ??
   Math.max(0, ((w.completedAt ?? w.startedAt) - w.startedAt) / 1000);
 const duration = workoutDurationSeconds;
-const isCardio = (e: SessionExercise) =>
-  [
-    "cardio",
-    "run",
-    "treadmill",
-    "bike",
-    "cycle",
-    "rower",
-    "swim",
-    "elliptical",
-    "conditioning",
-  ].some((x) => `${e.name} ${e.muscle}`.toLowerCase().includes(x));
-const nativeReps = (e: SessionExercise, s: LoggedSet) =>
-  e.tracking.startsWith("duration") ? s.durationSeconds : s.reps;
-export const isWorkingSet = (e: SessionExercise, s: LoggedSet) =>
-  s.kind !== "warmup" && (s.weightKg > 0 || nativeReps(e, s) > 0);
+const nativeReps = (e: SessionExercise, s: LoggedSet) => isTimed(e) ? s.durationSeconds : s.reps;
+export const isWorkingSet = validWorkingSet;
 const hardSets = (w: Workout) =>
   sum(
     w.exercises.map(
@@ -50,7 +37,7 @@ export function creditedProof(w: Workout, now = Date.now()) {
     w.exercises
       .filter(isCardio)
       .map(
-        (e) => sum(e.loggedSets.map((s) => Math.max(0, nativeReps(e, s)))) / 60,
+        (e) => sum(e.loggedSets.map((s) => cardioSeconds(e, s))) / 60,
       ),
   );
   return hard >= 8 || (hard >= 3 && duration(w) >= 1200) || cardio >= 10;
@@ -110,11 +97,26 @@ function regionContribution(e: SessionExercise): Record<string, number> {
       Record<string, number>
     >;
   const anchor = anchors[e.name.toLowerCase().replace(/[^a-z0-9]+/g, "")];
+  const stored: Record<string, number> = {};
+  const fineNames = Object.keys(muscles.FINE_MUSCLE_TO_REGION);
+  for (const [raw, fraction] of Object.entries(e.muscleContributions ?? {})) {
+    if (!Number.isFinite(fraction) || fraction <= 0) continue;
+    const name = raw.trim().toLowerCase();
+    const fine = fineNames.find(key => key.toLowerCase() === name);
+    if (fine) stored[fine] = (stored[fine] ?? 0) + fraction;
+    else for (const [key, share] of Object.entries(library[name] ?? {}))
+      stored[key] = (stored[key] ?? 0) + fraction * share;
+  }
+  const hints: Record<string, number> = {};
+  for (const raw of [...(e.primaryMuscles ?? []), e.muscle])
+    for (const [key, share] of Object.entries(library[raw.trim().toLowerCase()] ?? {}))
+      hints[key] = (hints[key] ?? 0) + share;
   let fine: Record<string, number>;
-  if (anchor) fine = normalize(anchor);
+  if (Object.keys(stored).length) fine = normalize(stored);
+  else if (anchor) fine = normalize(anchor);
   else {
     const t = normalize(templates[detectFamily(e.name)] ?? {}),
-      l = normalize(library[e.muscle.toLowerCase().trim()] ?? {});
+      l = normalize(hints);
     if (Object.keys(t).length && Object.keys(l).length) {
       const merged: Record<string, number> = {};
       for (const [k, v] of Object.entries(t)) merged[k] = v * 0.72;
@@ -129,7 +131,7 @@ function regionContribution(e: SessionExercise): Record<string, number> {
     if (r) out[r] = (out[r] ?? 0) + v;
   }
   if (!Object.keys(out).length) {
-    const m = e.muscle.toLowerCase();
+    const m = (e.muscle || e.primaryMuscles?.[0] || '').trim().toLowerCase();
     const r =
       m === "chest"
         ? "Push"
@@ -143,13 +145,13 @@ function regionContribution(e: SessionExercise): Record<string, number> {
               ? "Arms"
               : ["shoulders", "delts"].includes(m)
                 ? "Shoulders"
-                : "Core";
-    out[r] = 1;
+                : ["core", "abs", "abdominals", "obliques"].includes(m) ? "Core" : "";
+    if (r) out[r] = 1;
   }
   return out;
 }
 function exerciseFactor(e: SessionExercise) {
-  const text = `${e.name} ${e.equipment}`.toLowerCase();
+  const text = `${e.name} ${e.category ?? ''} ${e.equipment}`.toLowerCase();
   const lower = [
     "squat",
     "deadlift",
@@ -179,8 +181,9 @@ function exerciseFactor(e: SessionExercise) {
           ? 0.9
           : 1;
 }
+const isFailure = (s: LoggedSet) => s.kind === "failure" || s.toFailure === true || s.rir === 0 || s.rpe === 10;
 function setFactor(e: SessionExercise, s: LoggedSet) {
-  const rir = s.rir ?? (s.rpe === undefined ? undefined : 10 - s.rpe);
+  const rir = isFailure(s) ? 0 : s.rir ?? (s.rpe === undefined ? undefined : 10 - s.rpe);
   const effort =
     rir === undefined
       ? 0.9
@@ -194,67 +197,43 @@ function setFactor(e: SessionExercise, s: LoggedSet) {
               ? 0.95
               : 0.8;
   const type =
-    s.kind === "failure"
-      ? 1.18
-      : s.kind === "drop"
+    s.kind === "drop"
         ? 1.14
         : s.kind === "amrap"
           ? 1.1
           : 1;
-  return clamp(effort * type * (nativeReps(e, s) >= 12 ? 1.05 : 1), 0.65, 1.55);
+  return clamp(effort * type * (!isTimed(e) && s.reps >= 12 ? 1.05 : 1), 0.65, 1.55);
 }
 export function readinessByRegion(
   history: Workout[],
   painFlags: string[] = [],
   now = Date.now(),
 ): Record<string, number> {
-  const fatigue: Record<string, number> = {
-    Push: 0,
-    Pull: 0,
-    Legs: 0,
-    Core: 0,
-    Arms: 0,
-    Shoulders: 0,
-  };
+  const fatigue: Record<string, number> = {};
   for (const w of history) {
-    if (w.status !== "completed" || when(w) > now + 300000) continue;
+    if (w.status !== "completed" || when(w) > now) continue;
     const hours = Math.max(0, now - when(w)) / 3600000;
     const dose: Record<string, number> = {};
-    let failure = false,
-      lower = false;
+    const failureRegions = new Set<string>(), lowerRegions = new Set<string>();
     for (const e of w.exercises) {
-      const sets = e.loggedSets.filter((s) => s.kind !== "warmup");
+      const sets = e.loggedSets.filter((s) => isWorkingSet(e, s));
       if (!sets.length) continue;
-      const fold = regionContribution(e),
-        ef = exerciseFactor(e);
-      if (ef > 1.08 && "Legs" in fold) lower = true;
+      const fold = regionContribution(e), ef = exerciseFactor(e);
+      if (ef > 1.08 && "Legs" in fold) Object.keys(fold).forEach(r => lowerRegions.add(r));
       for (const s of sets) {
-        if (
-          s.kind === "failure" ||
-          (s.rir !== undefined && s.rir <= 0) ||
-          (s.rpe !== undefined && s.rpe >= 10)
-        )
-          failure = true;
+        if (isFailure(s)) Object.keys(fold).forEach(r => failureRegions.add(r));
         for (const [r, f] of Object.entries(fold))
           dose[r] = (dose[r] ?? 0) + f * setFactor(e, s) * ef;
       }
     }
-    const half = clamp(
-      18 *
-        (1 + (failure ? 0.28 : 0)) *
-        (1 + (lower ? 0.12 : 0)) *
-        (1 + clamp(sum(Object.values(dose)) / 24, 0, 0.3)),
-      16,
-      36,
-    );
-    const remaining =
-      0.35 * Math.exp((-Math.LN2 * hours) / 8) +
-      0.65 * Math.exp((-Math.LN2 * hours) / half);
     for (const [r, d] of Object.entries(dose)) {
+      const half = clamp(18 * (failureRegions.has(r) ? 1.28 : 1) * (lowerRegions.has(r) ? 1.12 : 1) * (1 + clamp(d / 24, 0, 0.3)), 16, 36);
+      const remaining = 0.35 * Math.exp((-Math.LN2 * hours) / 8) + 0.65 * Math.exp((-Math.LN2 * hours) / half);
       const deficit = (1 - Math.exp(-d / 3.5)) * remaining;
       fatigue[r] = 1 - (1 - (fatigue[r] ?? 0)) * (1 - deficit);
     }
   }
+  for (const region of painFlags) if (["Push", "Pull", "Legs", "Core", "Arms", "Shoulders"].includes(region)) fatigue[region] = 1;
   return Object.fromEntries(
     Object.entries(fatigue).map(([r, f]) => [
       r,
@@ -332,9 +311,7 @@ export function deriveSnapshot(snapshot: AppSnapshot, now = Date.now()) {
       const key = e.exerciseId || e.name.toLowerCase();
       for (const s of e.loggedSets.filter((s) => isWorkingSet(e, s))) {
         const perf =
-          isCardio(e) || s.weightKg <= 0
-            ? nativeReps(e, s)
-            : s.weightKg * (1 + nativeReps(e, s) / 30);
+          isTimed(e) ? s.durationSeconds : trackingMode(e) === "assisted_bodyweight" ? s.reps / (1 + s.weightKg) : (estimatedOneRm(e, s) ?? s.reps);
         sessionBest[key] = Math.max(sessionBest[key] ?? 0, perf);
       }
     }
@@ -354,10 +331,9 @@ export function deriveSnapshot(snapshot: AppSnapshot, now = Date.now()) {
   for (const w of history)
     for (const e of w.exercises)
       for (const s of e.loggedSets) {
-        if (s.kind === "warmup" || e.tracking !== "weight_reps") continue;
-        volumeKg += s.weightKg * s.reps;
-        if (s.weightKg <= 0 || s.reps <= 0) continue;
-        const one = s.weightKg * (1 + s.reps / 30);
+        volumeKg += externalLoadVolume(e, s);
+        const one = estimatedOneRm(e, s);
+        if (one === undefined) continue;
         const key = e.exerciseId || e.name.toLowerCase();
         if (!prs[key] || one > prs[key].oneRmKg)
           prs[key] = {
@@ -396,16 +372,16 @@ export function deriveSnapshot(snapshot: AppSnapshot, now = Date.now()) {
       0,
       ...working
         .filter(
-          ({ e, s }) => !isCardio(e) && s.weightKg > 0 && nativeReps(e, s) > 0,
+          ({ e, s }) => estimatedOneRm(e, s) !== undefined,
         )
-        .map(({ e, s }) => s.weightKg * (1 + nativeReps(e, s) / 30)),
+        .map(({ e, s }) => estimatedOneRm(e, s) ?? 0),
     ),
     120,
   );
   const power = toStat(
     working.filter(
       ({ e, s }) =>
-        !isCardio(e) &&
+        estimatedOneRm(e, s) !== undefined &&
         s.weightKg > 0 &&
         nativeReps(e, s) >= 1 &&
         nativeReps(e, s) <= 5,
@@ -417,7 +393,7 @@ export function deriveSnapshot(snapshot: AppSnapshot, now = Date.now()) {
     sum(
       working
         .filter(({ e }) => isCardio(e))
-        .map(({ e, s }) => Math.max(0, nativeReps(e, s)) / 60),
+        .map(({ e, s }) => cardioSeconds(e, s) / 60),
     ) +
       qualified.filter((w) => duration(w) >= 45 * 60).length * 2,
     20,
@@ -520,7 +496,7 @@ export function deriveSnapshot(snapshot: AppSnapshot, now = Date.now()) {
   const rows = Object.entries(recovery).sort((a, b) => a[1] - b[1]);
   let readiness = Math.round(
     clamp(
-      0.75 * rows[0][1] + (0.25 * sum(rows.slice(0, 3).map((x) => x[1]))) / 3,
+      0.75 * (rows[0]?.[1] ?? 0) + (0.25 * sum(rows.slice(0, 3).map((x) => x[1]))) / Math.max(1, Math.min(3, rows.length)),
       1,
       99,
     ),
@@ -540,6 +516,7 @@ export function deriveSnapshot(snapshot: AppSnapshot, now = Date.now()) {
         99,
       );
   }
+  if (!rows.length) readiness = 0;
   const durableUnlocked = new Set(
     Object.keys(snapshot.profile.badgeUnlocks).filter((id) => id !== "s_rank"),
   );
@@ -555,8 +532,7 @@ export function deriveSnapshot(snapshot: AppSnapshot, now = Date.now()) {
     qualified.flatMap((w) =>
       w.exercises.flatMap((e) =>
         e.loggedSets
-          .filter((s) => s.kind !== "warmup" && e.tracking === "weight_reps")
-          .map((s) => s.weightKg * s.reps),
+          .map((s) => externalLoadVolume(e, s)),
       ),
     ),
   );
@@ -602,7 +578,7 @@ export function deriveSnapshot(snapshot: AppSnapshot, now = Date.now()) {
     recovery,
     readiness,
     state:
-      readiness >= 85 ? "ready" : readiness >= 60 ? "recovering" : "fatigued",
+      !rows.length ? "unknown" : checkin?.painRegions.some(r => r in recovery) ? "pain flagged" : readiness >= 85 ? "ready" : readiness >= 60 ? "recovering" : "fatigued",
     limitingRegion: rows[0]?.[0],
     unlockedBadges: [...unlocked],
     durableUnlockedBadges: [...durableUnlocked],
@@ -615,6 +591,7 @@ export function plateCalculation(
   loadKg: number,
   barKg: number,
   platesKg: number[],
+  plateInventory?: { weightKg: number; quantity: number }[],
 ) {
   const platesPerSide: { weightKg: number; quantity: number }[] = [];
   if (!Number.isFinite(loadKg) || !Number.isFinite(barKg) || barKg < 0)
@@ -629,7 +606,45 @@ export function plateCalculation(
       achievable: barKg,
       remainder: loadKg - barKg,
     };
-  // The web profile lists denominations rather than finite quantities; available pairs are unlimited.
+  if (plateInventory !== undefined) {
+    const totals = new Map<number, number>();
+    for (const plate of plateInventory) {
+      if (!Number.isFinite(plate.weightKg) || plate.weightKg <= 0 ||
+          !Number.isSafeInteger(plate.quantity) || plate.quantity < 0)
+        throw Error("Invalid plate inventory");
+      const cents = Math.round(plate.weightKg * 100);
+      if (cents > 0) totals.set(cents, (totals.get(cents) ?? 0) + plate.quantity);
+    }
+    const target = Math.round(remaining * 100);
+    type Choice = { count: number; weight: number; quantity: number; previous?: Choice };
+    const reachable = new Map<number, Choice>([[0, { count: 0, weight: 0, quantity: 0 }]]);
+    // Binary bundles bound every denomination by its physical pair count.
+    for (const [weight, physicalCount] of [...totals].sort((a, b) => b[0] - a[0])) {
+      let pairs = Math.min(Math.floor(physicalCount / 2), Math.floor(target / weight));
+      for (let batch = 1; pairs > 0; batch *= 2) {
+        const quantity = Math.min(batch, pairs);
+        pairs -= quantity;
+        for (const [sum, previous] of [...reachable]) {
+          const next = sum + weight * quantity;
+          const count = previous.count + quantity;
+          if (next <= target && (!reachable.has(next) || reachable.get(next)!.count > count))
+            reachable.set(next, { count, weight, quantity, previous });
+        }
+      }
+    }
+    let best = 0;
+    for (const sum of reachable.keys()) if (sum > best) best = sum;
+    const used = new Map<number, number>();
+    for (let choice = reachable.get(best); choice?.previous; choice = choice.previous)
+      used.set(choice.weight, (used.get(choice.weight) ?? 0) + choice.quantity);
+    for (const [weight, quantity] of [...used].sort((a, b) => b[0] - a[0]))
+      platesPerSide.push({ weightKg: weight / 100, quantity });
+    const achievedWeightKg = Math.round((barKg + best / 50) * 100) / 100;
+    const remainderKg = Math.round((loadKg - achievedWeightKg) * 100) / 100;
+    return { isValid: Math.abs(remainderKg) <= 0.001, platesPerSide,
+      achievedWeightKg, remainderKg, achievable: achievedWeightKg, remainder: remainderKg };
+  }
+  // Legacy profiles have denominations only and retain unlimited pairs.
   for (const weightKg of [...new Set(platesKg)]
     .filter((p) => Number.isFinite(p) && p > 0)
     .sort((a, b) => b - a)) {
@@ -682,7 +697,7 @@ export function progressionSuggestion(
   exercise: SessionExercise,
   unit: "kg" | "lb" = "kg",
 ): { weightKg: number; reps: number } | null {
-  if (exercise.tracking.startsWith("duration")) return null;
+  if (isTimed(exercise) || trackingMode(exercise) === "assisted_bodyweight" || !["weight_reps", "bodyweight_reps", "bodyweight_plus_weight_reps"].includes(trackingMode(exercise))) return null;
   const sets = exercise.loggedSets.filter((s) => s.kind !== "warmup");
   if (!sets.length) return null;
   const top = sets.reduce((a, b) => (b.weightKg > a.weightKg ? b : a));

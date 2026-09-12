@@ -4,7 +4,7 @@ import type { AppSnapshot } from "./domain/types";
 import { deriveSnapshot } from "./domain/engine";
 import { AppProvider, navigate } from "./ui/context";
 import { applyTheme, currentTheme } from "./ui/theme";
-import { Button, Icon, IconButton, asset } from "./ui/components";
+import { Button, Icon, IconButton } from "./ui/components";
 import { Onboarding } from "./features/Onboarding";
 import { Home } from "./features/Home";
 import { Plans, PlanEditor } from "./features/Plans";
@@ -22,6 +22,16 @@ import { Settings } from "./features/Settings";
 import { Intelligence } from "./features/Intelligence";
 import { Research } from "./research";
 const tabs = ["Home", "Plans", "Log", "Stats", "Settings"];
+const detailTitles: Record<string, string> = {
+  workout: "ACTIVE WORKOUT",
+  recovery: "MUSCLE RECOVERY",
+  ledger: "IRON LEDGER",
+  body: "BODY TRACKER",
+  photos: "PROGRESS PHOTOS",
+  analytics: "VOLUME ANALYTICS",
+  intelligence: "ATHLETE PROFILE",
+  research: "RESEARCH",
+};
 const UpdateNotice = lazy(() =>
   import("./ui/UpdateNotice").then((m) => ({ default: m.UpdateNotice })),
 );
@@ -196,8 +206,8 @@ export function App() {
       ) : (
         <>
           <div className="app-shell">
-            <header className="app-header">
-              {detail ? (
+            {detail && (
+              <header className="app-header detail-header">
                 <IconButton
                   name="back"
                   label="Back"
@@ -211,18 +221,16 @@ export function App() {
                     )
                   }
                 />
-              ) : (
-                <img src={asset("ironlog-logo.svg")} alt="" />
-              )}
-              <a
-                href={import.meta.env.BASE_URL}
-                target="_top"
-                aria-label="IronLog website"
-              >
-                IRON<span>LOG</span>
-              </a>
-              <small>WEB</small>
-            </header>
+                <strong>
+                  {route.startsWith("plan/")
+                    ? "EDIT PLAN"
+                    : route.startsWith("history/")
+                      ? "WORKOUT"
+                      : detailTitles[route] ?? "IRONLOG"}
+                </strong>
+                <span aria-hidden="true" />
+              </header>
+            )}
             {active && route !== "workout" && (
               <button className="resume" onClick={() => navigate("workout")}>
                 <Icon name="log" />

@@ -1,13 +1,16 @@
 import { z } from "zod";
 const id = z.string().min(1).max(200);
 const number = z.number().finite().nonnegative();
-const tracking = z.enum([
-  "weight_reps",
-  "bodyweight_reps",
-  "duration",
-  "duration_distance",
-]);
+const tracking = z.string();
+const metadata = {
+  primaryMuscles: z.array(z.string()).optional(),
+  muscleContributions: z.record(z.string(), number).optional(),
+  category: z.string().optional(),
+  isBodyweight: z.boolean().optional(),
+  requiresExternalLoad: z.boolean().optional(),
+};
 export const exerciseSchema = z.object({
+  ...metadata,
   id,
   name: z.string().min(1),
   muscle: z.string(),
@@ -61,6 +64,7 @@ export const workoutSchema = z.object({
   imported: z.boolean().optional(),
   exercises: z.array(
     planned.extend({
+      ...metadata,
       tracking,
       muscle: z.string(),
       equipment: z.string(),
@@ -76,6 +80,7 @@ export const workoutSchema = z.object({
           kind: z.enum(["normal", "warmup", "failure", "drop", "amrap"]),
           rpe: z.number().min(0).max(10).optional(),
           rir: number.optional(),
+          toFailure: z.boolean().optional(),
           notes: z.string(),
           loggedAt: number,
         }),
@@ -134,7 +139,9 @@ export const profileSchema = z.object({
   restSeconds: number,
   barKg: number,
   platesKg: z.array(z.number().positive()),
+  plateInventory: z.array(z.object({ weightKg: z.number().finite().positive(), quantity: z.number().int().nonnegative() })).optional(),
   keepAwake: z.boolean(),
+  exerciseNextNotes: z.record(z.string().regex(/^exercise_next_note:.+$/), z.string().max(4000)).optional(),
   badgeUnlocks: z.record(z.string(), number),
   ledgerBaseline: onboardingLedgerBaselineSchema.optional(),
   recoveryWeeks: z.array(z.string()),
@@ -178,6 +185,7 @@ export const snapshotSchema = z.object({
       name: z.string(),
       barKg: number,
       platesKg: z.array(z.number().positive()),
+      plateInventory: z.array(z.object({ weightKg: z.number().finite().positive(), quantity: z.number().int().nonnegative() })).optional(),
     }),
   ),
 });

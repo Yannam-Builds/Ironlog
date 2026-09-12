@@ -212,7 +212,7 @@ test("Settings changes sync back to the website and survive workout navigation",
     .getByRole("button", { name: "Save completed workout", exact: true })
     .click();
   await expect(
-    app.getByRole("heading", { name: "Training log" }),
+    app.getByRole("heading", { name: "History", exact: true }),
   ).toBeVisible();
   await page
     .getByRole("link", { name: "Open app full-screen", exact: true })
@@ -262,11 +262,19 @@ test("spacing slider changes layout, persists, resets and retains touch targets 
     await expect(nav.locator("svg")).toHaveCSS("width", "22px");
     await page.setViewportSize({ width: 320, height: 800 });
     await page.addStyleTag({ content: "html { font-size: 200%; }" });
-    expect(
-      await page.evaluate(
-        () => document.documentElement.scrollWidth <= innerWidth,
-      ),
-    ).toBe(true);
+    const overflow = await page.evaluate(() => Array.from(document.querySelectorAll("*"))
+      .map((element) => {
+        const rect = element.getBoundingClientRect();
+        return {
+          tag: element.tagName.toLowerCase(),
+          className: typeof element.className === "string" ? element.className : "",
+          text: element.textContent?.trim().slice(0, 80) ?? "",
+          left: Math.round(rect.left),
+          right: Math.round(rect.right),
+        };
+      })
+      .filter((item) => item.right > innerWidth + 1 || item.left < -1));
+    expect(overflow).toEqual([]);
     expect((await slider.boundingBox())!.height).toBeGreaterThanOrEqual(48);
     await slider.screenshot({
       path: `output/playwright/${info.project.name}-spacing-${value}.png`,

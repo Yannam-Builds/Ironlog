@@ -11,6 +11,7 @@ import {
   Field,
   Icon,
   IconButton,
+  Progress,
   Sheet,
   Empty,
 } from "../ui/components";
@@ -27,35 +28,51 @@ import {
 import { SetEditor } from "./Workout";
 import type { LoggedSet, Photo } from "../domain/types";
 import { localDateKey } from "../domain/dates";
-import { workoutDurationSeconds } from "../domain/engine";
+import { setDescription, externalLoadVolume } from "../domain/tracking";
+import { creditedProof, isWorkingSet, workoutDurationSeconds } from "../domain/engine";
 export function History() {
   const { data } = useApp();
   const [date, setDate] = useState("");
+  const [query, setQuery] = useState("");
   const workouts = data.workouts.filter(
     (w) =>
       w.status === "completed" &&
-      (!date || localDateKey(w.completedAt!) === date),
+      (!date || localDateKey(w.completedAt!) === date) &&
+      (!query || `${w.name} ${w.exercises.map((exercise) => exercise.name).join(" ")}`.toLowerCase().includes(query.toLowerCase())),
   );
   return (
     <>
-      <h1>Training log</h1>
-      <Field label="Calendar date">
-        <input
-          type="date"
-          value={date}
-          onChange={(e) => setDate(e.target.value)}
-        />
-      </Field>
+      <header className="native-screen-title log-title">
+        <span className="eyebrow">Workout log</span>
+        <h1>History</h1>
+        <p>{workouts.length} session{workouts.length === 1 ? "" : "s"}</p>
+        <button className="text-button log-past" onClick={() => navigate("home")}>Log past workout</button>
+      </header>
+      <div className="history-search">
+        <label>
+          <Icon name="search" />
+          <input aria-label="Search workouts or exercises" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search workouts or exercises…" />
+        </label>
+        <label className="history-filter" aria-label="Filter by date">
+          <Icon name="filter" />
+          <input type="date" value={date} onChange={(event) => setDate(event.target.value)} />
+        </label>
+      </div>
       {date && (
         <Button variant="ghost" onClick={() => setDate("")}>
           Show all workouts
         </Button>
       )}
+      <button className="list-row progress-photos-row" onClick={() => navigate("photos")}>
+        <Icon name="camera" /><strong>Progress photos</strong><Icon name="next" />
+      </button>
       {!workouts.length && (
-        <Empty title="Your work belongs here">
-          <p>Finish a workout to see your sets, notes, and progress.</p>
-          <Button onClick={() => navigate("home")}>Start from Home</Button>
-        </Empty>
+        <div className="native-empty-state history-empty">
+          <Icon name="log" size={42} />
+          <h2>No workouts yet</h2>
+          <p>Start your first session to see your history here.</p>
+          <Button onClick={() => navigate("home")}>Go to today</Button>
+        </div>
       )}
       {workouts.map((w) => (
         <button
@@ -126,9 +143,7 @@ export function HistoryDetail({ id }: { id: string }) {
               </span>
               <div>
                 <strong>
-                  {e.tracking.startsWith("duration")
-                    ? `${s.durationSeconds} seconds${s.distanceKm ? ` · ${s.distanceKm} km` : ""}`
-                    : `${e.tracking === "bodyweight_reps" ? "BW" : `${displayWeight(s.weightKg, data.profile.unit)} ${data.profile.unit}`} × ${s.reps}`}
+                  {setDescription(e, s, data.profile.unit, displayWeight)}
                 </strong>
                 {(s.rpe !== undefined || s.rir !== undefined) && (
                   <small>
@@ -168,6 +183,7 @@ export function HistoryDetail({ id }: { id: string }) {
       </Button>
       {editing && (
         <SetEditor
+          exercise={w.exercises.find(e => e.id === editing.exerciseId)!}
           set={editing.set}
           unit={data.profile.unit}
           effort={data.profile.effort}
@@ -249,42 +265,55 @@ export function HistoryDetail({ id }: { id: string }) {
 }
 export function Stats() {
   const { data, derived: d } = useApp();
+  const completed = data.workouts.filter((workout) => workout.status === "completed");
+  const totalSets = completed.reduce((total, workout) => total + workout.exercises.reduce(
+    (count, exercise) => count + exercise.loggedSets.filter((set) => isWorkingSet(exercise, set)).length,
+    0,
+  ), 0);
+  const averageMinutes = completed.length
+    ? Math.round(completed.slice(0, 10).reduce((total, workout) => total + workoutDurationSeconds(workout), 0) / Math.min(10, completed.length) / 60)
+    : 0;
+  const activeDays = new Set(completed.filter((workout) => creditedProof(workout)).map((workout) => localDateKey(workout.startedAt)));
+  const frequency = Array.from({ length: 14 }, (_, index) => {
+    const at = Date.now() - (13 - index) * 86400000;
+    return { at, active: activeDays.has(localDateKey(at)) };
+  });
   return (
     <>
-      <h1>Stats</h1>
-      <div className="stat-pair">
-        <div>
-          <span>Completed workouts</span>
-          <strong>
-            {data.workouts.filter((w) => w.status === "completed").length}
-          </strong>
-        </div>
-        <div>
-          <span>Working volume</span>
-          <strong>
-            {formatNumber(displayWeight(d.volumeKg, data.profile.unit))}
-            <small> {data.profile.unit}</small>
-          </strong>
-        </div>
+      <header className="native-screen-title stats-title">
+        <span className="eyebrow">Analytics</span>
+        <h1>Stats</h1>
+        <p>{completed.length} sessions · {d.streak}-day streak</p>
+      </header>
+      <div className="stats-destinations">
+        <button onClick={() => navigate("log")}><Icon name="calendar" /><strong>Calendar</strong></button>
+        <button onClick={() => navigate("analytics")}><Icon name="stats" /><strong>Volume</strong></button>
+        <button onClick={() => navigate("body")}><Icon name="body" /><strong>Body</strong></button>
       </div>
-      <div className="link-list">
-        {[
-          ["body", "Bodyweight & measurements"],
-          ["photos", "Progress photos"],
-          ["analytics", "Volume & exercise progress"],
-          ["ledger", "Iron Ledger"],
-          ["intelligence", "Training intelligence"],
-        ].map(([route, name]) => (
-          <button
-            className="list-row"
-            key={route}
-            onClick={() => navigate(route)}
-          >
-            <strong>{name}</strong>
-            <Icon name="next" />
-          </button>
-        ))}
+      <div className="stats-metrics">
+        <div><span>Sessions</span><strong>{completed.length}</strong></div>
+        <div><span>Streak</span><strong>{d.streak}</strong></div>
+        <div><span>Sets</span><strong>{totalSets}</strong></div>
+        <div><span>Avg Min</span><strong>{averageMinutes}</strong></div>
       </div>
+      <button className="status-window-card" onClick={() => navigate("ledger")}>
+        <span className="eyebrow">Status window</span>
+        <div><strong>{d.grade} grade - Level {d.level}</strong><b>Open</b></div>
+        <p>Ledger Initiate · {completed.length} logged sessions</p>
+        <Progress value={d.levelProgress * 100} label="Ledger level progress" />
+        <div><span>{d.xp} / {d.nextLevelXp} XP</span><b>{d.weeklyStreak}w streak</b></div>
+      </button>
+      <span className="eyebrow performance-label">Performance stats</span>
+      <div className="performance-tabs">
+        <button onClick={() => navigate("recovery")}>Recovery</button>
+        <button className="active" onClick={() => navigate("intelligence")}>✦ Coach</button>
+        <button onClick={() => navigate("analytics")}>Progress</button>
+      </div>
+      <section className="card frequency-card">
+        <h2>14-day frequency</h2>
+        <div className="frequency-bars">{frequency.map((day) => <i key={day.at} className={day.active ? "active" : ""} />)}</div>
+        <div className="frequency-labels">{frequency.map((day) => <span key={day.at}>{new Intl.DateTimeFormat(undefined, { weekday: "short" }).format(day.at).slice(0, 2)}</span>)}</div>
+      </section>
       <h2>Personal records</h2>
       <p className="muted">
         Estimated one-rep max from retained working sets. Warmups excluded.
@@ -330,7 +359,7 @@ export function Analytics() {
           name: e.name,
           volume: e.loggedSets
             .filter((s) => s.kind !== "warmup")
-            .reduce((n, s) => n + s.weightKg * s.reps, 0),
+            .reduce((n, s) => n + externalLoadVolume(e, s), 0),
           sets: e.loggedSets.filter((s) => s.kind !== "warmup").length,
         })),
     )

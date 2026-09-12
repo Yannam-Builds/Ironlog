@@ -12,6 +12,7 @@ import {
 import { localDateKey, parseHistoryDate } from "./dates";
 import { snapshotSchema } from "../data/schema";
 import { z } from "zod";
+import { isTimed, trackingMode } from "./tracking";
 type Row = Record<string, unknown>;
 const obj = (v: unknown): Row =>
   v !== null && typeof v === "object" && !Array.isArray(v) ? (v as Row) : {};
@@ -222,13 +223,18 @@ export function encodeAndroidBackup(snapshot: AppSnapshot): string {
     primary_muscle: e.muscle,
     equipment: e.equipment,
     is_custom: !!e.custom,
-    tracking_type:
-      e.tracking === "bodyweight_reps" ? "weight_reps" : e.tracking,
-    is_bodyweight: e.tracking === "bodyweight_reps",
-    requires_external_load: e.tracking === "weight_reps",
+    tracking_type: e.tracking || null,
+    category: e.category ?? "",
+    is_bodyweight: e.isBodyweight ?? ["bodyweight_reps", "bodyweight_plus_weight_reps", "assisted_bodyweight"].includes(e.tracking),
+    requires_external_load: e.requiresExternalLoad ?? e.tracking === "weight_reps",
     secondary_muscles_json: JSON.stringify(e.secondaryMuscles ?? []),
     ...stamp,
   }));
+  for (const e of snapshot.exercises) {
+    const contributions = e.muscleContributions ?? {};
+    for (const muscle of new Set([...(e.primaryMuscles ?? []), ...(e.secondaryMuscles ?? []), ...Object.keys(contributions)]))
+      data.exercise_muscles.push({ id: `${e.id}:${muscle}`, exercise_id: e.id, muscle, role: e.primaryMuscles?.includes(muscle) ? "primary" : "secondary", contribution_fraction: contributions[muscle] ?? 0, ...stamp });
+  }
   for (const p of snapshot.plans) {
     data.plans.push({
       id: p.id,
@@ -289,6 +295,7 @@ export function encodeAndroidBackup(snapshot: AppSnapshot): string {
         id: blockId,
         workout_id: w.id,
         exercise_id: e.exerciseId,
+        exercise_snapshot_json: JSON.stringify({version:1,name:e.name,primaryMuscle:e.muscle||null,primaryMuscles:e.primaryMuscles??[],secondaryMuscles:e.secondaryMuscles??[],muscleContributions:e.muscleContributions??{},equipment:e.equipment||null,category:e.category??null,trackingType:e.tracking||null,isBodyweight:e.isBodyweight??false,requiresExternalLoad:e.requiresExternalLoad??false}),
         order_index: ei,
         superset_group: e.supersetGroup,
         notes: e.notes,
@@ -300,15 +307,15 @@ export function encodeAndroidBackup(snapshot: AppSnapshot): string {
           workout_exercise_id: blockId,
           set_index: si + 1,
           weight:
-            e.tracking === "duration_distance" ? s.distanceKm : s.weightKg,
-          reps: e.tracking.startsWith("duration") ? s.durationSeconds : s.reps,
+            trackingMode(e) === "duration_distance" ? s.distanceKm : s.weightKg,
+          reps: isTimed(e) ? s.durationSeconds : s.reps,
           rpe: s.rpe ?? null,
           rir: s.rir ?? null,
           rest_seconds: e.restSeconds,
           is_warmup: s.kind === "warmup",
           is_dropset: s.kind === "drop",
           is_amrap: s.kind === "amrap",
-          to_failure: s.kind === "failure",
+          to_failure: s.toFailure || s.kind === "failure",
           notes: s.notes,
           completed_at: s.loggedAt,
           ...stamp,
@@ -334,6 +341,26 @@ export function encodeAndroidBackup(snapshot: AppSnapshot): string {
       ...stamp,
     },
   ];
+  data.app_settings = Object.entries(snapshot.profile.exerciseNextNotes ?? {}).map(([key, value]) => ({
+    id: key, key, value, value_type: "string", ...stamp,
+  }));
+  const finiteGyms = snapshot.gyms.filter(g => g.plateInventory !== undefined);
+  let activeGym = finiteGyms.find(g => g.barKg === snapshot.profile.barKg &&
+    JSON.stringify(g.plateInventory) === JSON.stringify(snapshot.profile.plateInventory));
+  if (!activeGym && snapshot.profile.plateInventory !== undefined) {
+    let id = 'web-current-setup';
+    while (snapshot.gyms.some(g => g.id === id)) id += '-current';
+    activeGym = { id, name: 'Current setup', barKg: snapshot.profile.barKg,
+      platesKg: snapshot.profile.platesKg, plateInventory: snapshot.profile.plateInventory };
+    finiteGyms.push(activeGym);
+  }
+  const nativeGyms = finiteGyms.map(g => ({
+    id: g.id, name: g.name, barWeightKg: g.barKg,
+    // Native quantities are per side; web quantities count physical plates.
+    plates: g.plateInventory!.map(p => ({ weightKg: p.weightKg, quantity: Math.floor(p.quantity / 2) })),
+  }));
+  data.app_settings.push({ id: "gym_profiles_json", key: "gym_profiles_json", value: JSON.stringify(nativeGyms), value_type: "json", ...stamp });
+  if (activeGym) data.app_settings.push({ id: "active_gym_profile_id", key: "active_gym_profile_id", value: activeGym.id, value_type: "string", ...stamp });
   data.gamification_profiles = [
     {
       offline_user_id: "local",
@@ -363,6 +390,8 @@ export function encodeAndroidBackup(snapshot: AppSnapshot): string {
       },
       warnings: [
         "Progress photo bytes are not included. Use a web ZIP backup to retain photos.",
+        ...(snapshot.gyms.some(g => g.plateInventory === undefined) ? ["Gym profiles with unlimited pairs are preserved only in the web extension; Android requires finite quantities."] : []),
+        ...(finiteGyms.some(g => g.plateInventory!.some(p => p.quantity % 2)) ? ["Unpaired spare plates remain in the web extension; Android receives complete pairs only."] : []),
       ],
     },
     null,
@@ -431,20 +460,19 @@ export function decodeAndroidBackup(raw: string): {
     )
       throw Error("Invalid native workout duration");
   }
+  const stringArray = (v: unknown): string[] => {
+    try { const x=typeof v === "string" ? JSON.parse(v) : v; return Array.isArray(x) ? x.filter((s): s is string => typeof s === "string") : []; } catch { return []; }
+  };
   const exercises: Exercise[] = table("exercises").map((e) => {
-    const t = str(e.tracking_type);
-    const tracking: Tracking =
-      bool(e.is_bodyweight) && !bool(e.requires_external_load)
-        ? "bodyweight_reps"
-        : t === "duration" || t === "duration_distance"
-          ? t
-          : "weight_reps";
+    const relations=table("exercise_muscles").filter(m=>m.exercise_id===e.id);
     return {
-      id: str(e.id) || uid(),
-      name: str(e.name) || "Unnamed exercise",
-      muscle: str(e.primary_muscle),
-      equipment: str(e.equipment),
-      tracking,
+      id: str(e.id) || uid(), name: str(e.name) || "Unnamed exercise",
+      muscle: str(e.primary_muscle), equipment: str(e.equipment),
+      tracking: str(e.tracking_type), category: str(e.category),
+      isBodyweight: bool(e.is_bodyweight), requiresExternalLoad:bool(e.requires_external_load),
+      primaryMuscles:relations.filter(m=>m.role==='primary').map(m=>str(m.muscle)),
+      secondaryMuscles: [...new Set([...stringArray(e.secondary_muscles_json), ...relations.filter(m=>m.role==='secondary').map(m=>str(m.muscle))])],
+      muscleContributions:Object.fromEntries(relations.filter(m=>num(m.contribution_fraction)>0).map(m=>[str(m.muscle),num(m.contribution_fraction)])),
       custom: bool(e.is_custom),
     };
   });
@@ -457,7 +485,7 @@ export function decodeAndroidBackup(raw: string): {
       name: `Unresolved exercise (${id})`,
       muscle: "",
       equipment: "",
-      tracking: "weight_reps" as const,
+      tracking: "",
     };
   };
   const byOrder = (a: Row, b: Row) => num(a.order_index) - num(b.order_index);
@@ -520,7 +548,14 @@ export function decodeAndroidBackup(raw: string): {
         .filter((e) => e.workout_id === w.id)
         .sort(byOrder)
         .map((e) => {
-          const exercise = resolve(str(e.exercise_id));
+          let exercise = resolve(str(e.exercise_id));
+          if (e.exercise_snapshot_json) {
+            try {
+              const h=obj(JSON.parse(str(e.exercise_snapshot_json)));
+              if(h.version===1 && str(h.name).trim()) exercise={...exercise,name:str(h.name),muscle:str(h.primaryMuscle),primaryMuscles:stringArray(h.primaryMuscles),secondaryMuscles:stringArray(h.secondaryMuscles),muscleContributions:Object.fromEntries(Object.entries(obj(h.muscleContributions)).filter(([,v])=>num(v)>0).map(([k,v])=>[k,num(v)])),equipment:str(h.equipment),category:str(h.category),tracking:str(h.trackingType),isBodyweight:bool(h.isBodyweight),requiresExternalLoad:bool(h.requiresExternalLoad)};
+              else result.warnings.push("Unsupported exercise snapshot; library metadata used. Keep original backup.");
+            } catch { result.warnings.push("Invalid exercise snapshot; library metadata used. Keep original backup."); }
+          }
           return {
             id: str(e.id) || uid(),
             exerciseId: exercise.id,
@@ -528,6 +563,7 @@ export function decodeAndroidBackup(raw: string): {
             muscle: exercise.muscle,
             equipment: exercise.equipment,
             tracking: exercise.tracking,
+            primaryMuscles:exercise.primaryMuscles,secondaryMuscles:exercise.secondaryMuscles,muscleContributions:exercise.muscleContributions,category:exercise.category,isBodyweight:exercise.isBodyweight,requiresExternalLoad:exercise.requiresExternalLoad,
             sets: 3,
             reps: "8-12",
             restSeconds: 90,
@@ -541,17 +577,17 @@ export function decodeAndroidBackup(raw: string): {
               .map((s) => ({
                 id: str(s.id) || uid(),
                 weightKg:
-                  exercise.tracking === "duration_distance"
+                  trackingMode(exercise) === "duration_distance"
                     ? 0
                     : Math.max(0, num(s.weight)),
-                reps: exercise.tracking.startsWith("duration")
+                reps: isTimed(exercise)
                   ? 0
                   : Math.max(0, num(s.reps)),
-                durationSeconds: exercise.tracking.startsWith("duration")
+                durationSeconds: isTimed(exercise)
                   ? Math.max(0, num(s.reps))
                   : 0,
                 distanceKm:
-                  exercise.tracking === "duration_distance"
+                  trackingMode(exercise) === "duration_distance"
                     ? Math.max(0, num(s.weight))
                     : 0,
                 kind: bool(s.is_warmup)
@@ -563,6 +599,7 @@ export function decodeAndroidBackup(raw: string): {
                       : bool(s.to_failure)
                         ? "failure"
                         : "normal",
+                toFailure: bool(s.to_failure),
                 notes: str(s.notes),
                 loggedAt: epoch(s.completed_at, completedAt ?? startedAt),
                 rpe: s.rpe == null ? undefined : num(s.rpe),
@@ -599,8 +636,36 @@ export function decodeAndroidBackup(raw: string): {
   } catch {
     result.warnings.push("Badge metadata could not be read.");
   }
+  const exerciseNextNotes: Record<string, string> = {};
+  const gymSetting = table("app_settings").find(s => s.key === "gym_profiles_json");
+  const nativeGyms = gymSetting ? parse(str(gymSetting.value)) : [];
+  if (!Array.isArray(nativeGyms)) throw Error("Invalid native gym profiles");
+  const gyms = snapshotSchema.shape.gyms.parse(nativeGyms.map(value => {
+    const gym = obj(value);
+    const plates = gym.plates ?? [];
+    if (!Array.isArray(plates)) throw Error("Invalid native plate inventory");
+    const plateInventory = plates.map(value => {
+      const p = obj(value);
+      if (typeof p.quantity !== "number" || !Number.isSafeInteger(p.quantity) || p.quantity < 0)
+        throw Error("Invalid native plate quantity");
+      return { weightKg: p.weightKg, quantity: p.quantity * 2 };
+    });
+    return { id: gym.id, name: gym.name, barKg: gym.barWeightKg,
+      platesKg: plateInventory.map(p => p.weightKg), plateInventory };
+  }));
+  const activeGymId = str(table("app_settings").find(s => s.key === "active_gym_profile_id")?.value);
+  const activeGym = gyms.find(g => g.id === activeGymId);
+  for (const setting of table("app_settings")) {
+    const key = str(setting.key);
+    if (!key.startsWith("exercise_next_note:") || !key.slice("exercise_next_note:".length).trim()) continue;
+    if (typeof setting.value !== "string" || setting.value.length > 4000)
+      throw Error("Invalid exercise setup reminder");
+    exerciseNextNotes[key] = setting.value.trim();
+  }
   const profile = {
     ...defaultProfile,
+    ...(activeGym ? { barKg: activeGym.barKg, platesKg: activeGym.platesKg, plateInventory: activeGym.plateInventory } : {}),
+    exerciseNextNotes,
     weightKg: num(calibration.bodyweight_kg, defaultProfile.weightKg),
     unit: calibration.weight_unit === "lb" ? ("lb" as const) : ("kg" as const),
     weeklyGoal: num(calibration.weekly_goal_days, 3),
@@ -616,15 +681,16 @@ export function decodeAndroidBackup(raw: string): {
       const corresponding = extended.find((w) => w.id === native.id);
       if (!corresponding)
         throw Error("Web extension is missing canonical workout history");
-      const setIds = new Set(
-        corresponding.exercises.flatMap((e) => e.loggedSets.map((s) => s.id)),
-      );
-      if (
-        native.exercises.some((e) =>
-          e.loggedSets.some((s) => !setIds.has(s.id)),
-        )
-      )
-        throw Error("Web extension is missing canonical workout sets");
+      for (const canonicalExercise of native.exercises) {
+        const extendedExercise = corresponding.exercises.find(
+          (e) => canonicalExercise.id === e.id || canonicalExercise.id === `${native.id}:${e.id}`,
+        );
+        if (!extendedExercise)
+          throw Error("Web extension is missing a canonical workout exercise");
+        const setIds = new Set(extendedExercise.loggedSets.map((s) => s.id));
+        if (canonicalExercise.loggedSets.some((s) => !setIds.has(s.id)))
+          throw Error("Web extension is missing canonical workout sets");
+      }
     }
   }
   if (ext.measurements != null) {
@@ -642,15 +708,34 @@ export function decodeAndroidBackup(raw: string): {
         )
           throw Error("Web extension is missing canonical body measurements");
   }
+  // Canonical native snapshots own performed interpretation; web-only draft state remains.
+  const extendedWorkouts = ext.workouts == null ? undefined : snapshotSchema.shape.workouts.parse(ext.workouts).map(w => {
+    const canonicalWorkout = workouts.find(n => n.id === w.id);
+    if (!canonicalWorkout) return w; // e.g. a web-only discarded draft
+    const exercises = canonicalWorkout.exercises.map(canonical => {
+      const extended = w.exercises.find(e => canonical.id === e.id || canonical.id === `${w.id}:${e.id}`)!;
+      // Extension-only targets/drafts survive, but native tables own performed values,
+      // associations and immutable metadata.
+      return {...extended, exerciseId:canonical.exerciseId, name:canonical.name,
+        muscle:canonical.muscle, equipment:canonical.equipment, notes:canonical.notes,
+        supersetGroup:canonical.supersetGroup,
+        tracking:canonical.tracking, primaryMuscles:canonical.primaryMuscles,
+        secondaryMuscles:canonical.secondaryMuscles, muscleContributions:canonical.muscleContributions,
+        category:canonical.category, isBodyweight:canonical.isBodyweight,
+        requiresExternalLoad:canonical.requiresExternalLoad, loggedSets:canonical.loggedSets};
+    });
+    return {...w, ...canonicalWorkout, revision:w.revision, restUsed:w.restUsed,
+      restEndsAt:w.restEndsAt, exercises};
+  });
   const snapshot = snapshotSchema.parse({
-    profile: ext.profile ?? profile,
+    profile: { ...(ext.profile != null ? obj(ext.profile) : profile), exerciseNextNotes: { ...obj(obj(ext.profile).exerciseNextNotes), ...exerciseNextNotes } },
     plans,
-    workouts: ext.workouts ?? workouts,
+    workouts: extendedWorkouts ?? workouts,
     exercises,
     measurements: ext.measurements ?? measurements,
     photos: [],
     checkins: ext.checkins ?? [],
-    gyms: ext.gyms ?? [],
+    gyms: ext.gyms ?? gyms,
   });
   result.imported = workouts.length + plans.length + measurements.length;
   result.skipped = counts.progress_photos;

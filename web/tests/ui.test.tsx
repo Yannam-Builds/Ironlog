@@ -7,9 +7,25 @@ afterEach(cleanup);
 
 it("replaces the opposite effort scale instead of keeping contradictory values", () => {
   const save = vi.fn();
-  render(
-    <SetEditor
-      set={{
+    render(
+      <SetEditor
+        exercise={{
+          id: "slot",
+          exerciseId: "bench",
+          name: "Bench press",
+          muscle: "chest",
+          equipment: "barbell",
+          tracking: "weight_reps",
+          sets: 3,
+          reps: "8",
+          restSeconds: 90,
+          notes: "",
+          supersetGroup: "",
+          isWarmup: false,
+          pendingWarmups: [],
+          loggedSets: [],
+        }}
+        set={{
         id: "s",
         weightKg: 65,
         reps: 8,

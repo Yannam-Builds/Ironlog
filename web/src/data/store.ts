@@ -219,6 +219,23 @@ export async function saveProfile(partial: Partial<Profile>) {
     });
   });
 }
+export async function readExerciseNextNote(exerciseId: string): Promise<string> {
+  if (!exerciseId.trim()) throw Error("Exercise identity is required.");
+  return (await db.profiles.get("local"))?.exerciseNextNotes?.[`exercise_next_note:${exerciseId}`] ?? "";
+}
+export async function saveExerciseNextNote(exerciseId: string, note: string): Promise<void> {
+  if (note.length > 4000) throw Error("Keep the reminder under 4,000 characters.");
+  await db.transaction("rw", db.profiles, db.catalog, db.exercises, async () => {
+    const library = await readExerciseLibrary();
+    if (!exerciseId.trim() || !library.some((e) => e.id === exerciseId))
+      throw Error("Save this exercise to the library before attaching a reminder.");
+    const row = await db.profiles.get("local");
+    const profile = profileSchema.parse({ ...defaultProfile, ...row,
+      exerciseNextNotes: { ...row?.exerciseNextNotes, [`exercise_next_note:${exerciseId}`]: note.trim() },
+    });
+    await db.profiles.put({ ...profile, id: "local" });
+  });
+}
 export async function savePlan(plan: Plan) {
   await db.plans.put(planSchema.parse(plan));
 }
@@ -328,10 +345,12 @@ export async function startWorkout(
           return {
             ...e,
             exerciseId: lib?.id ?? e.exerciseId,
-            tracking: lib?.tracking ?? "weight_reps",
+            tracking: lib?.tracking ?? "",
             muscle: lib?.muscle ?? "",
             equipment: lib?.equipment ?? "",
             secondaryMuscles: lib?.secondaryMuscles,
+            primaryMuscles: lib?.primaryMuscles, muscleContributions: lib?.muscleContributions,
+            category: lib?.category, isBodyweight: lib?.isBodyweight, requiresExternalLoad: lib?.requiresExternalLoad,
             loggedSets: [],
             pendingWarmups: [],
           };
@@ -458,6 +477,8 @@ export function swapExercise(
         equipment: exercise.equipment,
         tracking: exercise.tracking,
         secondaryMuscles: exercise.secondaryMuscles,
+        primaryMuscles: exercise.primaryMuscles, muscleContributions: exercise.muscleContributions,
+        category: exercise.category, isBodyweight: exercise.isBodyweight, requiresExternalLoad: exercise.requiresExternalLoad,
         pendingWarmups: [],
       });
       if (saveToPlan) {

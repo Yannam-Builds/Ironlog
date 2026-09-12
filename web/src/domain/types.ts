@@ -1,7 +1,14 @@
-export type Tracking =
-  "weight_reps" | "bodyweight_reps" | "duration" | "duration_distance";
+/** Unknown imported values remain explicit and cannot be credited as known dimensions. */
+export type Tracking = string;
+export interface ExerciseMetadata {
+  primaryMuscles?: string[];
+  muscleContributions?: Record<string, number>;
+  category?: string;
+  isBodyweight?: boolean;
+  requiresExternalLoad?: boolean;
+}
 export type SetKind = "normal" | "warmup" | "failure" | "drop" | "amrap";
-export interface Exercise {
+export interface Exercise extends ExerciseMetadata {
   id: string;
   name: string;
   muscle: string;
@@ -44,6 +51,7 @@ export interface LoggedSet {
   durationSeconds: number;
   distanceKm: number;
   kind: SetKind;
+  toFailure?: boolean;
   rpe?: number;
   rir?: number;
   notes: string;
@@ -54,7 +62,7 @@ export interface WarmupTarget {
   weightKg: number;
   reps: number;
 }
-export interface SessionExercise extends PlannedExercise {
+export interface SessionExercise extends PlannedExercise, ExerciseMetadata {
   tracking: Tracking;
   muscle: string;
   equipment: string;
@@ -121,7 +129,10 @@ export interface Profile {
   restSeconds: number;
   barKg: number;
   platesKg: number[];
+  /** Total physical plates, shared between both sides. Missing means unlimited. */
+  plateInventory?: { weightKg: number; quantity: number }[];
   keepAwake: boolean;
+  exerciseNextNotes?: Record<string, string>;
   badgeUnlocks: Record<string, number>;
   ledgerBaseline?: OnboardingLedgerBaseline;
   recoveryWeeks: string[];
@@ -153,6 +164,7 @@ export interface Gym {
   name: string;
   barKg: number;
   platesKg: number[];
+  plateInventory?: { weightKg: number; quantity: number }[];
 }
 export interface AppSnapshot {
   profile: Profile;
@@ -191,6 +203,7 @@ export const defaultProfile: Profile = {
   barKg: 20,
   platesKg: [20, 15, 10, 5, 2.5, 1.25],
   keepAwake: true,
+  exerciseNextNotes: {},
   badgeUnlocks: {},
   recoveryWeeks: [],
 };

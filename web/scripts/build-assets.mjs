@@ -28,9 +28,13 @@ for (const size of [180, 192, 512])
 const web = resolve(root, "../..");
 const notices = resolve(web, "public/licenses");
 await mkdir(notices, { recursive: true });
+const packagedLicense = resolve(notices, "IronLog-LICENSE.txt");
+const licenseBytes = process.env.VERCEL
+  ? await readFile(packagedLicense)
+  : await readFile(resolve(web, "../LICENSE"));
 await writeFile(
-  resolve(notices, "IronLog-LICENSE.txt"),
-  await readFile(resolve(web, "../LICENSE")),
+  packagedLicense,
+  licenseBytes,
 );
 const packages = [
   "react",

@@ -31,7 +31,7 @@ test("route focus does not steal a newly focused control on a delayed frame", as
     });
     location.hash = "#/plans";
   });
-  const opener = page.getByRole("button", { name: "Import JSON", exact: true });
+  const opener = page.getByRole("button", { name: "Import plan", exact: true });
   await opener.focus();
   await page.evaluate(() => {
     (window as unknown as { flushRouteFrames: () => void }).flushRouteFrames();
@@ -69,7 +69,7 @@ test("all themes keep sheets opaque, modal and keyboard dismissible", async ({
       .click();
     await page.goto("app/#/plans");
     const opener = page.getByRole("button", {
-      name: "Import JSON",
+      name: "Import plan",
       exact: true,
     });
     await opener.focus();
@@ -111,7 +111,7 @@ test("all themes keep sheets opaque, modal and keyboard dismissible", async ({
   await page.setViewportSize({ width: 320, height: 568 });
   await page.evaluate(() => (document.documentElement.style.fontSize = "32px"));
   await page
-    .getByRole("button", { name: "Program library", exact: true })
+    .getByRole("button", { name: "Browse programs", exact: true })
     .click();
   const library = page.getByRole("dialog", { name: "Program library" });
   await expect(library).toBeVisible();

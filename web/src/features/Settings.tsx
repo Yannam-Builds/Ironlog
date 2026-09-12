@@ -44,7 +44,10 @@ export function Settings() {
   const [gymName, setGymName] = useState("");
   const [bar, setBar] = useState(String(p.barKg));
   const [plates, setPlates] = useState(p.platesKg.join(", "));
+  const [finitePlates, setFinitePlates] = useState(p.plateInventory !== undefined);
+  const [quantities, setQuantities] = useState(p.plateInventory?.map(x => x.quantity).join(", ") ?? "");
   const [storage, setStorage] = useState("");
+  const [settingsQuery, setSettingsQuery] = useState("");
   const backup = () =>
     run(async () => {
       const snapshot = await readSnapshot();
@@ -57,8 +60,35 @@ export function Settings() {
     }, "Backup download started. Keep the file somewhere safe.");
   return (
     <>
-      <h1>Settings</h1>
-      <section>
+      <header className="native-screen-title settings-title">
+        <span className="eyebrow">Settings</span>
+        <h1>Training Console</h1>
+        <p>Your training setup, integrations and local data in six focused areas.</p>
+      </header>
+      <section className="card local-record-card">
+        <div><span className="eyebrow">Local training record</span><strong>Ready on this device</strong></div>
+        <b>6 areas</b>
+      </section>
+      <label className="settings-search">
+        <Icon name="search" />
+        <input aria-label="Search settings" placeholder="Search settings" value={settingsQuery} onChange={(event) => setSettingsQuery(event.target.value)} />
+      </label>
+      <section className="card settings-destinations">
+        <span className="eyebrow">Destinations</span>
+        {[
+          ["Training", "Profile, workout behavior, equipment and tracking tools", `${p.weeklyGoal} days · ${p.unit.toUpperCase()} · ${p.keepAwake ? "On" : "Off"}`, "profile-training"],
+          ["Intelligence", "Choose and configure the coaching engine", "Built-in intelligence", "intelligence"],
+          ["Appearance", "Theme, typography, spacing and optional effects", theme, "appearance"],
+          ["Notifications", "Workout reminders, milestones and quiet hours", "Browser reminders", "notifications"],
+          ["Data & privacy", "Import, backup, export, privacy and destructive actions", "Stored locally · backup tools", "data"],
+          ["About", "Product details, methodology and installation help", "IronLog Web", "about"],
+        ].filter(([title, detail]) => `${title} ${detail}`.toLowerCase().includes(settingsQuery.toLowerCase())).map(([title, detail, statusText, target]) => (
+          <button key={title} onClick={() => target === "intelligence" ? navigate("intelligence") : document.getElementById(target)?.scrollIntoView({ behavior: "smooth" })}>
+            <div><strong>{title}</strong><p>{detail}</p><b>{statusText}</b></div><Icon name="next" />
+          </button>
+        ))}
+      </section>
+      <section id="profile-training">
         <h2>Profile & training</h2>
         <div className="workout-inputs">
           <Field label="Name">
@@ -123,7 +153,7 @@ export function Settings() {
           Keep workout screen awake when supported
         </label>
       </section>
-      <section>
+      <section id="appearance">
         <h2>Appearance</h2>
         <p className="muted">
           The same 12 native palettes. Your choice also applies to the website.
@@ -136,17 +166,24 @@ export function Settings() {
           }}
         />
       </section>
-      <section>
+      <section id="typography">
         <h2>Typography</h2>
         <FontPicker />
       </section>
-      <section>
+      <section id="spacing">
         <h2>Layout spacing</h2>
         <SpacingPicker />
       </section>
-      <section>
+      <section id="training-tools">
         <h2>Training tools</h2>
-        <button className="list-row" onClick={() => setGym(true)}>
+        <button className="list-row" onClick={() => {
+          setBar(String(p.barKg));
+          setPlates((p.plateInventory?.map(x => x.weightKg) ?? p.platesKg).join(", "));
+          setFinitePlates(p.plateInventory !== undefined);
+          setQuantities(p.plateInventory?.map(x => x.quantity).join(", ") ?? "");
+          setGymName("");
+          setGym(true);
+        }}>
           <strong>Gym & plate setup</strong>
           <Icon name="next" />
         </button>
@@ -158,6 +195,14 @@ export function Settings() {
           <strong>Training intelligence</strong>
           <Icon name="next" />
         </button>
+      </section>
+      <section id="notifications">
+        <h2>Notifications</h2>
+        <p className="muted">
+          Workout reminders depend on browser notification and background-task
+          support. IronLog keeps your training record usable when those APIs are
+          unavailable.
+        </p>
       </section>
       <section id="data">
         <h2>Your data</h2>
@@ -236,7 +281,7 @@ export function Settings() {
         </Button>
         {storage && <p role="status">{storage}</p>}
       </section>
-      <section>
+      <section id="about">
         <h2>About IronLog Web</h2>
         <p>
           A local-first browser edition. No account, analytics tracker,
@@ -359,6 +404,15 @@ export function Settings() {
           <Field label="Plate sizes (kg, comma separated)">
             <input value={plates} onChange={(e) => setPlates(e.target.value)} />
           </Field>
+          <Field label="Limit to my physical plates">
+            <input type="checkbox" checked={finitePlates} onChange={e => setFinitePlates(e.target.checked)} />
+          </Field>
+          {finitePlates ? <>
+            <Field label="Total quantities (comma separated)">
+              <input value={quantities} onChange={e => setQuantities(e.target.value)} placeholder="2, 2, 4" />
+            </Field>
+            <p className="muted">Enter total physical plates for each size, in the same order. Two plates make one pair; an odd spare is excluded. Use 0 for a size you do not have.</p>
+          </> : <p className="muted">Unlimited pairs assumed for every plate size.</p>}
           <Button
             disabled={busy}
             onClick={() =>
@@ -367,13 +421,22 @@ export function Settings() {
                 if (values.some((x) => !Number.isFinite(x) || x <= 0))
                   throw Error("Enter positive plate sizes separated by commas");
                 const barKg = Number(bar);
-                await saveProfile({ barKg, platesKg: values });
+                if (!bar.trim() || !Number.isFinite(barKg) || barKg < 0)
+                  throw Error("Enter a nonnegative bar weight");
+                const counts = quantities.split(",").map(x => Number(x.trim()));
+                if (finitePlates && (counts.length !== values.length ||
+                    quantities.split(",").some(x => !x.trim()) ||
+                    counts.some(x => !Number.isSafeInteger(x) || x < 0)))
+                  throw Error("Enter one nonnegative whole quantity for each plate size");
+                const plateInventory = finitePlates ? values.map((weightKg, i) => ({ weightKg, quantity: counts[i] })) : undefined;
+                await saveProfile({ barKg, platesKg: values, plateInventory });
                 if (gymName.trim())
                   await saveGym({
                     id: newId(),
                     name: gymName.trim(),
                     barKg,
                     platesKg: values,
+                    plateInventory,
                   });
                 setGym(false);
               }, "Gym setup saved")
@@ -387,12 +450,19 @@ export function Settings() {
                 className="text-button"
                 onClick={() =>
                   run(
-                    () => saveProfile({ barKg: g.barKg, platesKg: g.platesKg }),
+                    async () => {
+                      await saveProfile({ barKg: g.barKg, platesKg: g.platesKg, plateInventory: g.plateInventory });
+                      setBar(String(g.barKg));
+                      setPlates((g.plateInventory?.map(x => x.weightKg) ?? g.platesKg).join(", "));
+                      setFinitePlates(g.plateInventory !== undefined);
+                      setQuantities(g.plateInventory?.map(x => x.quantity).join(", ") ?? "");
+                      setGymName("");
+                    },
                     "Gym selected",
                   )
                 }
               >
-                {g.name} · {g.barKg} kg bar
+                {g.name} · {g.barKg} kg bar · {g.plateInventory === undefined ? "Unlimited pairs" : "Saved physical quantities"}
               </button>
               <IconButton
                 name="trash"

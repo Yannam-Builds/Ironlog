@@ -22,18 +22,18 @@ export function Icon({ name, size = 22 }: { name: string; size?: number }) {
     ),
     plans: (
       <>
-        <rect x="5" y="3" width="14" height="18" rx="2" />
-        <path d="M9 8h6M9 12h6M9 16h4" />
+        <path d="M5 8v8M2 10v4M19 8v8M22 10v4M5 12h14" />
       </>
     ),
     log: (
       <>
-        <path d="M5 8v8M2 10v4M19 8v8M22 10v4M5 12h14" />
+        <rect x="5" y="3" width="14" height="18" rx="2" />
+        <path d="M9 8h6M9 12h6M9 16h4" />
       </>
     ),
     stats: (
       <>
-        <path d="M4 20V12M10 20V7M16 20V3M22 20V9" />
+        <path d="M3 17 9 11l4 4 8-9" />
       </>
     ),
     settings: (
@@ -44,6 +44,16 @@ export function Icon({ name, size = 22 }: { name: string; size?: number }) {
     ),
     back: <path d="m14 5-7 7 7 7" />,
     next: <path d="m9 5 7 7-7 7" />,
+    fire: <path d="M12 22c4 0 7-2.7 7-6.5 0-2.7-1.5-5.1-4.1-7.2.1 2-1 3.4-2.1 4.1.2-3.7-1.7-7.1-5-9.4.2 3.8-2.8 6.3-2.8 10.6C5 18.4 8 22 12 22Z" />,
+    program: <><rect x="6" y="4" width="14" height="16" rx="2" /><path d="M3 8v13h13M10 8h6M10 12h6M10 16h4" /></>,
+    import: <><path d="M12 3v12m-4-4 4 4 4-4M5 20h14" /></>,
+    spark: <><path d="m12 2 1.2 4.1L17 8l-3.8 1.9L12 14l-1.2-4.1L7 8l3.8-1.9ZM5 14l.8 2.2L8 17l-2.2.8L5 20l-.8-2.2L2 17l2.2-.8ZM19 13l.7 1.8 1.8.7-1.8.7L19 18l-.7-1.8-1.8-.7 1.8-.7Z" /></>,
+    list: <path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01" />,
+    search: <><circle cx="10" cy="10" r="6" /><path d="m15 15 6 6" /></>,
+    filter: <path d="M4 6h16M7 12h10M10 18h4" />,
+    camera: <><rect x="3" y="6" width="18" height="14" rx="2" /><circle cx="12" cy="13" r="4" /><path d="m8 6 1.5-3h5L16 6" /></>,
+    calendar: <><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M7 3v4M17 3v4M3 10h18M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01" /></>,
+    body: <><rect x="5" y="3" width="14" height="18" rx="2" /><circle cx="12" cy="8" r="1" /><path d="M9 13h6M10 17h4" /></>,
     plus: <path d="M12 4v16M4 12h16" />,
     check: <path d="m4 12 5 5L20 6" />,
     close: <path d="m5 5 14 14M5 19 19 5" />,

@@ -55,9 +55,9 @@ it.each(["blank", "template"])(
       </AppProvider>,
     );
     if (kind === "blank")
-      fireEvent.click(screen.getByRole("button", { name: "Create plan" }));
+      fireEvent.click(screen.getByRole("button", { name: "New plan" }));
     else {
-      fireEvent.click(screen.getByRole("button", { name: "Program library" }));
+      fireEvent.click(screen.getByRole("button", { name: "Browse programs" }));
       fireEvent.click(
         screen.getByRole("button", {
           name: new RegExp(`^${templates[0].name}`),
@@ -89,7 +89,7 @@ it("does not navigate when App.run reports a failed refresh", async () => {
       <Plans />
     </AppProvider>,
   );
-  fireEvent.click(screen.getByRole("button", { name: "Create plan" }));
+  fireEvent.click(screen.getByRole("button", { name: "New plan" }));
   await waitFor(async () =>
     expect((await readSnapshot()).plans).toHaveLength(1),
   );

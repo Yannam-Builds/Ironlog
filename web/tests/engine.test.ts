@@ -106,7 +106,7 @@ describe("native-reference deterministic rules", () => {
     w.startedAt = now;
     const r = readinessByRegion([w], [], now);
     expect(r.Push).toBeCloseTo(Math.exp(-(8 * 0.9 * 0.6) / 3.5) * 100, 8);
-    expect(r.Core).toBe(100);
+    expect(r.Core).toBeUndefined();
     expect(readinessByRegion([w], ["Push"], now).Push).toBe(0);
     expect(readinessByRegion([w], [], now + 86400000).Push).toBeGreaterThan(
       r.Push,

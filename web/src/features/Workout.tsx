@@ -15,6 +15,8 @@ import {
   Empty,
 } from "../ui/components";
 import { ExercisePicker, planned } from "./Plans";
+import { ExerciseNextNote } from "./ExerciseNextNote";
+import { RecentPerformanceControl } from "./RecentPerformance";
 import {
   mutateWorkout,
   finishWorkout,
@@ -36,6 +38,8 @@ import type {
   Workout as WorkoutData,
   Tracking,
 } from "../domain/types";
+import { isTimed, trackingDimensions, trackingOptions, setDescription } from "../domain/tracking";
+import { recentPerformances, recentSetLabel, latestPerformedSet } from "../domain/recent-performance";
 const colorFor = (weight: number) =>
   weight >= 20
     ? "#EF5454"
@@ -50,14 +54,16 @@ export function PlateView({
   loadKg,
   barKg,
   platesKg,
+  plateInventory,
   unit,
 }: {
   loadKg: number;
   barKg: number;
   platesKg: number[];
+  plateInventory?: { weightKg: number; quantity: number }[];
   unit: string;
 }) {
-  const result = plateCalculation(loadKg, barKg, platesKg);
+  const result = plateCalculation(loadKg, barKg, platesKg, plateInventory);
   const plates = result.platesPerSide.flatMap((p) =>
     Array.from({ length: Math.min(p.quantity, 25) }, () => p.weightKg),
   );
@@ -120,19 +126,22 @@ export function PlateView({
         {!result.isValid && ` · Remainder: ${weight(result.remainderKg)}`}
       </p>
       <p className="muted">
-        Assumes available pairs of each plate size. Check the actual plates at
-        your gym.
+        {plateInventory === undefined
+          ? "Unlimited pairs assumed. Add physical plate quantities in Settings → Gym profiles."
+          : "Uses your saved physical plates, split equally between both sides. Unpaired plates are excluded."}
       </p>
     </>
   );
 }
 export function SetEditor({
+  exercise,
   set,
   unit,
   effort,
   onSave,
   onClose,
 }: {
+  exercise: SessionExercise;
   set: LoggedSet;
   unit: string;
   effort: string;
@@ -141,9 +150,12 @@ export function SetEditor({
 }) {
   const [value, setValue] = useState({ ...set });
   const update = (p: Partial<LoggedSet>) => setValue({ ...value, ...p });
+  const dims = trackingDimensions(exercise);
+  const loadLabel = dims.mode === 'assisted_bodyweight' ? 'Assistance' : dims.mode === 'bodyweight_plus_weight_reps' ? 'Added load' : 'Weight';
   return (
     <Sheet title="Edit logged set" onClose={onClose}>
-      <Field label={`Weight (${unit})`}>
+      {!dims.known && <p>Unrecognized or unrecorded tracking. Original performance values are preserved; only effort, type and notes can be edited.</p>}
+      {dims.load && <Field label={`${loadLabel} (${unit})`}>
         <input
           type="number"
           inputMode="decimal"
@@ -153,8 +165,8 @@ export function SetEditor({
             update({ weightKg: canonicalWeight(Number(e.target.value), unit) })
           }
         />
-      </Field>
-      <Field label="Reps">
+      </Field>}
+      {dims.reps && <Field label="Reps">
         <input
           type="number"
           inputMode="numeric"
@@ -162,16 +174,16 @@ export function SetEditor({
           value={value.reps}
           onChange={(e) => update({ reps: Number(e.target.value) })}
         />
-      </Field>
-      <Field label="Duration (seconds)">
+      </Field>}
+      {dims.duration && <Field label="Duration (seconds)">
         <input
           type="number"
           min="0"
           value={value.durationSeconds}
           onChange={(e) => update({ durationSeconds: Number(e.target.value) })}
         />
-      </Field>
-      <Field label="Distance (km)">
+      </Field>}
+      {dims.distance && <Field label="Distance (km)">
         <input
           type="number"
           min="0"
@@ -179,7 +191,7 @@ export function SetEditor({
           value={value.distanceKm}
           onChange={(e) => update({ distanceKm: Number(e.target.value) })}
         />
-      </Field>
+      </Field>}
       <Field label={effort.toUpperCase()}>
         <input
           type="number"
@@ -200,12 +212,16 @@ export function SetEditor({
       <Field label="Set type">
         <select
           value={value.kind}
-          onChange={(e) => update({ kind: e.target.value as SetKind })}
+          onChange={(e) => update({ kind: e.target.value as SetKind, toFailure: e.target.value === 'failure' })}
         >
           {["normal", "warmup", "failure", "drop", "amrap"].map((x) => (
             <option key={x}>{x}</option>
           ))}
         </select>
+      </Field>
+      <Field label="Taken to failure">
+        <input type="checkbox" checked={value.kind === 'failure' || !!value.toFailure}
+          onChange={e => update({toFailure:e.target.checked, kind:!e.target.checked && value.kind === 'failure' ? 'normal' : value.kind})} />
       </Field>
       <Field label="Notes">
         <textarea
@@ -228,11 +244,13 @@ function ExerciseCard({
 }) {
   const { data, run, busy } = useApp();
   const p = data.profile;
+  const dims = trackingDimensions(e);
+  const mode = dims.mode;
   const last = e.loggedSets.at(-1);
   const [weight, setWeight] = useState(
     last
       ? String(
-          e.tracking === "duration_distance"
+          dims.distance
             ? last.distanceKm
             : displayWeight(last.weightKg, p.unit),
         )
@@ -240,7 +258,7 @@ function ExerciseCard({
   );
   const previousUnit = useRef(p.unit);
   useLayoutEffect(() => {
-    if (previousUnit.current !== p.unit && e.tracking === "weight_reps") {
+    if (previousUnit.current !== p.unit && dims.load) {
       const oldUnit = previousUnit.current;
       setWeight((value) =>
         value === "" || !Number.isFinite(Number(value))
@@ -251,10 +269,10 @@ function ExerciseCard({
       );
     }
     previousUnit.current = p.unit;
-  }, [p.unit, e.tracking]);
+  }, [p.unit, dims.load]);
   const [reps, setReps] = useState(
     String(
-      (e.tracking.startsWith("duration")
+      (isTimed(e)
         ? last?.durationSeconds
         : last?.reps) ??
         (parseInt(e.reps) || 8),
@@ -286,12 +304,7 @@ function ExerciseCard({
     });
     setTargets(true);
   };
-  const previous = data.workouts
-    .filter((x) => x.status === "completed")
-    .flatMap((x) => x.exercises)
-    .find((x) =>
-      x.exerciseId ? x.exerciseId === e.exerciseId : x.name === e.name,
-    );
+  const previous = recentPerformances(data.workouts, e).find(row => row.comparable)?.exercise;
   const suggestion = previous ? progressionSuggestion(previous, p.unit) : null;
   const mutate = (
     recipe: (ex: SessionExercise, workout: WorkoutData) => void,
@@ -306,16 +319,16 @@ function ExerciseCard({
         }),
       message,
     );
-  const timed = e.tracking.startsWith("duration");
+  const timed = isTimed(e);
   const kg = canonicalWeight(Number(weight), p.unit);
   const log = () =>
     mutate((ex, workout) => {
       const set: LoggedSet = {
         id: newId(),
-        weightKg: timed || e.tracking === "bodyweight_reps" ? 0 : kg,
+        weightKg: dims.load ? kg : 0,
         reps: timed ? 0 : Number(reps),
         durationSeconds: timed ? Number(reps) : 0,
-        distanceKm: e.tracking === "duration_distance" ? Number(weight) : 0,
+        distanceKm: dims.distance ? Number(weight) : 0,
         kind,
         notes: note,
         loggedAt: Date.now(),
@@ -359,6 +372,8 @@ function ExerciseCard({
         </p>
       )}
       {e.notes && <p className="exercise-note">{e.notes}</p>}
+      <ExerciseNextNote key={e.exerciseId} exerciseId={e.exerciseId} />
+      <RecentPerformanceControl exercise={e} dayId={w.dayId} />
       <div className="sets">
         {e.loggedSets.map((s, i) => (
           <div className="set-row" key={s.id}>
@@ -367,9 +382,7 @@ function ExerciseCard({
             </span>
             <div>
               <strong>
-                {timed
-                  ? `${s.durationSeconds}s${s.distanceKm ? ` · ${s.distanceKm} km` : ""}`
-                  : `${e.tracking === "bodyweight_reps" ? "BW" : `${displayWeight(s.weightKg, p.unit)} ${p.unit}`} × ${s.reps}`}
+                {setDescription(e, s, p.unit, displayWeight)}
               </strong>
               <small>
                 {s.kind !== "normal" ? s.kind : ""}
@@ -463,8 +476,8 @@ function ExerciseCard({
         </div>
       )}
       <div className="workout-inputs">
-        {e.tracking !== "bodyweight_reps" && e.tracking !== "duration" && (
-          <Field label={timed ? "Distance (km)" : p.unit.toUpperCase()}>
+        {(dims.load || dims.distance) && (
+          <Field label={dims.distance ? "Distance (km)" : mode === "assisted_bodyweight" ? `Assistance (${p.unit.toUpperCase()})` : mode === "bodyweight_plus_weight_reps" ? `Added load (${p.unit.toUpperCase()})` : p.unit.toUpperCase()}>
             <input
               type="number"
               min="0"
@@ -475,7 +488,7 @@ function ExerciseCard({
             />
           </Field>
         )}
-        <Field label={timed ? "Seconds" : "Reps"}>
+        {dims.known && <Field label={timed ? "Seconds" : "Reps"}>
           <input
             type="number"
             min="1"
@@ -484,27 +497,29 @@ function ExerciseCard({
             value={reps}
             onChange={(ev) => setReps(ev.target.value)}
           />
-        </Field>
+        </Field>}
         <Button
           disabled={
             busy ||
+            !dims.known ||
+            !Number.isFinite(Number(reps)) ||
             Number(reps) <= 0 ||
-            (!timed &&
-              e.tracking === "weight_reps" &&
-              (weight === "" || kg < 0))
+            ((dims.load || dims.distance) && (weight === '' || !Number.isFinite(Number(weight)) || Number(weight) < 0)) ||
+            (dims.load && mode !== 'assisted_bodyweight' && !!e.requiresExternalLoad && kg <= 0)
           }
           onClick={log}
         >
           Log
         </Button>
       </div>
+      {!dims.known && <p className="muted">Choose a supported tracking type in Targets, tracking & notes before logging. Imported values remain preserved.</p>}
       {last && (
         <Button
           variant="ghost"
           onClick={() => {
             setWeight(
               String(
-                e.tracking === "duration_distance"
+                dims.distance
                   ? last.distanceKm
                   : displayWeight(last.weightKg, p.unit),
               ),
@@ -557,7 +572,7 @@ function ExerciseCard({
       <div className="exercise-tools">
         <button
           className="text-button"
-          disabled={busy || e.tracking !== "weight_reps" || kg <= 0}
+          disabled={busy || mode !== "weight_reps" || kg <= 0}
           onClick={() =>
             run(async () => {
               const queue = warmupTargets(kg, p.barKg);
@@ -589,7 +604,7 @@ function ExerciseCard({
           {e.restSeconds}s rest
         </button>
       </div>
-      {(e.tracking !== "weight_reps" || kg <= 0) && (
+      {(mode !== "weight_reps" || kg <= 0) && (
         <small className="muted">
           Warmup queue needs a weighted target. Bodyweight and timed warmups can
           be logged using the warmup set type.
@@ -621,7 +636,7 @@ function ExerciseCard({
           </Button>
           <Button
             variant="secondary"
-            disabled={e.tracking !== "weight_reps" || kg <= 0}
+            disabled={mode !== "weight_reps" || kg <= 0}
             onClick={() => {
               setMenu(false);
               setPlates(true);
@@ -668,12 +683,14 @@ function ExerciseCard({
             loadKg={kg}
             barKg={p.barKg}
             platesKg={p.platesKg}
+            plateInventory={p.plateInventory}
             unit={p.unit}
           />
         </Sheet>
       )}
       {editSet && (
         <SetEditor
+          exercise={e}
           set={editSet}
           unit={p.unit}
           effort={p.effort}
@@ -787,12 +804,8 @@ function ExerciseCard({
                 })
               }
             >
-              {[
-                "weight_reps",
-                "bodyweight_reps",
-                "duration",
-                "duration_distance",
-              ].map((x) => (
+              {!trackingOptions.includes(targetDraft.tracking) && <option value={targetDraft.tracking}>{targetDraft.tracking || 'Unrecorded tracking'}</option>}
+              {trackingOptions.map((x) => (
                 <option key={x}>{x}</option>
               ))}
             </select>
@@ -870,6 +883,7 @@ export function Workout() {
       </Empty>
     );
   const remaining = Math.max(0, Math.ceil(((w.restEndsAt ?? 0) - now) / 1000));
+  const lastPerformed = latestPerformedSet(w, now);
   return (
     <>
       <div className="page-title">
@@ -893,7 +907,9 @@ export function Workout() {
               ? `${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, "0")}`
               : "Rest complete"}
           </strong>
-          <span>Rest timer</span>
+          <span>Rest timer
+            {lastPerformed && <small className="rest-context">{lastPerformed.exercise.name}<br />{recentSetLabel(lastPerformed.exercise, lastPerformed.set, data.profile.unit, displayWeight)}</small>}
+          </span>
           <button
             onClick={() =>
               run(() =>
@@ -949,6 +965,7 @@ export function Workout() {
                   muscle: e.muscle,
                   equipment: e.equipment,
                   secondaryMuscles: e.secondaryMuscles,
+                  primaryMuscles:e.primaryMuscles,muscleContributions:e.muscleContributions,category:e.category,isBodyweight:e.isBodyweight,requiresExternalLoad:e.requiresExternalLoad,
                   loggedSets: [],
                   pendingWarmups: [],
                 });

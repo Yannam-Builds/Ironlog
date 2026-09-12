@@ -22,7 +22,7 @@ export function Recovery() {
   const [energy, setEnergy] = useState(3);
   const [soreness, setSoreness] = useState(3);
   const [pain, setPain] = useState<string[]>([]);
-  const hasHistory = hasTrainingHistory(data.workouts);
+  const hasHistory = Object.keys(d.recovery).length > 0;
   return (
     <>
       <h1>Recovery map</h1>
@@ -60,7 +60,7 @@ export function Recovery() {
         />
       </div>
       <div className="region-list">
-        {Object.entries(d.recovery).map(([region, value]) => (
+        {["Push", "Pull", "Legs", "Core", "Arms", "Shoulders"].map((region) => (
           <button
             className="list-row"
             key={region}
@@ -68,14 +68,14 @@ export function Recovery() {
           >
             <strong>{region}</strong>
             <span>
-              {!hasHistory ? (
-                "No working-set history"
+              {d.recovery[region] === undefined ? (
+                "No mapped workload"
               ) : (
                 <>
-                  {Math.round(value)} / 100 ·{" "}
-                  {value >= 90
+                  {Math.round(d.recovery[region])} / 100 ·{" "}
+                  {d.recovery[region] >= 90
                     ? "Ready"
-                    : value >= 72
+                    : d.recovery[region] >= 72
                       ? "Building back"
                       : "Recovering"}
                 </>
@@ -91,7 +91,7 @@ export function Recovery() {
       {selected && (
         <Sheet title={`${selected} estimate`} onClose={() => setSelected("")}>
           <h3>
-            {hasHistory
+            {d.recovery[selected] !== undefined
               ? `${Math.round(d.recovery[selected])} / 100`
               : "No working-set history yet"}
           </h3>
@@ -132,7 +132,7 @@ export function Recovery() {
           ))}
           <fieldset>
             <legend>Pain (not ordinary soreness)</legend>
-            {Object.keys(d.recovery).map((r) => (
+            {["Push", "Pull", "Legs", "Core", "Arms", "Shoulders"].map((r) => (
               <label className="check-label" key={r}>
                 <input
                   type="checkbox"

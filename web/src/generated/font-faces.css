@@ -1,5 +1,12 @@
 /* Generated from fonts.json. Original font files and OFL licenses retained. */
 @font-face {
+  font-family: "Lexend";
+  src: url("/Ironlog/assets/lexend_variable.ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
   font-family: "IronLog inter";
   src: url("/Ironlog/fonts/inter_variable.ttf") format("truetype");
   font-weight: 100 900;

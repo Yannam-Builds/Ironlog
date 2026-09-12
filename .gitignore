@@ -29,6 +29,9 @@ Thumbs.db
 .impeccable/
 artifacts/
 PROJECT.md
-
 # Local Android diagnostics can contain device and account metadata
 bugreport-*.zip
+
+# Local Vercel project metadata and environment files
+.vercel
+.env*

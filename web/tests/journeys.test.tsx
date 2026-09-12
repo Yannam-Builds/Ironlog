@@ -167,14 +167,14 @@ it("starts with onboarding and no invented rewards", async () => {
 it("shows five native tabs and navigates to settings", async () => {
   await saveProfile({ name: "Test Athlete", onboarded: true });
   render(<App />);
-  expect(await screen.findByText("First proof awaits")).toBeInTheDocument();
+  expect(await screen.findByText("Set your proof loop")).toBeInTheDocument();
   expect(screen.getByRole("navigation", { name: "Main" })).toHaveTextContent(
     "HomePlansLogStatsSettings",
   );
   fireEvent.click(screen.getByRole("link", { name: "Settings" }));
   await waitFor(() =>
     expect(
-      screen.getByRole("heading", { name: "Settings" }),
+      screen.getByRole("heading", { name: "Training Console" }),
     ).toBeInTheDocument(),
   );
 });

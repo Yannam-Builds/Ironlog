@@ -42,6 +42,33 @@ The final run results should accompany this document. Current covered cases incl
 
 Screenshots and traces are local, ignored artifacts under `web/output/playwright/` and `web/test-results/`. Passing a route smoke test is not exhaustive overlay or accessibility coverage.
 
+### 6 September 2026 local acceptance
+
+- Unit/component: 24 files, 138 tests passed after the typed tracking, recovery metadata, finite-plate export, setup-note, recent-performance, rest-context and canonical restore-integrity slice.
+- Production build passed. The scoped output verifier checked 110 generated files for expected app/PWA entries, base paths and known private fixture/secret patterns.
+- Browser suite: 49/49 passed across iPhone-sized Chromium, desktop WebKit and the configured Pixel 7 Chromium subset. This includes reload persistence, explicit warmups, opaque/focus-safe sheets, cross-tab workout writes, stopped-origin offline recovery, themes, 200% text and touch-target checks.
+- After adding direct recent-performance and rest-context assertions, the updated workout flow passed 2/2 in Chromium and WebKit.
+- Logs: `output/parity-final-unit.log`, `output/parity-final-build.log`, `output/parity-final-output.log`, `output/parity-final-e2e.log`, and `output/parity-feature-e2e.log`.
+
+### 6 September 2026 native visual parity slice
+
+- Removed the web-only primary header and matched the native 64dp floating glass navigation capsule, spacing and tab icon order.
+- Rebuilt Home, Plans, History, Stats and the Settings landing hierarchy from the current Compose implementations. Home uses credited sessions and tracking-aware set/volume calculations; Plans now exposes a browser-local goal/day plan generator through the native Create with AI entry.
+- Compared live API 36.1 release-app captures with 390 × 844 and desktop browser captures. Evidence and handoff details are in `docs/native-visual-parity-2026-09-06.md`.
+- Unit/component verification after the slice: 24 files, 138 tests passed. Final production/output/browser counts are recorded after the closing run below.
+
+### 12 September 2026 parity closure
+
+- Restored the no-plan freestyle workout entry while retaining the native Choose a Program action.
+- Weekly Summary now uses the browser share sheet when supported and copies the same summary when Web Share is unavailable.
+- Settings now has all six working destinations, including Notifications and About, and remains within a 320px viewport at 200% text in WebKit.
+- Closing verification: type check passed; 24 unit/component files with 138 tests passed; production build passed; 110 output files passed the scoped verifier; all 49 browser tests passed across Chromium, WebKit and Android-sized Chromium.
+- Production was deployed to Vercel at `https://ironlogpro.vercel.app`. The Vercel build completed successfully and the same deployment passed live landing/theme transfer plus persisted-workout browser checks through its generated production URL.
+- Vercel root hosting and the existing `/Ironlog/` GitHub Pages workflow now use environment-specific asset, font, manifest, service-worker and app fallback paths.
+- Vercel SSO protection was disabled so the production app is public. The local router still wildcard-resolves `*.vercel.app` to `127.0.0.1`; direct DNS-over-HTTPS and TLS checks isolate the screenshot's refusal to that network policy.
+
+These are local automated checks. They do not close real iPhone Safari/Home Screen, physical Android, browser notification/background execution, Health Connect, widgets or native photo/camera behavior.
+
 ## Publication gates still open
 
 1. Desktop WebKit's `context.setOffline(true)` reload returns an internal engine error. A minimal vanilla service worker reproduces the failure without IronLog/Workbox. The application acceptance transport now stops its own actual HTTP origin, keeping the reload/fresh-page/log/finish assertions and requiring an uncached request to fail. The app-independent emulation diagnostic remains unchanged and nonzero on failure. This isolates an emulation-path limitation, not a precise upstream defect, and does not prove shipping Safari or device-level airplane-mode behavior.

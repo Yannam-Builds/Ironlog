@@ -108,6 +108,8 @@ test("workout survives reload, pending warmups never self-log, deletion persists
   await card.getByLabel("KG", { exact: true }).fill("65");
   await card.getByRole("button", { name: "Log", exact: true }).click();
   await expect(page.locator(".sets .set-row")).toHaveCount(2);
+  await expect(page.locator(".rest-banner")).toContainText("Barbell Bench Press");
+  await expect(page.locator(".rest-banner")).toContainText("65 kg × 8");
   await card.getByRole("button", { name: /Options for/ }).click();
   await page
     .getByRole("button", { name: "Plate calculator", exact: true })
@@ -132,6 +134,10 @@ test("workout survives reload, pending warmups never self-log, deletion persists
   await expect(page.locator(".sets .set-row")).toHaveCount(1);
   await page.reload();
   await expect(page.locator(".sets .set-row")).toHaveCount(1);
+  await page.locator(".exercise-card").first().getByLabel("KG", { exact: true }).fill("65");
+  await page.locator(".exercise-card").first().getByLabel("Reps", { exact: true }).fill("8");
+  await page.locator(".exercise-card").first().getByRole("button", { name: "Log", exact: true }).click();
+  await expect(page.locator(".sets .set-row")).toHaveCount(2);
   await page
     .getByRole("button", { name: "Finish workout", exact: true })
     .click();
@@ -139,10 +145,20 @@ test("workout survives reload, pending warmups never self-log, deletion persists
     .getByRole("button", { name: "Save completed workout", exact: true })
     .click();
   await expect(
-    page.getByRole("heading", { name: "Training log" }),
+    page.getByRole("heading", { name: "History", exact: true }),
   ).toBeVisible();
   await page.getByRole("button", { name: /Freestyle workout/ }).click();
-  await expect(page.locator(".set-row")).toHaveCount(1);
+  await expect(page.locator(".set-row")).toHaveCount(2);
+  await page.getByRole("link", { name: "Home", exact: true }).click();
+  await page.getByRole("button", { name: "Start freestyle", exact: true }).click();
+  await page.getByRole("button", { name: "Add exercise", exact: true }).click();
+  await page.getByLabel("Exercise name").fill("Barbell Bench Press");
+  await page.getByRole("button", { name: /^Barbell Bench Press/ }).first().click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await page.getByRole("button", { name: "Recent performance", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Recent performance" })).toBeVisible();
+  await expect(page.getByText("Same tracking and equipment")).toBeVisible();
+  await expect(page.getByText("65 kg × 8")).toBeVisible();
 });
 test("every route, themes, narrow and large-text layouts", async ({
   page,

@@ -1,8 +1,9 @@
 import { readFile, writeFile } from 'node:fs/promises';
 const registry=JSON.parse(await readFile(new URL('../src/generated/fonts.json',import.meta.url),'utf8'));
-const css=registry.fonts.filter(f=>f.id!=='lexend').map(f=>`@font-face {
-  font-family: "IronLog ${f.id}";
-  src: url("/Ironlog/${f.file}") format("truetype");
+const publicBase=process.env.VERCEL ? '/' : '/Ironlog/';
+const css=registry.fonts.map(f=>`@font-face {
+  font-family: "${f.id==='lexend' ? 'Lexend' : `IronLog ${f.id}`}";
+  src: url("${publicBase}${f.file}") format("truetype");
   font-weight: ${f.minWeight} ${f.maxWeight};
   font-style: normal;
   font-display: swap;

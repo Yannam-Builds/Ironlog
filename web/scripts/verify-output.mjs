@@ -41,8 +41,9 @@ for (const required of [
 const manifest = JSON.parse(
   await readFile(resolve(root, "manifest.webmanifest"), "utf8"),
 );
-if (manifest.start_url !== "/Ironlog/app/" || manifest.scope !== "/Ironlog/")
-  throw Error("Incorrect GitHub Pages base");
+const expectedBase = process.env.VERCEL ? "/" : "/Ironlog/";
+if (manifest.start_url !== `${expectedBase}app/` || manifest.scope !== expectedBase)
+  throw Error(`Incorrect public base; expected ${expectedBase}`);
 console.log(
   `Verified ${files.length} output files: expected app entries, PWA icons, base paths, and no known private fixture/secret patterns. This is a scoped check, not a secret-scanner guarantee.`,
 );

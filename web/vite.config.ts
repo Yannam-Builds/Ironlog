@@ -3,8 +3,11 @@ import react from "@vitejs/plugin-react";
 import { resolve } from "node:path";
 import { VitePWA } from "vite-plugin-pwa";
 
+const publicBase = process.env.VERCEL ? "/" : "/Ironlog/";
+const appPath = `${publicBase}app/`;
+
 export default defineConfig({
-  base: "/Ironlog/",
+  base: publicBase,
   plugins: [
     react(),
     VitePWA({
@@ -17,8 +20,8 @@ export default defineConfig({
         name: "IronLog",
         short_name: "IronLog",
         description: "Train. Recover. Prove it.",
-        start_url: "/Ironlog/app/",
-        scope: "/Ironlog/",
+        start_url: appPath,
+        scope: publicBase,
         display: "standalone",
         background_color: "#121212",
         theme_color: "#121212",
@@ -48,8 +51,10 @@ export default defineConfig({
           "**/assets/ic_forge_streak_dumbbell.png",
           "**/assets/splashscreen_logo.png",
         ],
-        navigateFallback: "/Ironlog/app/index.html",
-        navigateFallbackAllowlist: [/^\/Ironlog\/app\/?$/],
+        navigateFallback: `${appPath}index.html`,
+        navigateFallbackAllowlist: [
+          publicBase === "/" ? /^\/app\/?$/ : /^\/Ironlog\/app\/?$/,
+        ],
         cleanupOutdatedCaches: false,
         skipWaiting: false,
         clientsClaim: false,

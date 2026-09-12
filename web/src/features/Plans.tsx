@@ -166,47 +166,42 @@ export function Plans() {
   const { data, run, busy } = useApp();
   const [library, setLibrary] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [aiBuilder, setAiBuilder] = useState(false);
+  const [aiGoal, setAiGoal] = useState("General Fitness");
+  const [aiDays, setAiDays] = useState(3);
   const [raw, setRaw] = useState("");
   const [result, setResult] = useState("");
+  const createBlankPlan = () => {
+    const plan: Plan = {
+      id: newId(),
+      name: "New plan",
+      description: "",
+      goal: "General Fitness",
+      days: [],
+      order: data.plans.length,
+    };
+    void run(() => savePlan(plan)).then((ok) => {
+      if (ok) navigate(`plan/${plan.id}`);
+    });
+  };
   return (
     <>
-      <div className="page-title">
+      <header className="native-screen-title">
+        <span className="eyebrow">Training</span>
         <h1>Plans</h1>
-        <IconButton
-          name="plus"
-          label="Create plan"
-          disabled={busy}
-          onClick={() => {
-            const p: Plan = {
-              id: newId(),
-              name: "New plan",
-              description: "",
-              goal: "General Fitness",
-              days: [],
-              order: data.plans.length,
-            };
-            void run(() => savePlan(p)).then((ok) => {
-              if (ok) navigate(`plan/${p.id}`);
-            });
-          }}
-        />
-      </div>
-      <p className="muted">A clear plan. Room to make it yours.</p>
-      <div className="toolbar">
-        <Button variant="secondary" onClick={() => setLibrary(true)}>
-          Program library
-        </Button>
-        <Button variant="ghost" onClick={() => setImporting(true)}>
-          Import JSON
-        </Button>
+        <p>{data.plans.length} program{data.plans.length === 1 ? "" : "s"}</p>
+      </header>
+      <div className="plan-actions">
+        <button onClick={() => setLibrary(true)}><Icon name="program" />Browse programs</button>
+        <button onClick={() => setImporting(true)}><Icon name="import" />Import plan</button>
+        <button onClick={() => setAiBuilder(true)}><Icon name="spark" />Create with AI</button>
       </div>
       {!data.plans.length && (
-        <Empty title="Find your next program">
-          <p>
-            Start with a native IronLog template, import a plan, or create one
-            from scratch.
-          </p>
-        </Empty>
+        <div className="native-empty-state">
+          <Icon name="list" size={34} />
+          <h2>No plans yet</h2>
+          <p>Browse a program above, import one, or create a routine with AI.</p>
+        </div>
       )}
       {data.plans.map((p, index) => (
         <section className="card" key={p.id}>
@@ -268,6 +263,9 @@ export function Plans() {
           </div>
         </section>
       ))}
+      <Button className="new-plan-action" disabled={busy} onClick={createBlankPlan}>
+        <Icon name="plus" />New plan
+      </Button>
       {library && (
         <Sheet title="Program library" onClose={() => setLibrary(false)}>
           <p>
@@ -348,6 +346,40 @@ export function Plans() {
             Import plans
           </Button>
           {result && <p role="status">{result}</p>}
+        </Sheet>
+      )}
+      {aiBuilder && (
+        <Sheet title="Create with AI" onClose={() => setAiBuilder(false)}>
+          <p>Build a local starting plan from IronLog’s current program library. You can edit every exercise afterward.</p>
+          <Field label="Goal">
+            <select value={aiGoal} onChange={(event) => setAiGoal(event.target.value)}>
+              <option>General Fitness</option>
+              <option>Hypertrophy</option>
+              <option>Strength</option>
+              <option>Endurance</option>
+            </select>
+          </Field>
+          <Field label="Training days">
+            <select value={aiDays} onChange={(event) => setAiDays(Number(event.target.value))}>
+              {[2, 3, 4, 5, 6].map((days) => <option key={days} value={days}>{days} days</option>)}
+            </select>
+          </Field>
+          <Button disabled={busy} onClick={() => {
+            const goal = aiGoal.toLowerCase();
+            const matches = templates.filter((template) => template.days.length === aiDays);
+            const source = matches.find((template) =>
+              `${template.name} ${template.description}`.toLowerCase().includes(goal),
+            ) ?? matches[0] ?? templates[0];
+            const copy = instantiatePlan(source as Plan, { order: data.plans.length });
+            copy.name = `${aiGoal} ${aiDays}-Day Plan`;
+            copy.goal = aiGoal;
+            void run(() => savePlan(copy)).then((ok) => {
+              if (ok) {
+                setAiBuilder(false);
+                navigate(`plan/${copy.id}`);
+              }
+            });
+          }}>Generate plan</Button>
         </Sheet>
       )}
     </>

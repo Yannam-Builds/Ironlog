@@ -65,7 +65,7 @@ test("a workout can be logged and completed inside the website phone", async ({
     .getByRole("button", { name: "Save completed workout", exact: true })
     .click();
   await expect(
-    app.getByRole("heading", { name: "Training log" }),
+    app.getByRole("heading", { name: "History", exact: true }),
   ).toBeVisible();
   await app.getByRole("button", { name: /Freestyle workout/ }).click();
   await expect(app.locator(".set-row")).toHaveCount(1);
