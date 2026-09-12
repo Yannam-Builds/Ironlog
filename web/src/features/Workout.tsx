@@ -12,6 +12,8 @@ import {
   Icon,
   IconButton,
   Sheet,
+  Switch,
+  RollingTimerText,
   Empty,
 } from "../ui/components";
 import { ExercisePicker, planned } from "./Plans";
@@ -219,10 +221,11 @@ export function SetEditor({
           ))}
         </select>
       </Field>
-      <Field label="Taken to failure">
-        <input type="checkbox" checked={value.kind === 'failure' || !!value.toFailure}
-          onChange={e => update({toFailure:e.target.checked, kind:!e.target.checked && value.kind === 'failure' ? 'normal' : value.kind})} />
-      </Field>
+      <Switch
+        label="Taken to failure"
+        checked={value.kind === 'failure' || !!value.toFailure}
+        onChange={checked => update({toFailure: checked, kind: !checked && value.kind === 'failure' ? 'normal' : value.kind})}
+      />
       <Field label="Notes">
         <textarea
           value={value.notes}
@@ -903,9 +906,9 @@ export function Workout() {
         <aside className="rest-banner" role="status">
           <Icon name="timer" />
           <strong>
-            {remaining
+            <RollingTimerText value={remaining
               ? `${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, "0")}`
-              : "Rest complete"}
+              : "Rest complete"} />
           </strong>
           <span>Rest timer
             {lastPerformed && <small className="rest-context">{lastPerformed.exercise.name}<br />{recentSetLabel(lastPerformed.exercise, lastPerformed.set, data.profile.unit, displayWeight)}</small>}

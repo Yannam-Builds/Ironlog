@@ -6,6 +6,7 @@ import {
   Icon,
   IconButton,
   Sheet,
+  Switch,
   ThemePicker,
 } from "../ui/components";
 import { useTheme, applyTheme } from "../ui/theme";
@@ -142,16 +143,12 @@ export function Settings() {
             ))}
           </select>
         </Field>
-        <label className="check-label">
-          <input
-            type="checkbox"
-            checked={p.keepAwake}
-            onChange={(e) =>
-              run(() => saveProfile({ keepAwake: e.target.checked }))
-            }
-          />
-          Keep workout screen awake when supported
-        </label>
+        <Switch
+          checked={p.keepAwake}
+          disabled={busy}
+          onChange={(checked) => run(() => saveProfile({ keepAwake: checked }))}
+          label="Keep workout screen awake when supported"
+        />
       </section>
       <section id="appearance">
         <h2>Appearance</h2>
@@ -404,9 +401,7 @@ export function Settings() {
           <Field label="Plate sizes (kg, comma separated)">
             <input value={plates} onChange={(e) => setPlates(e.target.value)} />
           </Field>
-          <Field label="Limit to my physical plates">
-            <input type="checkbox" checked={finitePlates} onChange={e => setFinitePlates(e.target.checked)} />
-          </Field>
+          <Switch label="Limit to my physical plates" checked={finitePlates} onChange={setFinitePlates} />
           {finitePlates ? <>
             <Field label="Total quantities (comma separated)">
               <input value={quantities} onChange={e => setQuantities(e.target.value)} placeholder="2, 2, 4" />

@@ -14,7 +14,8 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "check": "tsc -b",
-    "extract:native": "node scripts/extract-native.mjs"
+    "extract:native": "node scripts/extract-native.mjs",
+    "sync:native": "node scripts/extract-native.mjs --source .."
   },
   "dependencies": {
     "dexie": "^4.4.5",

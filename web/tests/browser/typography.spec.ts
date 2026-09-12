@@ -259,7 +259,7 @@ test("spacing slider changes layout, persists, resets and retains touch targets 
     ).toBeGreaterThanOrEqual(48);
     const nav = page.getByRole("link", { name: "Home", exact: true });
     expect((await nav.boundingBox())!.height).toBeGreaterThanOrEqual(48);
-    await expect(nav.locator("svg")).toHaveCSS("width", "22px");
+    await expect(nav.locator("svg")).toHaveCSS("width", "21px");
     await page.setViewportSize({ width: 320, height: 800 });
     await page.addStyleTag({ content: "html { font-size: 200%; }" });
     const overflow = await page.evaluate(() => Array.from(document.querySelectorAll("*"))

@@ -57,6 +57,7 @@ export function Onboarding() {
         <small>{step + 1} / 4</small>
       </header>
       <Progress value={step + 1} max={4} label="Onboarding progress" />
+      <div className="onboarding-step" key={step}>
       {step === 0 && (
         <>
           <Fox pose="07_determined" />
@@ -260,6 +261,7 @@ export function Onboarding() {
           </p>
         </>
       )}
+      </div>
       <div className="onboard-actions">
         {step > 0 && (
           <Button

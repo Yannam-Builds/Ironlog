@@ -355,12 +355,87 @@ textarea {
   line-height: 1.5;
 }
 input[type="checkbox"] {
+  appearance: none;
+  display: inline-grid;
+  place-content: center;
   min-height: 24px;
   width: 24px;
   height: 24px;
-  accent-color: var(--accent);
+  border: 2px solid var(--muted);
+  border-radius: 3px;
+  background: var(--surface);
+  color: var(--button-ink);
   flex-shrink: 0;
+  transition: background-color 200ms ease, border-color 200ms ease, transform 140ms ease;
 }
+input[type="checkbox"]::after {
+  content: "";
+  width: 11px;
+  height: 6px;
+  border: solid currentColor;
+  border-width: 0 0 2px 2px;
+  transform: rotate(-45deg) scale(0);
+  transition: transform 160ms cubic-bezier(0.2, 0.9, 0.2, 1.25);
+}
+input[type="checkbox"]:checked {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+input[type="checkbox"]:checked::after {
+  transform: rotate(-45deg) scale(1);
+}
+input[type="checkbox"]:active { transform: scale(0.9); }
+.ironlog-switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(16px * var(--ui-spacing, 1));
+  min-height: 64px;
+  padding: calc(10px * var(--ui-spacing, 1)) 0;
+  font-size: 0.875rem;
+  line-height: 1.45;
+  cursor: pointer;
+}
+.ironlog-switch {
+  position: relative;
+  width: 52px;
+  height: 32px;
+  flex: 0 0 52px;
+}
+.ironlog-switch input {
+  position: absolute;
+  inset: 0;
+  width: 52px;
+  height: 32px;
+  min-height: 32px;
+  margin: 0;
+  border: 2px solid var(--muted);
+  border-radius: 999px;
+  background: var(--surface);
+  color: transparent;
+  cursor: pointer;
+}
+.ironlog-switch input::after { display: none; }
+.ironlog-switch i {
+  position: absolute;
+  pointer-events: none;
+  top: 7px;
+  left: 7px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--subtext);
+  transition: transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1), background-color 200ms ease;
+}
+.ironlog-switch input:checked {
+  border-color: var(--accentBorder);
+  background: var(--accentSoft);
+}
+.ironlog-switch input:checked + i {
+  transform: translateX(20px);
+  background: var(--accent);
+}
+.ironlog-switch input:focus-visible { outline: 3px solid var(--info); outline-offset: 4px; }
 input[type="range"] {
   padding: 0;
   margin: 0;
@@ -509,17 +584,34 @@ legend {
   background: color-mix(in srgb, var(--tabBg) 82%, transparent);
   border: 1px solid color-mix(in srgb, var(--cardBorder) 84%, white 16%);
   border-radius: 999px;
-  padding: 5px;
+  padding: 0;
   box-shadow: 0 12px 32px rgb(0 0 0 / 0.28), inset 0 1px 0 rgb(255 255 255 / 0.12);
   backdrop-filter: blur(20px) saturate(145%);
 }
+.bottom-nav-selection {
+  --tab-index: 0;
+  position: absolute;
+  z-index: 0;
+  top: 5px;
+  left: calc((100% / 5) * var(--tab-index) + 5px);
+  width: calc((100% / 5) - 10px);
+  height: 54px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgb(255 255 255 / 0.28), rgb(255 255 255 / 0.09));
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.08);
+  transition: left 360ms cubic-bezier(0.2, 0.86, 0.2, 1), transform 140ms ease;
+  pointer-events: none;
+}
+.bottom-nav:has(a:active) .bottom-nav-selection { transform: scale(0.97); }
 .bottom-nav a {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex-direction: column;
   gap: 1px;
   align-items: center;
   justify-content: center;
-  min-height: 54px;
+  min-height: 64px;
   min-width: 0;
   overflow-wrap: anywhere;
   text-align: center;
@@ -527,12 +619,13 @@ legend {
   color: var(--subtext);
   border-radius: 999px;
   font-size: 0.75rem;
+  transition: color 180ms ease 45ms, transform 140ms ease;
 }
+.bottom-nav a:active { transform: scale(0.96); }
 .bottom-nav a[aria-current="page"] {
   color: var(--link);
-  background: linear-gradient(180deg, rgb(255 255 255 / 0.28), rgb(255 255 255 / 0.09));
-  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.08);
 }
+[dir="rtl"] .ironlog-icon.auto-mirror { transform: scaleX(-1); }
 .resume {
   display: flex;
   gap: calc(10px * var(--ui-spacing, 1));
@@ -1036,7 +1129,9 @@ legend {
   border: 0;
   border-radius: 99px;
   color: var(--subtext);
+  transition: background-color 200ms ease, color 200ms ease, transform 140ms ease;
 }
+.segmented button:active { transform: scale(0.96); }
 .segmented button[aria-pressed="true"] {
   background: var(--accent);
   color: var(--button-ink);
@@ -1062,9 +1157,11 @@ legend {
   color: var(--text);
   padding: 0;
   overscroll-behavior: contain;
+  animation: ironlog-sheet-in 280ms cubic-bezier(0.2, 0.82, 0.2, 1) both;
 }
 .sheet::backdrop {
   background: rgb(0 0 0 / 0.72);
+  animation: ironlog-backdrop-in 220ms ease-out both;
 }
 .sheet-head {
   position: sticky;
@@ -1118,6 +1215,7 @@ legend {
   color: var(--text);
   font-size: 0.875rem;
   line-height: 1.5;
+  animation: ironlog-message-in 240ms cubic-bezier(0.2, 0.82, 0.2, 1) both;
 }
 .message.error {
   border-color: var(--danger);
@@ -1139,6 +1237,7 @@ legend {
   border: 1px solid var(--cardBorder);
   border-radius: 10px;
   font-size: 0.75rem;
+  animation: ironlog-fade-scale-in 180ms ease-out both;
 }
 .offline {
   padding: calc(8px * var(--ui-spacing, 1));
@@ -1200,6 +1299,15 @@ legend {
   display: block;
   margin: calc(20px * var(--ui-spacing, 1)) auto
     calc(10px * var(--ui-spacing, 1));
+  width: 170px;
+  height: 175px;
+}
+.onboarding-step {
+  animation: ironlog-onboarding-step-in 360ms cubic-bezier(0.33, 1, 0.68, 1) both;
+}
+.onboarding-step > .fox {
+  display: block;
+  margin: calc(20px * var(--ui-spacing, 1)) auto calc(10px * var(--ui-spacing, 1));
   width: 170px;
   height: 175px;
 }
@@ -1433,6 +1541,42 @@ details > summary {
 .rest-banner strong {
   font-variant-numeric: tabular-nums;
   font-size: 1.5rem;
+}
+.rolling-timer {
+  display: inline-flex;
+  overflow: hidden;
+  line-height: 1.1;
+}
+.rolling-timer-slot {
+  display: inline-block;
+  min-width: 0.62em;
+  text-align: center;
+  animation: ironlog-timer-digit-in 190ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.rolling-timer-slot:nth-child(2),
+.rolling-timer-slot:nth-child(5) { min-width: 0.34em; }
+.resume { animation: ironlog-fade-scale-in 320ms cubic-bezier(0.18, 0.9, 0.25, 1.35) both; }
+
+@keyframes ironlog-sheet-in {
+  from { transform: translateY(32px); }
+  to { transform: translateY(0); }
+}
+@keyframes ironlog-backdrop-in { from { background: rgb(0 0 0 / 0); } }
+@keyframes ironlog-message-in {
+  from { opacity: 0; transform: translate(-50%, -12px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+@keyframes ironlog-fade-scale-in {
+  from { opacity: 0; transform: scale(0.7); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes ironlog-onboarding-step-in {
+  from { opacity: 0; transform: translateY(12.5%); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes ironlog-timer-digit-in {
+  from { opacity: 0.3; transform: translateY(100%); }
+  to { opacity: 1; transform: translateY(0); }
 }
 .rest-banner span {
   font-size: 0.8rem;

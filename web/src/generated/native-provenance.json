@@ -1,10 +1,10 @@
 {
-  "revision": "b851eb0575a07d6ca9487aa3a1ad710d189e6457",
+  "revision": "b5a9806b9d4f6982c0a0680df48db25b1fcab53d",
   "reference": "Native working tree (file hashes are authoritative)",
   "files": [
     {
       "path": "app/src/main/java/com/ironlog/app/ui/theme/IronLogThemes.kt",
-      "sha256": "faaf6a83571055f6ffc7427d09f70f9021fbde33e5e9b6b5a40f4d0975013efb"
+      "sha256": "62d245096355052658af0b9f32ab288645048a80cb02ecb88959a81f7935ace0"
     },
     {
       "path": "app/src/main/assets/exerciseLibrary.json",
@@ -12,35 +12,239 @@
     },
     {
       "path": "app/src/main/java/com/ironlog/app/data/seed/ProgramTemplates.kt",
-      "sha256": "90544e6744f96bb80ce4b54b4e35b4d237b4ecb10a72b79872fb74456c1e260a"
+      "sha256": "4a59436b40d6155ea917ebe995bb4210a37093e132f79d3f36f7358d773c3eed"
     },
     {
       "path": "app/src/main/assets/ironlog/body_map_paths.json",
       "sha256": "4f299e8a4c374de97edf43b62432819214ba447f6164df73ebd734a09b00aa96"
     },
     {
+      "path": "app/src/main/res/drawable-nodpi/forgefox_01_neutral.png",
+      "sha256": "c8bf89657937cc80386fc0d1fc20f782f55cc4f856ad3f71cea791d67298bd8d"
+    },
+    {
+      "path": "app/src/main/res/drawable-nodpi/forgefox_02_smile.png",
+      "sha256": "a9dac21158116b576155a4511f0417a645ec5489e95ccfcdcc145e7fc9df1987"
+    },
+    {
+      "path": "app/src/main/res/drawable-nodpi/forgefox_03_big_happy.png",
+      "sha256": "da40f751c2670da6cbf5fa91fa877dcd69cf27f08af2aef6d8a2d8c6f0dbec2f"
+    },
+    {
+      "path": "app/src/main/res/drawable-nodpi/forgefox_04_excited.png",
+      "sha256": "52059d6f3128d8e4f6c60ace4e99d5079c41efa1b52c94aca8cebea5e1258804"
+    },
+    {
+      "path": "app/src/main/res/drawable-nodpi/forgefox_05_laughing.png",
+      "sha256": "75f5d116e09e018103841279e1c1ba27f7796b36cd69d34e701bde5220e5fef1"
+    },
+    {
+      "path": "app/src/main/res/drawable-nodpi/forgefox_06_wink_teasing.png",
+      "sha256": "839d9be314dc94e5e5f06e9e7fedcda00991903efaa69e0a4743b679baa4b88f"
+    },
+    {
       "path": "app/src/main/res/drawable-nodpi/forgefox_07_determined.png",
       "sha256": "a8363cd4a4228527cbe41d4ddfe22f750aaf1442569fed03bf0b56972c5a39fa"
+    },
+    {
+      "path": "app/src/main/res/drawable-nodpi/forgefox_08_serious.png",
+      "sha256": "5489884f4372306c2ab2da62df7c3911fc03fa90726ca17fcbec98f1bd8979e5"
+    },
+    {
+      "path": "app/src/main/res/drawable-nodpi/forgefox_09_angry_coach.png",
+      "sha256": "e14011f917dfdf261c55f7542e90fce4ceb29e87a3dc0dd3a86a5a0216975363"
+    },
+    {
+      "path": "app/src/main/res/drawable-nodpi/forgefox_10_disappointed.png",
+      "sha256": "337048e0b51814b156669760e4ff6702a93f4cc371e1b035b32055f327d11499"
+    },
+    {
+      "path": "app/src/main/res/drawable-nodpi/forgefox_11_sad.png",
+      "sha256": "337048e0b51814b156669760e4ff6702a93f4cc371e1b035b32055f327d11499"
+    },
+    {
+      "path": "app/src/main/res/drawable-nodpi/forgefox_12_exhausted.png",
+      "sha256": "cca52d4935aebaacc81b0f1d29099b89476f1b09d8d62cb323d8ac9c36393d39"
+    },
+    {
+      "path": "app/src/main/res/drawable-nodpi/forgefox_13_sleepy.png",
+      "sha256": "2b3a6a0754150a00e15818e992c83551a1eabf0db0a176784418b6afe0c57420"
+    },
+    {
+      "path": "app/src/main/res/drawable-nodpi/forgefox_14_shocked.png",
+      "sha256": "a7e68df8ec66c070f7fb7f51531c0d859ef874510acf43c9d5756e574fe7c761"
+    },
+    {
+      "path": "app/src/main/res/drawable-nodpi/forgefox_15_confused.png",
+      "sha256": "17ef143fb3dea6dc091437343328feab62f2e6dedce559cde6fa2a2e988a4ab7"
     },
     {
       "path": "app/src/main/res/drawable-nodpi/forgefox_16_proud.png",
       "sha256": "59127b35642747ae26c96ffa6ac58c1a3f74a859599c5338d3975608edc4901d"
     },
     {
+      "path": "app/src/main/res/drawable-nodpi/forgefox_17_flexing.png",
+      "sha256": "f81b2984f69b9a6795cc2d1e2c028dfdec9aa1c6bf4bfffe40e0c6c57ce60521"
+    },
+    {
+      "path": "app/src/main/res/drawable-nodpi/forgefox_18_fist_pump.png",
+      "sha256": "15c2ff18ffddd84c1e5e3cdb79e0e6d134433268aa6e746728a60c8360d181c6"
+    },
+    {
+      "path": "app/src/main/res/drawable-nodpi/forgefox_19_pointing_forward.png",
+      "sha256": "33bc0fc81f2b8a41a3d5cb3abe5ab460fc36bb1a56c6c86b502a2dcac4df6f18"
+    },
+    {
       "path": "app/src/main/res/drawable-nodpi/forgefox_20_clipboard.png",
       "sha256": "36df8264a7c535291ab4026a6cc3823ca2dbdd4a929e7c2b41410b527bd87ba5"
+    },
+    {
+      "path": "app/src/main/res/drawable-nodpi/forgefox_21_water_bottle.png",
+      "sha256": "6f3fea6238f9a17e2be3009b239247acc590026cc6daeef0c99438c5cfa2f9ec"
     },
     {
       "path": "app/src/main/res/drawable-nodpi/forgefox_22_dumbbell.png",
       "sha256": "dba29ecb0fb79e7de3fc7ef5a67747bebef107b63ad98bf4a8bb8876a44af166"
     },
     {
+      "path": "app/src/main/res/drawable-nodpi/forgefox_23_pull_up.png",
+      "sha256": "c4ff5c89cbb1a6da6e8c00553f52722e4c5e1f540a93e9057c281f9a1f5c27af"
+    },
+    {
+      "path": "app/src/main/res/drawable-nodpi/forgefox_24_tired_towel.png",
+      "sha256": "dafd2df31f4204f143d23cf65acf088b3201e26a6c36cceb833890990e0c468e"
+    },
+    {
+      "path": "app/src/main/res/drawable-nodpi/forgefox_25_trophy_medal.png",
+      "sha256": "99c590efd2af40fb96b1e21a66065e06d11277826ab515e900c34c9cbd5ab2a1"
+    },
+    {
+      "path": "app/src/main/res/drawable-nodpi/forgefox_26_streak_fire.png",
+      "sha256": "61d80590f001dd7d69f0252201fd748a2945e96e233b33851e5d9a454afe5a10"
+    },
+    {
+      "path": "app/src/main/res/drawable-nodpi/forgefox_27_repair_streak.png",
+      "sha256": "a0c2711677431b82a207014f318e3e5bd77a2f3d63dc8051a53c0f4f239a0c41"
+    },
+    {
       "path": "app/src/main/res/drawable-nodpi/forgefox_28_rest_blanket.png",
       "sha256": "5364baeda4068077b082bb4dbcce60ad76ce9a18a3fdf34531ef332a4ecf7d09"
     },
     {
+      "path": "app/src/main/res/drawable-nodpi/forgefox_29_checking_watch.png",
+      "sha256": "1762c01cb86eeb007592998189715340374fc78c4effdf6533dc24cb5122cf76"
+    },
+    {
+      "path": "app/src/main/res/drawable-nodpi/forgefox_30_coach_arms_crossed.png",
+      "sha256": "3227eb774200b6747269fa3311f97e48f1ac66862cf1b6afe51bfe1365d05548"
+    },
+    {
+      "path": "app/src/main/res/drawable-nodpi/forgefox_31_supportive_failure.png",
+      "sha256": "3bb9a18e444e70ef2294482642bf4346e6fdc48282cd76cb4d75a6353c35cfa7"
+    },
+    {
       "path": "app/src/main/res/drawable-nodpi/forgefox_32_level_up.png",
       "sha256": "45fbe704e898a69ede2a88fce716ef40c2021c3cb8fb2cc7c109424bf05dfb67"
+    },
+    {
+      "path": "app/src/main/res/drawable-nodpi/forgefox_widget_active.png",
+      "sha256": "f085ca52f8ba642a69a07caa7daca7fa35f47d186a08c12d0a8147a568f49e44"
+    },
+    {
+      "path": "app/src/main/res/drawable-nodpi/forgefox_widget_at_risk.png",
+      "sha256": "bfb91dd1e39706f787d34ec9db21a64c3fecd9d45056acb8a7bdbcda0db31b4f"
+    },
+    {
+      "path": "app/src/main/res/drawable-nodpi/forgefox_widget_coach.png",
+      "sha256": "8874802147014222f1d3936f91112c5f5a7a6804b092a5e32d08775e99b72d57"
+    },
+    {
+      "path": "app/src/main/res/drawable-nodpi/forgefox_widget_comeback.png",
+      "sha256": "7dcb4238a05f26f5c0a1555ec7d0ec21123ac2213b2220fa0a0029e7004a9ce6"
+    },
+    {
+      "path": "app/src/main/res/drawable-nodpi/forgefox_widget_done.png",
+      "sha256": "f47b83e350671e0bb6062e1125ee5bda99048366ab065e383d2f2c7a465511aa"
+    },
+    {
+      "path": "app/src/main/res/drawable-nodpi/forgefox_widget_early_workout.png",
+      "sha256": "f8a17359871328ad9cddf8c4e1a71de492533a69ed37eb3c79ab14d3d6c0304a"
+    },
+    {
+      "path": "app/src/main/res/drawable-nodpi/forgefox_widget_mission_complete.png",
+      "sha256": "44ca8ccdf849a633a90ff21a74973936183ef02bf8681f0c35b6f938bdeef5e6"
+    },
+    {
+      "path": "app/src/main/res/drawable-nodpi/forgefox_widget_pb.png",
+      "sha256": "c219c2085ae1b4b630893d3bb070af56063890eec5806a32a471d166eb690772"
+    },
+    {
+      "path": "app/src/main/res/drawable-nodpi/forgefox_widget_recovery.png",
+      "sha256": "bf90242168cfaa7240adfeee2dbdc6c6ecd391f1b78401c7073a608e7d495810"
+    },
+    {
+      "path": "app/src/main/res/drawable-nodpi/forgefox_widget_workout_soon.png",
+      "sha256": "3ed83834a68ae1f0f6d69333860ce6c8a9ed0f14a781ce24e1b55f59bd86ce39"
+    },
+    {
+      "path": "app/src/main/res/drawable-nodpi/ic_badge_3stars.png",
+      "sha256": "2084065825f36258211a84a19af2ecd01c10b5cec0337750c53941a07d80a1ce"
+    },
+    {
+      "path": "app/src/main/res/drawable-nodpi/ic_badge_atom.png",
+      "sha256": "096c576ceec732f1054be1e087f4ab7a45ddc2032b1706fbce6cef82383dc9fd"
+    },
+    {
+      "path": "app/src/main/res/drawable-nodpi/ic_badge_calendar.png",
+      "sha256": "e167cede7986fc0866879a6ab8b45cd0115a76d7c3c57f71b04e3045598ca943"
+    },
+    {
+      "path": "app/src/main/res/drawable-nodpi/ic_badge_chart.png",
+      "sha256": "cd81dee06b8591b6987bf4d9ec17064802ddbf72e1d79219c5907f87d0de56fe"
+    },
+    {
+      "path": "app/src/main/res/drawable-nodpi/ic_badge_crown.png",
+      "sha256": "f531524de80e98e24561d582be43360f1086b70a72a02029bd9a86e374d0d775"
+    },
+    {
+      "path": "app/src/main/res/drawable-nodpi/ic_badge_dumbbell.png",
+      "sha256": "e70ccac443ce5934df818a821ad1e8673719dc8d16c6c5da02c939f89675d5df"
+    },
+    {
+      "path": "app/src/main/res/drawable-nodpi/ic_badge_flame.png",
+      "sha256": "00208db71f2761c9cda4b921e4bf69090fbd2433f5b97d3aabd57c8132350237"
+    },
+    {
+      "path": "app/src/main/res/drawable-nodpi/ic_badge_flexed_arm.png",
+      "sha256": "e204e0a5f38c6cdec13b360c2e239d4f1c272ca0f2afadf4cb98d1f1d3fedd6e"
+    },
+    {
+      "path": "app/src/main/res/drawable-nodpi/ic_badge_hourglass.png",
+      "sha256": "ff65220de4c595a9db50a54757af86e7ef438fc8d97c146e81e8653bc213a6b7"
+    },
+    {
+      "path": "app/src/main/res/drawable-nodpi/ic_badge_infinity.png",
+      "sha256": "d890ff794931e17326125b0df074a2ace807b2e351ae1c7a9968fa36eeaf0c4f"
+    },
+    {
+      "path": "app/src/main/res/drawable-nodpi/ic_badge_lightning.png",
+      "sha256": "5d815bca58780e8a7fcba0d7dac1f094d232b67f8f19113caf4cf803bf93786c"
+    },
+    {
+      "path": "app/src/main/res/drawable-nodpi/ic_badge_mountain.png",
+      "sha256": "4f78dba42bedff0e210d1d260310fe5596d2d8815577881284baa46eb027c70d"
+    },
+    {
+      "path": "app/src/main/res/drawable-nodpi/ic_badge_shield.png",
+      "sha256": "9c6f9ecbcfccf7db1778fd278e273497aa02054c0f9af0b12e025cb30b2c7283"
+    },
+    {
+      "path": "app/src/main/res/drawable-nodpi/ic_badge_trophy.png",
+      "sha256": "657d04d7ee4f3798042285bd05cf4c2013ad1eaf4e2beb0255ed5d537d1e1488"
+    },
+    {
+      "path": "app/src/main/res/drawable-nodpi/ic_badge_twin_dumbbells.png",
+      "sha256": "1e2cfb5c353a1c18091341f00b17df4714eb1bd396af81f3ffc8c92c21430868"
     },
     {
       "path": "app/src/main/res/drawable-nodpi/ic_forge_streak_dumbbell.png",
@@ -48,7 +252,7 @@
     },
     {
       "path": "app/src/main/res/drawable-nodpi/iron_grade_aether.png",
-      "sha256": "205daac1dbda10af755cd1317336bb8898b403078c3892e66cacabe662e4a9e9"
+      "sha256": "75e72e1c40eb02b871ad67d15c991f96dcd459f1201f457217f5aa91f2c71d41"
     },
     {
       "path": "app/src/main/res/drawable-nodpi/iron_grade_apex.png",
@@ -87,12 +291,92 @@
       "sha256": "900ce192db3f6c91d5a8c0e58c5219bbf834256c5cfe07ea192a7ab75f2aa969"
     },
     {
+      "path": "app/src/main/res/font/assistant_variable.ttf",
+      "sha256": "1c3b393884f8fb133a1b17f41d26178adae1050a4f86d7a429d1b5658c314fa3"
+    },
+    {
+      "path": "app/src/main/res/font/dmsans_variable.ttf",
+      "sha256": "8cd08d97e89c24d0aa92edd2f0f4c8ee6195eee9b7c9f154865a58b02f0c1c0d"
+    },
+    {
+      "path": "app/src/main/res/font/exo2_variable.ttf",
+      "sha256": "205a448676a2586f9c57c25f3d5c58ca8db7e6cf5edf7506783a010c6fe2bfb5"
+    },
+    {
+      "path": "app/src/main/res/font/figtree_variable.ttf",
+      "sha256": "26ad3db9b31ff7dde67a91ff515d022d2f495cd506590699cf264f0bfe6fb714"
+    },
+    {
+      "path": "app/src/main/res/font/inter_variable.ttf",
+      "sha256": "29160a80ff49ddcab2c97711247e08b1fab27a484a329ce8b813d820dc559031"
+    },
+    {
       "path": "app/src/main/res/font/lexend_variable.ttf",
       "sha256": "3add53e641fbc81da64da4bb254285e2831b52b029527bc0714e2b9610832ee6"
     },
     {
+      "path": "app/src/main/res/font/manrope_variable.ttf",
+      "sha256": "d0639be45d0af36e798172419d7bd173c4bd4f29e2b76cbb69db1d11bf8b0a40"
+    },
+    {
+      "path": "app/src/main/res/font/montserrat_variable.ttf",
+      "sha256": "0f7b311b2f3279e4eef9b2f968bcdbab6e28f4daeb1f049f4f278a902bcd82f7"
+    },
+    {
+      "path": "app/src/main/res/font/mulish_variable.ttf",
+      "sha256": "00f1105796291a2fdda117a0fc7f25d8e68f8010cdbb34a411f60b3bd57717ac"
+    },
+    {
+      "path": "app/src/main/res/font/nunitosans_variable.ttf",
+      "sha256": "f934d7142fb4784bf828da485b7dcbd90c0c80d514e9d49a5da0ed3a1ae2491d"
+    },
+    {
+      "path": "app/src/main/res/font/nunito_variable.ttf",
+      "sha256": "bb55a5ca5c2042335b3991af27c4d0705d0ef41cac6164ac737fd8f2a1e85207"
+    },
+    {
+      "path": "app/src/main/res/font/outfit_variable.ttf",
+      "sha256": "fc7287273e66929776e2ba54f144fe699080bec29f61bf649d70d871468aeade"
+    },
+    {
+      "path": "app/src/main/res/font/plusjakartasans_variable.ttf",
+      "sha256": "89b3fb38aa0d275d7a731d0d817a4f1622b316b4d7fbdedcf02ee9099ff68bc8"
+    },
+    {
+      "path": "app/src/main/res/font/publicsans_variable.ttf",
+      "sha256": "d75a7dc1a27eb9e336d5b33f55489d2ecb5621bf694d5c43b2415bce2ca830a8"
+    },
+    {
+      "path": "app/src/main/res/font/quicksand_variable.ttf",
+      "sha256": "39c9b64223561f56aaff6062a6f04063c4fc86809ad6768722c06614d977e1cc"
+    },
+    {
+      "path": "app/src/main/res/font/raleway_variable.ttf",
+      "sha256": "8bbcc3eb8275c388f4bcd998832f8a4b943eadbaf6a595205312774b5951aefb"
+    },
+    {
+      "path": "app/src/main/res/font/rubik_variable.ttf",
+      "sha256": "1b3a7437ba2af80e465e773ed60c5036d1ba6ace492d89046dbcf18fb31e4e88"
+    },
+    {
+      "path": "app/src/main/res/font/sora_variable.ttf",
+      "sha256": "84ff7096ae3ec6c8be47d906d1a0ba4de7f2ce78c615275c77301964a316e16c"
+    },
+    {
+      "path": "app/src/main/res/font/sourcesans3_variable.ttf",
+      "sha256": "042fe2cc0b933e328410d7acbd0aa6a1873dca5aef81875f4bc214b08825c7b9"
+    },
+    {
+      "path": "app/src/main/res/font/urbanist_variable.ttf",
+      "sha256": "748362d51eb276840e9f0023cd2d98299bf709a95fb3a5ae4ffcb624c638ebb9"
+    },
+    {
+      "path": "app/src/main/res/font/worksans_variable.ttf",
+      "sha256": "f50f61f2ba738e239442d40bf1069adb195c224b6a5a73a581fc2f3ed62a9f63"
+    },
+    {
       "path": "app/src/main/res/drawable/ic_launcher_foreground.xml",
-      "sha256": "65dcbc4d667c7e4c3187125b3a38b48d64c0acd8eef542ef2027c512f13ffc78"
+      "sha256": "fc3c4cf74de0feb9593ad12ac6e55618d438215bde56e769a4c7cec70ceba892"
     }
   ]
 }

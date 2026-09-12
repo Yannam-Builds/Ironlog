@@ -1,4 +1,7 @@
 import { readFileSync } from "node:fs";
+import { readdirSync } from "node:fs";
+import { resolve } from "node:path";
+import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import {
   parseThemes,
@@ -6,6 +9,42 @@ import {
   nativeLogoSvg,
 } from "../scripts/extract-native.mjs";
 describe("native extraction contracts", () => {
+  const hash = (path: string) =>
+    createHash("sha256").update(readFileSync(path)).digest("hex");
+  it("exports every density-independent native artwork file and font", () => {
+    const nativeArt = readdirSync(resolve("../app/src/main/res/drawable-nodpi"))
+      .filter((name) => name.endsWith(".png"))
+      .sort();
+    const webArt = [
+      ...readdirSync(resolve("public/assets")).filter((name) =>
+        name.endsWith(".png") && !name.startsWith("icon-"),
+      ),
+      ...readdirSync(resolve("public/assets/badges")),
+    ].sort();
+    expect(webArt).toEqual(nativeArt);
+    for (const name of nativeArt) {
+      const webPath = name.startsWith("ic_badge_")
+        ? resolve("public/assets/badges", name)
+        : resolve("public/assets", name);
+      expect(hash(webPath)).toBe(
+        hash(resolve("../app/src/main/res/drawable-nodpi", name)),
+      );
+    }
+    const nativeFonts = readdirSync(resolve("../app/src/main/res/font"))
+      .filter((name) => name.endsWith(".ttf"))
+      .sort();
+    const webFonts = [
+      "lexend_variable.ttf",
+      ...readdirSync(resolve("public/fonts")),
+    ].sort();
+    expect(webFonts).toEqual(nativeFonts);
+    for (const name of nativeFonts) {
+      const webPath = name === "lexend_variable.ttf"
+        ? resolve("public/assets", name)
+        : resolve("public/fonts", name);
+      expect(hash(webPath)).toBe(hash(resolve("../app/src/main/res/font", name)));
+    }
+  });
   it("uses the current monochrome vector, not the retired orange launcher raster", () => {
     const xml =
       '<path android:fillColor="#FFFFFF" android:pathData="M10 10L20 20Z" />';

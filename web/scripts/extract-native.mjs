@@ -180,21 +180,30 @@ function extract(source) {
     "src/generated/body-map.json",
     JSON.parse(read(prefix + "assets/ironlog/body_map_paths.json")),
   );
+  // drawable-nodpi contains the canonical, density-independent artwork used
+  // by Compose. Export the complete set so web screens can select the same
+  // mascot pose, badge and grade art instead of maintaining approximations.
   const art = prefix + "res/drawable-nodpi/";
-  const selected = readdirSync(resolve(source, art)).filter(
-    (n) =>
-      /^iron_grade_.*\.png$/.test(n) ||
-      /^(forgefox_(07_|16_|20_|22_|28_|32_).+|recovery_circuit_emblem|ic_forge_streak_dumbbell)\.png$/.test(
-        n,
-      ),
+  const artwork = readdirSync(resolve(source, art)).filter((n) => n.endsWith(".png"));
+  const fonts = readdirSync(resolve(source, prefix + "res/font/")).filter((n) =>
+    n.endsWith(".ttf"),
   );
   const paths = [
-    ...selected.map((n) => art + n),
-    prefix + "res/font/lexend_variable.ttf",
+    ...artwork.map((n) => art + n),
+    ...fonts.map((n) => prefix + "res/font/" + n),
   ];
   for (const path of paths) {
     read(path);
-    const target = resolve(root, "public/assets", basename(path));
+    const name = basename(path);
+    const target = resolve(
+      root,
+      path.includes("/res/font/") && name !== "lexend_variable.ttf"
+        ? "public/fonts"
+        : /^ic_badge_/.test(name)
+          ? "public/assets/badges"
+          : "public/assets",
+      name,
+    );
     mkdirSync(dirname(target), { recursive: true });
     copyFileSync(resolve(source, path), target);
   }
@@ -204,7 +213,7 @@ function extract(source) {
   writeFileSync(resolve(root, "public/assets/ironlog-logo.svg"), logo);
   output("src/generated/native-provenance.json", manifest);
   console.log(
-    `Extracted ${Object.keys(themes).length} themes, ${templates.length} templates, ${exercises.length} exercises, ${paths.length} assets. No user data read.`,
+    `Extracted ${Object.keys(themes).length} themes, ${templates.length} templates, ${exercises.length} exercises, ${artwork.length} artwork files and ${fonts.length} native fonts. No user data read.`,
   );
 }
 if (

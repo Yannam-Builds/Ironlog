@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, lazy, Suspense } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, lazy, Suspense, type CSSProperties } from "react";
 import { readSnapshot, subscribeSnapshot, reconcileBadges } from "./data/store";
 import type { AppSnapshot } from "./domain/types";
 import { deriveSnapshot } from "./domain/engine";
@@ -135,6 +135,16 @@ export function App() {
     );
   const active = data.workouts.find((w) => w.status === "active");
   const detail = !["home", "plans", "log", "stats", "settings"].includes(route);
+  const selectedTabRoute = route.startsWith("plan/")
+    ? "plans"
+    : route.startsWith("history/")
+      ? "log"
+      : ["analytics", "body", "photos"].includes(route)
+        ? "stats"
+        : ["workout", "recovery", "ledger", "intelligence", "research"].includes(route)
+          ? "home"
+          : route;
+  const selectedTabIndex = Math.max(0, tabs.findIndex((tab) => tab.toLowerCase() === selectedTabRoute));
   const screen =
     route === "home" ? (
       <Home />
@@ -248,6 +258,11 @@ export function App() {
             </main>
           </div>
           <nav className="bottom-nav" aria-label="Main">
+            <span
+              className="bottom-nav-selection"
+              aria-hidden="true"
+              style={{ "--tab-index": selectedTabIndex } as CSSProperties}
+            />
             {tabs.map((tab) => {
               const r = tab.toLowerCase();
               return (
@@ -256,7 +271,7 @@ export function App() {
                   href={`#/${r}`}
                   aria-current={route === r ? "page" : undefined}
                 >
-                  <Icon name={r} />
+                  <Icon name={r} size={21} />
                   <span>{tab}</span>
                 </a>
               );

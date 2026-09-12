@@ -33,3 +33,13 @@ The Android Compose app in `Z:\KOTLIN\UnifiedPort` is the visual and behavioral 
 Android-only operating-system surfaces cannot be literal browser copies: Health Connect, home-screen widgets, foreground-service alarms, Android notification channels, wallpaper Monet, and device camera URIs. The web keeps the corresponding data and workflow destinations where browsers provide an equivalent, and describes unavailable OS guarantees without fabricating them.
 
 Future device acceptance should compare active-workout overlays and each Settings destination on physical Android and iPhone hardware. Automated route coverage already exercises 320px layouts, 200% text, focus containment, offline startup, multi-tab writes and complete workout journeys.
+
+## 12 September 2026 — native assets, navigation and motion
+
+- `npm run sync:native` now exports every one of the 68 density-independent PNG artwork files and all 21 native font files from `app/src/main/res`. Badge art keeps its browser path, and the generated provenance manifest records a SHA-256 hash for every source file. A unit contract fails if either native inventory drifts from the web export.
+- The five bottom-navigation icons now use the exact AndroidX Compose vector paths selected by `AppNavigator.kt`: outlined Home, Fitness Center, Assignment, Show Chart and Settings. Their rendered size is the native 21 dp, and the Log/Stats auto-mirroring behavior is retained for RTL layouts.
+- The tab bar uses the native 64 dp bar, 5 dp inset and 54 dp moving selection pill. Its travel and tint timings approximate the Compose springs while remaining CSS-only and honoring `prefers-reduced-motion`.
+- Web bottom sheets, floating workout resume control, transient messages, onboarding-step content, progress bars, segmented controls and active rest-timer digits now reproduce the corresponding Compose entrance, selection and rolling-digit motion.
+- Switch settings use the native 52 × 32 Material geometry and IronLog theme roles for checked/unchecked thumb, track and border colors. Multi-select and confirmation controls remain checkboxes and now use the app palette instead of the browser-default artwork.
+
+Compose controls and animations are executable Kotlin rather than image assets. They are implemented with semantic HTML and CSS so keyboard, screen-reader and reduced-motion behavior remains valid. Android-only operating-system surfaces listed above remain the only intentional platform exclusions.

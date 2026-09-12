@@ -1,6 +1,6 @@
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import { afterEach, describe, it, expect, vi } from "vitest";
-import { Sheet, NumberWheel } from "../src/ui/components";
+import { Sheet, NumberWheel, RollingTimerText, Switch } from "../src/ui/components";
 import { applyTheme, themeNames } from "../src/ui/theme";
 import { SetEditor } from "../src/features/Workout";
 afterEach(cleanup);
@@ -104,5 +104,19 @@ describe("native UI contracts", () => {
     expect(screen.getByRole("dialog")).toHaveAccessibleName("Edit set");
     fireEvent.click(screen.getByRole("button", { name: "Close Edit set" }));
     expect(close).toHaveBeenCalled();
+  });
+  it("exposes the native-style toggle as an accessible switch", () => {
+    const change = vi.fn();
+    render(<Switch label="Keep awake" checked={false} onChange={change} />);
+    const control = screen.getByRole("switch", { name: "Keep awake" });
+    expect(control).not.toBeChecked();
+    fireEvent.click(control);
+    expect(change).toHaveBeenCalledWith(true);
+  });
+  it("keeps the rolling rest timer readable as one value", () => {
+    const { rerender } = render(<RollingTimerText value="1:30" />);
+    expect(screen.getByLabelText("1:30")).toBeInTheDocument();
+    rerender(<RollingTimerText value="1:29" />);
+    expect(screen.getByLabelText("1:29")).toBeInTheDocument();
   });
 });
