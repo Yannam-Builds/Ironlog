@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { useApp, navigate, download } from "../ui/context";
 import {
   Button,
@@ -171,6 +171,129 @@ export function Plans() {
   const [aiDays, setAiDays] = useState(3);
   const [raw, setRaw] = useState("");
   const [result, setResult] = useState("");
+  const [orderedIds, setOrderedIds] = useState(() => data.plans.map((plan) => plan.id));
+  const [draggingId, setDraggingId] = useState<string>();
+  const orderedIdsRef = useRef(orderedIds);
+  const draggingIdRef = useRef<string | undefined>(undefined);
+  const planListRef = useRef<HTMLDivElement>(null);
+  const planPositionsRef = useRef(new Map<string, number>());
+  const dragPointerRef = useRef({ x: 0, y: 0 });
+  const autoScrollFrameRef = useRef<number | undefined>(undefined);
+
+  const updateOrder = (recipe: (ids: string[]) => string[]) => {
+    setOrderedIds((current) => {
+      const next = recipe(current);
+      orderedIdsRef.current = next;
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    updateOrder((current) => {
+      const available = new Set(data.plans.map((plan) => plan.id));
+      const retained = current.filter((id) => available.has(id));
+      const added = data.plans.map((plan) => plan.id).filter((id) => !retained.includes(id));
+      return [...retained, ...added];
+    });
+  }, [data.plans]);
+
+  const orderedPlans = orderedIds
+    .map((id) => data.plans.find((plan) => plan.id === id))
+    .filter((plan): plan is Plan => Boolean(plan));
+
+  useLayoutEffect(() => {
+    const cards = Array.from(
+      planListRef.current?.querySelectorAll<HTMLElement>("[data-plan-id]") ?? [],
+    );
+    const nextPositions = new Map<string, number>();
+    cards.forEach((card) => {
+      const id = card.dataset.planId;
+      if (!id) return;
+      const top = card.getBoundingClientRect().top;
+      nextPositions.set(id, top);
+      const previousTop = planPositionsRef.current.get(id);
+      if (previousTop === undefined || id === draggingIdRef.current) return;
+      const delta = previousTop - top;
+      if (Math.abs(delta) < 1 || typeof card.animate !== "function") return;
+      card.animate(
+        [{ transform: `translateY(${delta}px)` }, { transform: "translateY(0)" }],
+        { duration: 220, easing: "cubic-bezier(0.2, 0.8, 0.2, 1)" },
+      );
+    });
+    planPositionsRef.current = nextPositions;
+  }, [orderedIds]);
+
+  const movePlan = (draggedId: string, targetId: string) => {
+    if (draggedId === targetId) return;
+    updateOrder((current) => {
+      const from = current.indexOf(draggedId);
+      const to = current.indexOf(targetId);
+      if (from < 0 || to < 0) return current;
+      const next = [...current];
+      next.splice(to, 0, next.splice(from, 1)[0]);
+      return next;
+    });
+  };
+
+  const planUnderPointer = (x: number, y: number) => document
+    .elementFromPoint(x, y)
+    ?.closest<HTMLElement>("[data-plan-id]")
+    ?.dataset.planId;
+
+  const stopPlanAutoScroll = () => {
+    if (autoScrollFrameRef.current !== undefined) {
+      cancelAnimationFrame(autoScrollFrameRef.current);
+      autoScrollFrameRef.current = undefined;
+    }
+  };
+
+  const startPlanAutoScroll = () => {
+    stopPlanAutoScroll();
+    const tick = () => {
+      const draggedId = draggingIdRef.current;
+      if (!draggedId) return;
+      const { x, y } = dragPointerRef.current;
+      const edge = Math.min(110, window.innerHeight * 0.18);
+      const upward = y < edge ? -Math.ceil((edge - y) / 7) : 0;
+      const downward = y > window.innerHeight - edge
+        ? Math.ceil((y - (window.innerHeight - edge)) / 7)
+        : 0;
+      const delta = Math.max(-22, Math.min(22, upward + downward));
+      if (delta) {
+        window.scrollBy(0, delta);
+        const target = planUnderPointer(x, y);
+        if (target) movePlan(draggedId, target);
+      }
+      autoScrollFrameRef.current = requestAnimationFrame(tick);
+    };
+    autoScrollFrameRef.current = requestAnimationFrame(tick);
+  };
+
+  useEffect(() => () => {
+    stopPlanAutoScroll();
+    document.body.classList.remove("plan-reordering");
+  }, []);
+
+  const commitPlanOrder = (ids: string[]) => run(async () => {
+    await reorderPlans(ids);
+    if (ids[0] && ids[0] !== data.profile.activePlanId) {
+      await saveProfile({ activePlanId: ids[0] });
+    }
+  }, ids[0] && ids[0] !== data.profile.activePlanId
+    ? "Plan order saved · top plan is now active"
+    : "Plan order saved");
+
+  const finishPlanDrag = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (!draggingIdRef.current) return;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    draggingIdRef.current = undefined;
+    setDraggingId(undefined);
+    stopPlanAutoScroll();
+    document.body.classList.remove("plan-reordering");
+    void commitPlanOrder(orderedIdsRef.current);
+  };
   const createBlankPlan = () => {
     const plan: Plan = {
       id: newId(),
@@ -203,8 +326,13 @@ export function Plans() {
           <p>Browse a program above, import one, or create a routine with AI.</p>
         </div>
       )}
-      {data.plans.map((p, index) => (
-        <section className="card" key={p.id}>
+      <div ref={planListRef} className="plan-reorder-list" aria-label="Saved plans">
+      {orderedPlans.map((p, index) => (
+        <section
+          className={`card plan-card${p.id === data.profile.activePlanId ? " active" : ""}${draggingId === p.id ? " dragging" : ""}`}
+          data-plan-id={p.id}
+          key={p.id}
+        >
           <div className="section-title">
             <div>
               {p.id === data.profile.activePlanId && (
@@ -217,6 +345,54 @@ export function Plans() {
               label={`Edit ${p.name}`}
               onClick={() => navigate(`plan/${p.id}`)}
             />
+            <button
+              type="button"
+              className="plan-drag-handle"
+              aria-label={`Drag to reorder ${p.name}`}
+              aria-pressed={draggingId === p.id}
+              disabled={busy}
+              onPointerDown={(event) => {
+                event.preventDefault();
+                event.currentTarget.setPointerCapture(event.pointerId);
+                draggingIdRef.current = p.id;
+                dragPointerRef.current = { x: event.clientX, y: event.clientY };
+                setDraggingId(p.id);
+                document.body.classList.add("plan-reordering");
+                startPlanAutoScroll();
+              }}
+              onPointerMove={(event) => {
+                if (draggingIdRef.current !== p.id) return;
+                dragPointerRef.current = { x: event.clientX, y: event.clientY };
+                const target = planUnderPointer(event.clientX, event.clientY);
+                if (target) movePlan(p.id, target);
+              }}
+              onPointerUp={finishPlanDrag}
+              onPointerCancel={(event) => {
+                if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+                  event.currentTarget.releasePointerCapture(event.pointerId);
+                }
+                draggingIdRef.current = undefined;
+                setDraggingId(undefined);
+                stopPlanAutoScroll();
+                document.body.classList.remove("plan-reordering");
+                const restored = data.plans.map((plan) => plan.id);
+                orderedIdsRef.current = restored;
+                setOrderedIds(restored);
+              }}
+              onKeyDown={(event) => {
+                if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+                event.preventDefault();
+                const nextIndex = event.key === "ArrowUp" ? index - 1 : index + 1;
+                if (nextIndex < 0 || nextIndex >= orderedPlans.length) return;
+                const next = [...orderedIdsRef.current];
+                [next[index], next[nextIndex]] = [next[nextIndex], next[index]];
+                orderedIdsRef.current = next;
+                setOrderedIds(next);
+                void commitPlanOrder(next);
+              }}
+            >
+              <Icon name="menu" size={18} />
+            </button>
           </div>
           <p>{p.description || `${p.days.length} days · ${p.goal}`}</p>
           <div className="chips">
@@ -246,23 +422,10 @@ export function Plans() {
             >
               {p.id === data.profile.activePlanId ? "Selected" : "Make active"}
             </Button>
-            {index > 0 && (
-              <Button
-                variant="ghost"
-                onClick={() =>
-                  run(async () => {
-                    const ids = data.plans.map((p) => p.id);
-                    [ids[index - 1], ids[index]] = [ids[index], ids[index - 1]];
-                    await reorderPlans(ids);
-                  })
-                }
-              >
-                Move up
-              </Button>
-            )}
           </div>
         </section>
       ))}
+      </div>
       <Button className="new-plan-action" disabled={busy} onClick={createBlankPlan}>
         <Icon name="plus" />New plan
       </Button>

@@ -44,3 +44,10 @@ Future device acceptance should compare active-workout overlays and each Setting
 - Switch settings use the native 52 × 32 Material geometry and IronLog theme roles for checked/unchecked thumb, track and border colors. Multi-select and confirmation controls remain checkboxes and now use the app palette instead of the browser-default artwork.
 
 Compose controls and animations are executable Kotlin rather than image assets. They are implemented with semantic HTML and CSS so keyboard, screen-reader and reduced-motion behavior remains valid. Android-only operating-system surfaces listed above remain the only intentional platform exclusions.
+
+## 12 September 2026 — interaction and motion parity follow-up
+
+- The Home “Today’s workout” card now uses the native `animatedCardShine` recipe: the same 3% / 20% / 28% / 4% accent stops, a 900 px diagonal gradient, linear travel from -600 px to 1800 px over five seconds, and reverse playback for the ten-second full cycle.
+- Saved plans now expose the native 44 px drag handle and can be reordered with mouse, touch, or pen. Cards lift while held and surrounding cards interpolate into their new positions over 220 ms. Dropping a plan into the first position also makes it the active plan, matching the requested top-plan behavior. Arrow Up and Arrow Down on the focused handle provide the same operation for keyboard users.
+- Primary route content now enters with a short pager-style horizontal transition. Newly logged set rows, expanded detail content, active-plan badges, and the Ledger XP bar reproduce the visible Compose fade, slide, scale, and 800 ms progress motions.
+- Every continuous or entrance animation remains disabled by the existing `prefers-reduced-motion` rule. Motion parity tests cover pointer reordering, keyboard reordering, top-plan activation, and the Home shine attachment.

@@ -254,7 +254,9 @@ export function App() {
               ref={main}
               className="app-content"
             >
-              {screen}
+              <div key={route} className="route-stage">
+                {screen}
+              </div>
             </main>
           </div>
           <nav className="bottom-nav" aria-label="Main">

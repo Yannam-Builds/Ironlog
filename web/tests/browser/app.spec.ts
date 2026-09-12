@@ -160,6 +160,51 @@ test("workout survives reload, pending warmups never self-log, deletion persists
   await expect(page.getByText("Same tracking and equipment")).toBeVisible();
   await expect(page.getByText("65 kg × 8")).toBeVisible();
 });
+test("plan cards reorder by pointer and the top plan becomes active", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 2200 });
+  await onboard(page);
+  await page.getByRole("link", { name: "Plans", exact: true }).click();
+
+  for (const name of ["Plan One", "Plan Two"]) {
+    await page.getByRole("button", { name: "New plan", exact: true }).click();
+    await page.getByLabel("Plan name").fill(name);
+    await page.getByRole("button", { name: "Save plan", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Plans", exact: true })).toBeVisible();
+  }
+
+  const dragged = page.getByRole("button", { name: "Drag to reorder Plan Two" });
+  const target = page.getByRole("button", { name: "Drag to reorder Plan One" });
+  await expect(dragged).toBeEnabled();
+  const draggedBox = await dragged.boundingBox();
+  const targetBox = await target.boundingBox();
+  expect(draggedBox).not.toBeNull();
+  expect(targetBox).not.toBeNull();
+  await page.mouse.move(draggedBox!.x + draggedBox!.width / 2, draggedBox!.y + draggedBox!.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(targetBox!.x + targetBox!.width / 2, targetBox!.y + targetBox!.height / 2, { steps: 8 });
+  await page.mouse.up();
+
+  const first = page.locator("[data-plan-id]").first();
+  await expect(first).toContainText("Plan Two");
+  await expect(first).toContainText("Active program");
+  await page.reload();
+  await expect(page.locator("[data-plan-id]").first()).toContainText("Plan Two");
+  await expect(page.locator("[data-plan-id]").first()).toContainText("Active program");
+  await page.getByRole("link", { name: "Home", exact: true }).click();
+  const shine = await page.locator(".today-card").evaluate((card) => {
+    const style = getComputedStyle(card, "::before");
+    return {
+      name: style.animationName,
+      duration: style.animationDuration,
+      direction: style.animationDirection,
+    };
+  });
+  expect(shine).toEqual({
+    name: "ironlog-card-shine",
+    duration: "5s",
+    direction: "alternate",
+  });
+});
 test("every route, themes, narrow and large-text layouts", async ({
   page,
 }, testInfo) => {

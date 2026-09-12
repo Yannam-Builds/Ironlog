@@ -630,6 +630,7 @@ legend {
   border-radius: 8px;
   transition: width 0.2s;
 }
+.status-window-card .progress i { transition-duration: 800ms; }
 .bottom-nav {
   position: fixed;
   z-index: var(--z-nav);
@@ -866,6 +867,61 @@ legend {
   text-transform: uppercase;
 }
 .plan-actions button:last-child { color: var(--text); }
+.plan-reorder-list {
+  display: grid;
+  gap: calc(12px * var(--ui-spacing, 1));
+}
+.plan-reorder-list > .card { margin-bottom: 0; }
+.plan-card {
+  position: relative;
+  background:
+    linear-gradient(135deg, var(--accentSoft), color-mix(in srgb, var(--accent) 3%, transparent)),
+    var(--card);
+  border-color: color-mix(in srgb, var(--accent) 20%, transparent);
+  transition: transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    opacity 180ms ease;
+}
+.plan-card.active {
+  border-width: 2px;
+  border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+}
+.plan-card .pill { animation: ironlog-fade-scale-in 180ms ease-out both; }
+.plan-card.dragging {
+  z-index: 4;
+  transform: scale(1.025);
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  box-shadow: 0 18px 44px color-mix(in srgb, var(--accent) 18%, transparent);
+  opacity: 0.96;
+}
+.route-stage {
+  animation: ironlog-route-in 280ms cubic-bezier(0.2, 0.82, 0.2, 1) both;
+}
+.plan-drag-handle {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  display: inline-grid;
+  place-items: center;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: color-mix(in srgb, var(--accent) 35%, transparent);
+  cursor: grab;
+  touch-action: none;
+}
+.plan-drag-handle:hover,
+.plan-drag-handle:focus-visible {
+  color: var(--accent);
+  background: var(--accentSoft);
+}
+.plan-drag-handle:active,
+.plan-drag-handle[aria-pressed="true"] { cursor: grabbing; }
+body.plan-reordering {
+  cursor: grabbing;
+  user-select: none;
+}
 .native-empty-state {
   display: grid;
   justify-items: center;
@@ -1032,8 +1088,35 @@ legend {
 .settings-destinations p { margin: 4px 0; font-size: 0.82rem; line-height: 1.45; }
 .settings-destinations b { color: var(--accent); font-size: 0.82rem; }
 .today-card {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
   padding: calc(25px * var(--ui-spacing, 1));
   border-color: var(--accentBorder);
+}
+.animated-card-shine::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  top: -100%;
+  left: 0;
+  width: 900px;
+  height: 300%;
+  pointer-events: none;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--accent) 3%, transparent) 0%,
+    color-mix(in srgb, var(--accent) 20%, transparent) 35%,
+    color-mix(in srgb, var(--accent) 28%, transparent) 65%,
+    color-mix(in srgb, var(--accent) 4%, transparent) 100%
+  );
+  transform: translateX(-600px);
+  animation: ironlog-card-shine 5000ms linear infinite alternate;
+  will-change: transform;
+}
+.today-card > * {
+  position: relative;
+  z-index: 1;
 }
 .today-card h2 {
   font-size: 1.8rem;
@@ -1603,6 +1686,12 @@ details > summary {
   font-variant-numeric: tabular-nums;
   font-size: 1.5rem;
 }
+details[open] > :not(summary) {
+  animation: ironlog-expand-content 220ms cubic-bezier(0.2, 0.82, 0.2, 1) both;
+}
+.set-row {
+  animation: ironlog-set-row-in 220ms cubic-bezier(0.2, 0.82, 0.2, 1) both;
+}
 .rolling-timer {
   display: inline-flex;
   overflow: hidden;
@@ -1638,6 +1727,22 @@ details > summary {
 @keyframes ironlog-timer-digit-in {
   from { opacity: 0.3; transform: translateY(100%); }
   to { opacity: 1; transform: translateY(0); }
+}
+@keyframes ironlog-card-shine {
+  from { transform: translateX(-600px); }
+  to { transform: translateX(1800px); }
+}
+@keyframes ironlog-route-in {
+  from { opacity: 0; transform: translateX(18px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes ironlog-expand-content {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes ironlog-set-row-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 .rest-banner span {
   font-size: 0.8rem;
