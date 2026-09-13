@@ -898,7 +898,10 @@ legend {
 .route-stage {
   animation: ironlog-route-next-in 280ms cubic-bezier(0.2, 0.82, 0.2, 1) both;
 }
-.app-content { touch-action: pan-y; }
+.app-content {
+  overflow-x: clip;
+  touch-action: pan-y;
+}
 .app-content.tab-swiping { user-select: none; }
 .app-content.swipe-click-shield .route-stage { pointer-events: none; }
 .route-stage.route-previous { animation-name: ironlog-route-previous-in; }
@@ -1090,7 +1093,7 @@ body.plan-reordering {
 .settings-destinations > button > div { flex: 1; min-width: 0; }
 .settings-destinations strong { font-size: 1.05rem; }
 .settings-destinations p { margin: 4px 0; font-size: 0.82rem; line-height: 1.45; }
-.settings-destinations b { color: var(--accent); font-size: 0.82rem; }
+.settings-destinations b { color: var(--link); font-size: 0.82rem; }
 .today-card {
   position: relative;
   isolation: isolate;

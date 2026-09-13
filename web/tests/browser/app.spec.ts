@@ -300,6 +300,9 @@ test("every route, themes, narrow and large-text layouts", async ({
   }
   await page.setViewportSize({ width: 320, height: 568 });
   await page.evaluate(() => (document.documentElement.style.fontSize = "22px"));
+  await page.locator(".route-stage").evaluate(async (stage) => {
+    await Promise.all(stage.getAnimations().map((animation) => animation.finished));
+  });
   await page.screenshot({
     path: `output/playwright/${testInfo.project.name}-settings-large.png`,
     fullPage: true,

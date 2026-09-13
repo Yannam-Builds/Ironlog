@@ -61,7 +61,11 @@ export function applyTheme(id: string) {
   );
   document.documentElement.style.setProperty(
     "--link",
-    key === "dark" || key === "amoled" ? "#FF8C69" : colors.accent,
+    key === "dark" || key === "amoled"
+      ? "#FF8C69"
+      : key === "light"
+        ? "#B71C0C"
+        : colors.accent,
   );
   document.documentElement.dataset.theme = key;
   document.documentElement.style.colorScheme =
