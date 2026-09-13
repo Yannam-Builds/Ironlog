@@ -141,6 +141,8 @@ test("workout survives reload, pending warmups never self-log, deletion persists
   await page
     .getByRole("button", { name: "Finish workout", exact: true })
     .click();
+  await expect(page.getByRole("heading", { name: "Session complete" })).toBeVisible();
+  await expect(page.locator(".completion-stats")).toContainText("Work sets");
   await page
     .getByRole("button", { name: "Save completed workout", exact: true })
     .click();
@@ -159,6 +161,37 @@ test("workout survives reload, pending warmups never self-log, deletion persists
   await expect(page.getByRole("heading", { name: "Recent performance" })).toBeVisible();
   await expect(page.getByText("Same tracking and equipment")).toBeVisible();
   await expect(page.getByText("65 kg × 8")).toBeVisible();
+});
+test("active workout exercise cards reorder by pointer and persist", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 1800 });
+  await onboard(page);
+  await page.getByRole("button", { name: "Start freestyle", exact: true }).click();
+  for (const name of ["Barbell Bench Press", "Barbell Row"]) {
+    await page.getByRole("button", { name: "Add exercise", exact: true }).click();
+    await page.getByLabel("Exercise name").fill(name);
+    await page.getByRole("button", { name: new RegExp(`^${name}`) }).first().click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+  }
+  await expect(page.locator(".exercise-card")).toHaveCount(2);
+  await page.locator(".exercise-card").last().evaluate(async (card) => {
+    await Promise.all(card.getAnimations().map((animation) => animation.finished));
+  });
+
+  const dragged = page.getByRole("button", { name: "Drag to reorder Barbell Row" });
+  const target = page.getByRole("button", { name: "Drag to reorder Barbell Bench Press" });
+  const draggedBox = await dragged.boundingBox();
+  const targetBox = await target.boundingBox();
+  expect(draggedBox).not.toBeNull();
+  expect(targetBox).not.toBeNull();
+  await page.mouse.move(draggedBox!.x + draggedBox!.width / 2, draggedBox!.y + draggedBox!.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(targetBox!.x + targetBox!.width / 2, targetBox!.y + targetBox!.height / 2, { steps: 8 });
+  await page.mouse.up();
+
+  await expect(page.locator("[data-exercise-id]").first()).toContainText("Barbell Row");
+  await expect(page.locator(".message")).toContainText("Exercise order saved");
+  await page.reload();
+  await expect(page.locator("[data-exercise-id]").first()).toContainText("Barbell Row");
 });
 test("plan cards reorder by pointer and the top plan becomes active", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 2200 });
@@ -186,7 +219,7 @@ test("plan cards reorder by pointer and the top plan becomes active", async ({ p
 
   const first = page.locator("[data-plan-id]").first();
   await expect(first).toContainText("Plan Two");
-  await expect(first).toContainText("Active program");
+  await expect(page.locator(".message")).toContainText("Plan order saved");
   await page.reload();
   await expect(page.locator("[data-plan-id]").first()).toContainText("Plan Two");
   await expect(page.locator("[data-plan-id]").first()).toContainText("Active program");

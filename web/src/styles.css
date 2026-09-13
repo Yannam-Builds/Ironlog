@@ -1973,6 +1973,62 @@ figcaption {
     height: 54px;
   }
 }
+.set-index-label { width: 42px; flex: 0 0 42px; color: var(--subtext); font-size: 0.64rem; font-weight: var(--type-w800, 800); letter-spacing: 0.08em; }
+.set-kind { min-width: 48px; min-height: 48px; padding: 0 5px; border: 0; border-radius: 9px; background: transparent; color: var(--subtext); font-size: 0.72rem; font-weight: var(--type-w800, 800); cursor: pointer; }
+.set-kind-warmup { color: var(--info, #5299ed); background: color-mix(in srgb, var(--info, #5299ed) 10%, transparent); }
+.set-kind-drop { color: var(--accent); background: var(--accentSoft); }
+.set-kind-failure { color: var(--danger); background: color-mix(in srgb, var(--danger) 10%, transparent); }
+.set-kind-amrap { color: var(--gold, #f0cb55); background: color-mix(in srgb, var(--gold, #f0cb55) 10%, transparent); }
+.effort-chip { min-height: 32px; margin-top: 5px; padding: 4px 8px; border: 0; border-radius: 8px; background: var(--faint, var(--surface)); color: var(--subtext); font-size: 0.7rem; }
+.workout-exercise-list { display: grid; gap: calc(14px * var(--ui-spacing, 1)); }
+.workout-exercise-list > .exercise-card { margin-bottom: 0; }
+.exercise-card { position: relative; transition: transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1), border-color 180ms ease, box-shadow 180ms ease, opacity 180ms ease; }
+.exercise-card.dragging { z-index: 5; transform: scale(1.02); border-color: color-mix(in srgb, var(--accent) 55%, transparent); box-shadow: 0 18px 44px color-mix(in srgb, var(--accent) 18%, transparent); opacity: 0.97; }
+.exercise-card .section-title { align-items: flex-start; }
+.exercise-card-title { flex: 1; min-width: 0; }
+.workout-drag-handle { width: 40px; height: 44px; flex: 0 0 40px; display: inline-grid; place-items: center; margin-left: -8px; border: 0; border-radius: 10px; background: transparent; color: var(--subtext); cursor: grab; touch-action: none; }
+.workout-drag-handle:hover, .workout-drag-handle:focus-visible { color: var(--accent); background: var(--accentSoft); }
+.workout-drag-handle:active, .workout-drag-handle[aria-pressed="true"] { cursor: grabbing; }
+body.workout-reordering { cursor: grabbing; user-select: none; }
+.workout-header-card { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 12px; padding: 16px; margin-bottom: 16px; }
+.workout-header-card h1 { margin: 5px 0 0; font-size: 1.55rem; overflow-wrap: anywhere; }
+.workout-header-actions { display: grid; justify-items: center; gap: 3px; }
+.workout-header-actions small { color: var(--subtext); font-size: 0.65rem; }
+.elapsed-pill { display: inline-flex; padding: 7px 10px; border-radius: 999px; background: var(--faint, var(--surface)); font-size: 0.82rem; font-weight: var(--type-w700, 700); font-variant-numeric: tabular-nums; }
+.workout-minimize { min-height: 44px; padding: 0 7px; font-size: 0.72rem; font-weight: var(--type-w800, 800); letter-spacing: 0.08em; }
+.live-volume { grid-column: 1 / -1; margin: 0; color: var(--success); font-size: 0.76rem; font-weight: var(--type-w600, 600); }
+.live-volume.behind { color: var(--danger); }
+.rest-progress-ring { position: relative; display: inline-grid !important; place-items: center; width: 46px; height: 46px; flex: 0 0 46px !important; border-radius: 50%; color: var(--accent) !important; transition: background 300ms linear, transform 180ms ease; }
+.rest-progress-ring::after { content: ""; position: absolute; inset: 4px; border-radius: inherit; background: var(--surface); }
+.rest-progress-ring svg { position: relative; z-index: 1; }
+.rest-banner.complete .rest-progress-ring { animation: ironlog-rest-complete 800ms cubic-bezier(0.18, 0.9, 0.25, 1.35) both; }
+.workout-volume-card { display: grid; gap: 5px; padding: 14px; margin-top: 16px; }
+.workout-volume-card span { color: var(--subtext); font-size: 0.82rem; }
+.completion-preview { position: relative; overflow: hidden; text-align: center; padding: 14px 0 8px; }
+.completion-preview h3 { margin: 10px 0 18px; font-size: 1.35rem; }
+.completion-mark { display: inline-grid; place-items: center; width: 64px; height: 64px; border-radius: 50%; background: var(--accent); color: var(--button-ink); animation: ironlog-completion-mark 520ms cubic-bezier(0.18, 0.9, 0.25, 1.35) both; }
+.completion-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.completion-stats div { display: grid; gap: 4px; min-width: 0; }
+.completion-stats strong { font-size: 1.15rem; overflow-wrap: anywhere; }
+.completion-stats span { color: var(--subtext); font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.04em; }
+.completion-burst { position: absolute; inset: 0; pointer-events: none; }
+.completion-burst i { position: absolute; left: 50%; top: 31px; width: 5px; height: 12px; border-radius: 4px; background: var(--accent); transform-origin: 0 72px; animation: ironlog-confetti 720ms ease-out both; }
+.completion-burst i:nth-child(3n) { background: var(--gold, #f0cb55); }
+.completion-burst i:nth-child(3n + 1) { background: var(--success); }
+.completion-burst i:nth-child(1) { transform: rotate(0deg); } .completion-burst i:nth-child(2) { transform: rotate(26deg); } .completion-burst i:nth-child(3) { transform: rotate(52deg); } .completion-burst i:nth-child(4) { transform: rotate(78deg); }
+.completion-burst i:nth-child(5) { transform: rotate(104deg); } .completion-burst i:nth-child(6) { transform: rotate(130deg); } .completion-burst i:nth-child(7) { transform: rotate(156deg); } .completion-burst i:nth-child(8) { transform: rotate(182deg); }
+.completion-burst i:nth-child(9) { transform: rotate(208deg); } .completion-burst i:nth-child(10) { transform: rotate(234deg); } .completion-burst i:nth-child(11) { transform: rotate(260deg); } .completion-burst i:nth-child(12) { transform: rotate(286deg); }
+.completion-burst i:nth-child(13) { transform: rotate(312deg); } .completion-burst i:nth-child(14) { transform: rotate(338deg); }
+@keyframes ironlog-rest-complete { 0% { transform: scale(0.82); } 48% { transform: scale(1.15); } 100% { transform: scale(1); } }
+@keyframes ironlog-completion-mark { from { opacity: 0; transform: scale(0.45) rotate(-18deg); } to { opacity: 1; transform: scale(1) rotate(0); } }
+@keyframes ironlog-confetti { from { opacity: 1; translate: 0 0; } to { opacity: 0; translate: 0 78px; rotate: 100deg; } }
+@media (max-width: 430px) {
+  .workout-header-card { grid-template-columns: minmax(0, 1fr) auto; }
+  .workout-minimize { grid-column: 2; grid-row: 2; min-height: 32px; }
+  .workout-header-actions { grid-column: 2; grid-row: 1; }
+  .set-row { gap: 6px; }
+  .set-index-label { width: 36px; flex-basis: 36px; }
+}
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

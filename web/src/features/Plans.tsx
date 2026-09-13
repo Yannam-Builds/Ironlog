@@ -179,6 +179,7 @@ export function Plans() {
   const planPositionsRef = useRef(new Map<string, number>());
   const dragPointerRef = useRef({ x: 0, y: 0 });
   const autoScrollFrameRef = useRef<number | undefined>(undefined);
+  const planDragLayoutRef = useRef<{ id: string; center: number }[]>([]);
 
   const updateOrder = (recipe: (ids: string[]) => string[]) => {
     setOrderedIds((current) => {
@@ -223,22 +224,16 @@ export function Plans() {
     planPositionsRef.current = nextPositions;
   }, [orderedIds]);
 
-  const movePlan = (draggedId: string, targetId: string) => {
-    if (draggedId === targetId) return;
-    updateOrder((current) => {
-      const from = current.indexOf(draggedId);
-      const to = current.indexOf(targetId);
-      if (from < 0 || to < 0) return current;
-      const next = [...current];
-      next.splice(to, 0, next.splice(from, 1)[0]);
-      return next;
-    });
+  const movePlanToPointer = (draggedId: string, y: number) => {
+    const others = planDragLayoutRef.current.filter((entry) => entry.id !== draggedId);
+    let insertion = others.findIndex((entry) => y <= entry.center);
+    if (insertion < 0) insertion = others.length;
+    const next = others.map((entry) => entry.id);
+    next.splice(insertion, 0, draggedId);
+    if (next.join("|") === orderedIdsRef.current.join("|")) return;
+    orderedIdsRef.current = next;
+    setOrderedIds(next);
   };
-
-  const planUnderPointer = (x: number, y: number) => document
-    .elementFromPoint(x, y)
-    ?.closest<HTMLElement>("[data-plan-id]")
-    ?.dataset.planId;
 
   const stopPlanAutoScroll = () => {
     if (autoScrollFrameRef.current !== undefined) {
@@ -261,8 +256,7 @@ export function Plans() {
       const delta = Math.max(-22, Math.min(22, upward + downward));
       if (delta) {
         window.scrollBy(0, delta);
-        const target = planUnderPointer(x, y);
-        if (target) movePlan(draggedId, target);
+        movePlanToPointer(draggedId, y);
       }
       autoScrollFrameRef.current = requestAnimationFrame(tick);
     };
@@ -289,6 +283,7 @@ export function Plans() {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
     draggingIdRef.current = undefined;
+    planDragLayoutRef.current = [];
     setDraggingId(undefined);
     stopPlanAutoScroll();
     document.body.classList.remove("plan-reordering");
@@ -356,6 +351,13 @@ export function Plans() {
                 event.currentTarget.setPointerCapture(event.pointerId);
                 draggingIdRef.current = p.id;
                 dragPointerRef.current = { x: event.clientX, y: event.clientY };
+                planDragLayoutRef.current = Array.from(
+                  planListRef.current?.querySelectorAll<HTMLElement>("[data-plan-id]") ?? [],
+                ).flatMap((card) => {
+                  const id = card.dataset.planId;
+                  const box = card.getBoundingClientRect();
+                  return id ? [{ id, center: box.top + box.height / 2 }] : [];
+                });
                 setDraggingId(p.id);
                 document.body.classList.add("plan-reordering");
                 startPlanAutoScroll();
@@ -363,8 +365,7 @@ export function Plans() {
               onPointerMove={(event) => {
                 if (draggingIdRef.current !== p.id) return;
                 dragPointerRef.current = { x: event.clientX, y: event.clientY };
-                const target = planUnderPointer(event.clientX, event.clientY);
-                if (target) movePlan(p.id, target);
+                movePlanToPointer(p.id, event.clientY);
               }}
               onPointerUp={finishPlanDrag}
               onPointerCancel={(event) => {
@@ -372,6 +373,7 @@ export function Plans() {
                   event.currentTarget.releasePointerCapture(event.pointerId);
                 }
                 draggingIdRef.current = undefined;
+                planDragLayoutRef.current = [];
                 setDraggingId(undefined);
                 stopPlanAutoScroll();
                 document.body.classList.remove("plan-reordering");

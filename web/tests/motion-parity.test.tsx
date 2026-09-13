@@ -37,10 +37,15 @@ it("drags a plan to the top and makes it active", async () => {
   });
   render(<App />);
   const firstCard = (await screen.findByText("Plan One")).closest<HTMLElement>("[data-plan-id]")!;
+  const secondCard = screen.getByText("Plan Two").closest<HTMLElement>("[data-plan-id]")!;
   const handle = screen.getByRole("button", { name: "Drag to reorder Plan Two" });
-  Object.defineProperty(document, "elementFromPoint", {
+  Object.defineProperty(firstCard, "getBoundingClientRect", {
     configurable: true,
-    value: vi.fn(() => firstCard),
+    value: () => ({ top: 80, bottom: 180, left: 0, right: 320, width: 320, height: 100, x: 0, y: 80, toJSON: () => ({}) }),
+  });
+  Object.defineProperty(secondCard, "getBoundingClientRect", {
+    configurable: true,
+    value: () => ({ top: 300, bottom: 400, left: 0, right: 320, width: 320, height: 100, x: 0, y: 300, toJSON: () => ({}) }),
   });
 
   fireEvent.pointerDown(handle, { pointerId: 1, clientY: 400 });

@@ -1,4 +1,11 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import {
   useApp,
   navigate,
@@ -52,6 +59,22 @@ const colorFor = (weight: number) =>
         : weight >= 5
           ? "#67BE8D"
           : "#C782E7";
+const setKinds: SetKind[] = ["normal", "warmup", "drop", "failure", "amrap"];
+const setKindLabel: Record<SetKind, string> = {
+  normal: "W", warmup: "WU", drop: "DS", failure: "F", amrap: "AMRAP",
+};
+const volumeComparisons = [
+  [0, "a house cat"], [500, "a baby goat"], [1_000, "a large pumpkin"],
+  [2_000, "a baby elephant"], [3_500, "a baby hippo"], [5_000, "a grand piano"],
+  [7_500, "a polar bear"], [10_000, "a small car"], [15_000, "a T-Rex"],
+  [20_000, "a rhino"], [25_000, "an orca whale"], [35_000, "an elephant"],
+  [40_000, "a school bus"], [60_000, "a space shuttle"], [100_000, "a blue whale"],
+] as const;
+const volumeComparison = (kg: number) =>
+  volumeComparisons.findLast(([threshold]) => kg >= threshold)?.[1] ?? "a house cat";
+const vibrate = (pattern: number | number[]) => {
+  if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") navigator.vibrate(pattern);
+};
 export function PlateView({
   loadKg,
   barKg,
@@ -240,10 +263,22 @@ function ExerciseCard({
   exercise: e,
   workout: w,
   index,
+  isDragging,
+  onDragPointerDown,
+  onDragPointerMove,
+  onDragPointerUp,
+  onDragPointerCancel,
+  onDragKeyDown,
 }: {
   exercise: SessionExercise;
   workout: WorkoutData;
   index: number;
+  isDragging: boolean;
+  onDragPointerDown: (event: ReactPointerEvent<HTMLButtonElement>) => void;
+  onDragPointerMove: (event: ReactPointerEvent<HTMLButtonElement>) => void;
+  onDragPointerUp: (event: ReactPointerEvent<HTMLButtonElement>) => void;
+  onDragPointerCancel: (event: ReactPointerEvent<HTMLButtonElement>) => void;
+  onDragKeyDown: (event: ReactKeyboardEvent<HTMLButtonElement>) => void;
 }) {
   const { data, run, busy } = useApp();
   const p = data.profile;
@@ -350,12 +385,27 @@ function ExerciseCard({
         workout.restUsed = true;
       }
     }, "Set logged").then((ok) => {
-      if (ok) setNote("");
+      if (ok) {
+        setNote("");
+        vibrate([18, 20, 30]);
+      }
     });
   return (
-    <section className="card exercise-card">
+    <section className={`card exercise-card${isDragging ? " dragging" : ""}`} data-exercise-id={e.id}>
       <div className="section-title">
-        <div>
+        <button
+          type="button"
+          className="workout-drag-handle"
+          aria-label={`Drag to reorder ${e.name}`}
+          aria-pressed={isDragging}
+          disabled={busy}
+          onPointerDown={onDragPointerDown}
+          onPointerMove={onDragPointerMove}
+          onPointerUp={onDragPointerUp}
+          onPointerCancel={onDragPointerCancel}
+          onKeyDown={onDragKeyDown}
+        ><Icon name="menu" size={20} /></button>
+        <div className="exercise-card-title">
           <h2>{e.name}</h2>
           <p>
             {e.sets} × {e.reps} · {e.tracking.replaceAll("_", " ")}
@@ -380,9 +430,21 @@ function ExerciseCard({
       <div className="sets">
         {e.loggedSets.map((s, i) => (
           <div className="set-row" key={s.id}>
-            <span className="set-number">
-              {s.kind === "warmup" ? "W" : i + 1}
-            </span>
+            <span className="set-index-label">SET {i + 1}</span>
+            <button
+              type="button"
+              className={`set-kind set-kind-${s.kind}`}
+              aria-label={`Set type for set ${i + 1}`}
+              title="Tap to change set type"
+              disabled={busy}
+              onClick={() => mutate((ex) => {
+                const saved = ex.loggedSets.find((row) => row.id === s.id);
+                if (!saved) throw Error("Set no longer exists");
+                const current = setKinds.indexOf(saved.kind);
+                saved.kind = setKinds[(current + 1) % setKinds.length];
+                saved.toFailure = saved.kind === "failure";
+              }, "Set type updated")}
+            >{setKindLabel[s.kind]}</button>
             <div>
               <strong>
                 {setDescription(e, s, p.unit, displayWeight)}
@@ -396,6 +458,12 @@ function ExerciseCard({
                     : ""}
                 {s.notes ? ` · ${s.notes}` : ""}
               </small>
+              <button
+                type="button"
+                className="effort-chip"
+                onClick={() => setEditSet(s)}
+                aria-label={`${p.effort.toUpperCase()} for set ${i + 1}`}
+              >{p.effort.toUpperCase()} {((p.effort === "rpe" ? s.rpe : s.rir) ?? "—")}</button>
             </div>
             <div className="set-actions">
               <IconButton
@@ -846,6 +914,13 @@ export function Workout() {
   const [confirm, setConfirm] = useState<"finish" | "discard">();
   const [acknowledged, setAcknowledged] = useState(false);
   const [now, setNow] = useState(Date.now());
+  const [orderedExerciseIds, setOrderedExerciseIds] = useState<string[]>([]);
+  const [draggingExerciseId, setDraggingExerciseId] = useState<string>();
+  const orderedExerciseIdsRef = useRef<string[]>([]);
+  const draggingExerciseIdRef = useRef<string | undefined>(undefined);
+  const exerciseListRef = useRef<HTMLDivElement>(null);
+  const exercisePositionsRef = useRef(new Map<string, number>());
+  const exerciseDragLayoutRef = useRef<{ id: string; center: number }[]>([]);
   useEffect(() => {
     const tick = () => setNow(Date.now());
     const timer = setInterval(tick, 1000);
@@ -878,6 +953,39 @@ export function Workout() {
       document.removeEventListener("visibilitychange", request);
     };
   }, [w?.id, data.profile.keepAwake]);
+  useEffect(() => {
+    const current = w?.exercises.map((exercise) => exercise.id) ?? [];
+    setOrderedExerciseIds((previous) => {
+      const available = new Set(current);
+      const retained = previous.filter((id) => available.has(id));
+      const added = current.filter((id) => !retained.includes(id));
+      const next = [...retained, ...added];
+      orderedExerciseIdsRef.current = next;
+      return next;
+    });
+  }, [w?.id, w?.exercises.map((exercise) => exercise.id).join("|")]);
+  useLayoutEffect(() => {
+    const cards = Array.from(
+      exerciseListRef.current?.querySelectorAll<HTMLElement>("[data-exercise-id]") ?? [],
+    );
+    const nextPositions = new Map<string, number>();
+    cards.forEach((card) => {
+      const id = card.dataset.exerciseId;
+      if (!id) return;
+      const top = card.getBoundingClientRect().top;
+      nextPositions.set(id, top);
+      const previousTop = exercisePositionsRef.current.get(id);
+      if (previousTop === undefined || id === draggingExerciseIdRef.current) return;
+      const delta = previousTop - top;
+      if (Math.abs(delta) < 1 || typeof card.animate !== "function") return;
+      card.animate(
+        [{ transform: `translateY(${delta}px)` }, { transform: "translateY(0)" }],
+        { duration: 220, easing: "cubic-bezier(0.2, 0.8, 0.2, 1)" },
+      );
+    });
+    exercisePositionsRef.current = nextPositions;
+  }, [orderedExerciseIds]);
+  useEffect(() => () => document.body.classList.remove("workout-reordering"), []);
   if (!w)
     return (
       <Empty title="No active workout">
@@ -887,24 +995,81 @@ export function Workout() {
     );
   const remaining = Math.max(0, Math.ceil(((w.restEndsAt ?? 0) - now) / 1000));
   const lastPerformed = latestPerformedSet(w, now);
+  const orderedExercises = orderedExerciseIds
+    .map((id) => w.exercises.find((exercise) => exercise.id === id))
+    .filter((exercise): exercise is SessionExercise => Boolean(exercise));
+  const totalVolumeKg = w.exercises.flatMap((exercise) => exercise.loggedSets)
+    .filter((set) => set.kind !== "warmup")
+    .reduce((total, set) => total + set.weightKg * set.reps, 0);
+  const previousWorkout = data.workouts
+    .filter((workout) => workout.status === "completed" && workout.name === w.name)
+    .sort((a, b) => b.startedAt - a.startedAt)[0];
+  const previousVolumeKg = previousWorkout?.exercises.flatMap((exercise) => exercise.loggedSets)
+    .filter((set) => set.kind !== "warmup")
+    .reduce((total, set) => total + set.weightKg * set.reps, 0) ?? 0;
+  const workingSets = w.exercises.flatMap((exercise) => exercise.loggedSets)
+    .filter((set) => set.kind !== "warmup").length;
+  const elapsedSeconds = Math.max(0, Math.floor((now - w.startedAt) / 1000));
+  const restDuration = Math.max(1, lastPerformed?.exercise.restSeconds ?? data.profile.restSeconds);
+  const restProgress = Math.max(0, Math.min(1, remaining / restDuration));
+  const moveExerciseToPointer = (draggedId: string, y: number) => {
+    const others = exerciseDragLayoutRef.current.filter((entry) => entry.id !== draggedId);
+    let insertion = others.findIndex((entry) => y <= entry.center);
+    if (insertion < 0) insertion = others.length;
+    const next = others.map((entry) => entry.id);
+    next.splice(insertion, 0, draggedId);
+    if (next.join("|") === orderedExerciseIdsRef.current.join("|")) return;
+    orderedExerciseIdsRef.current = next;
+    setOrderedExerciseIds(next);
+  };
+  const commitExerciseOrder = (ids: string[]) => run(
+    () => mutateWorkout(w.id, w.revision, (next) => {
+      const byId = new Map(next.exercises.map((exercise) => [exercise.id, exercise]));
+      const reordered = ids.map((id) => byId.get(id))
+        .filter((exercise): exercise is SessionExercise => Boolean(exercise));
+      if (reordered.length !== next.exercises.length) throw Error("Exercise list changed during reorder");
+      next.exercises = reordered;
+    }),
+    "Exercise order saved",
+  );
+  const finishExerciseDrag = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (!draggingExerciseIdRef.current) return;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    draggingExerciseIdRef.current = undefined;
+    exerciseDragLayoutRef.current = [];
+    setDraggingExerciseId(undefined);
+    document.body.classList.remove("workout-reordering");
+    vibrate(24);
+    void commitExerciseOrder(orderedExerciseIdsRef.current);
+  };
   return (
     <>
-      <div className="page-title">
+      <div className="card workout-header-card">
         <div>
-          <span className="eyebrow">
-            Active workout · {Math.floor((now - w.startedAt) / 60000)} min
-          </span>
+          <span className="eyebrow">Active workout</span>
           <h1>{w.name}</h1>
         </div>
-        <IconButton
-          name="close"
-          label="Minimize workout"
+        <div className="workout-header-actions">
+          <span className="elapsed-pill"><RollingTimerText value={`${String(Math.floor(elapsedSeconds / 60)).padStart(2, "0")}:${String(elapsedSeconds % 60).padStart(2, "0")}`} /></span>
+          <small>elapsed</small>
+        </div>
+        <button
+          className="text-button workout-minimize"
+          aria-label="Minimize workout"
           onClick={() => navigate("home")}
-        />
+        >MINIMIZE</button>
+        {totalVolumeKg > 0 && (
+          <p className={`live-volume${previousVolumeKg > totalVolumeKg ? " behind" : ""}`}>
+            You’ve lifted {previousVolumeKg > totalVolumeKg ? "↓" : "↑"} {formatNumber(displayWeight(totalVolumeKg, data.profile.unit))} {data.profile.unit}
+            {previousVolumeKg > 0 && ` (${totalVolumeKg >= previousVolumeKg ? "+" : ""}${formatNumber(displayWeight(totalVolumeKg - previousVolumeKg, data.profile.unit))} ${data.profile.unit} vs prev)`}
+          </p>
+        )}
       </div>
       {w.restEndsAt && (
-        <aside className="rest-banner" role="status">
-          <Icon name="timer" />
+        <aside className={`rest-banner${remaining === 0 ? " complete" : ""}`} role="status">
+          <span className="rest-progress-ring" style={{ background: `conic-gradient(var(--accent) ${restProgress * 360}deg, var(--faint) 0deg)` }} aria-hidden="true">
+            <Icon name={remaining === 0 ? "check" : "timer"} size={19} />
+          </span>
           <strong>
             <RollingTimerText value={remaining
               ? `${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, "0")}`
@@ -926,14 +1091,61 @@ export function Workout() {
           </button>
         </aside>
       )}
-      {w.exercises.map((e, i) => (
+      <div ref={exerciseListRef} className="workout-exercise-list" aria-label="Workout exercises">
+      {orderedExercises.map((e) => {
+        const i = w.exercises.findIndex((exercise) => exercise.id === e.id);
+        return (
         <ExerciseCard
           key={`${e.id}-${e.exerciseId}-${e.tracking}`}
           exercise={e}
           workout={w}
           index={i}
+          isDragging={draggingExerciseId === e.id}
+          onDragPointerDown={(event) => {
+            event.preventDefault();
+            event.currentTarget.setPointerCapture(event.pointerId);
+            draggingExerciseIdRef.current = e.id;
+            exerciseDragLayoutRef.current = Array.from(
+              exerciseListRef.current?.querySelectorAll<HTMLElement>("[data-exercise-id]") ?? [],
+            ).flatMap((card) => {
+              const id = card.dataset.exerciseId;
+              const box = card.getBoundingClientRect();
+              return id ? [{ id, center: box.top + box.height / 2 }] : [];
+            });
+            setDraggingExerciseId(e.id);
+            document.body.classList.add("workout-reordering");
+            vibrate(12);
+          }}
+          onDragPointerMove={(event) => {
+            if (draggingExerciseIdRef.current !== e.id) return;
+            moveExerciseToPointer(e.id, event.clientY);
+          }}
+          onDragPointerUp={finishExerciseDrag}
+          onDragPointerCancel={(event) => {
+            if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+            draggingExerciseIdRef.current = undefined;
+            exerciseDragLayoutRef.current = [];
+            setDraggingExerciseId(undefined);
+            document.body.classList.remove("workout-reordering");
+            const restored = w.exercises.map((exercise) => exercise.id);
+            orderedExerciseIdsRef.current = restored;
+            setOrderedExerciseIds(restored);
+          }}
+          onDragKeyDown={(event) => {
+            if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+            event.preventDefault();
+            const position = orderedExerciseIdsRef.current.indexOf(e.id);
+            const nextPosition = event.key === "ArrowUp" ? position - 1 : position + 1;
+            if (nextPosition < 0 || nextPosition >= orderedExerciseIdsRef.current.length) return;
+            const next = [...orderedExerciseIdsRef.current];
+            [next[position], next[nextPosition]] = [next[nextPosition], next[position]];
+            orderedExerciseIdsRef.current = next;
+            setOrderedExerciseIds(next);
+            void commitExerciseOrder(next);
+          }}
         />
-      ))}
+      )})}
+      </div>
       <Button variant="secondary" onClick={() => setAdding(true)}>
         <Icon name="plus" />
         Add exercise
@@ -942,6 +1154,10 @@ export function Workout() {
         Changes save after every action. Keep this screen open for timer
         feedback; locked-screen alarms aren’t supported.
       </p>
+      <section className="card workout-volume-card" aria-label="Workout volume">
+        <strong>Volume: {formatNumber(displayWeight(totalVolumeKg, data.profile.unit))} {data.profile.unit}</strong>
+        <span>About {volumeComparison(totalVolumeKg)}</span>
+      </section>
       <div className="sticky-actions">
         <Button
           disabled={busy}
@@ -993,6 +1209,18 @@ export function Workout() {
               ? "Only logged sets will be saved in History. Pending warmup targets do not count."
               : "This session will not count toward your training history."}
           </p>
+          {confirm === "finish" && (
+            <div className="completion-preview">
+              <div className="completion-burst" aria-hidden="true">{Array.from({ length: 14 }, (_, index) => <i key={index} />)}</div>
+              <span className="completion-mark"><Icon name="check" size={30} /></span>
+              <h3>Session complete</h3>
+              <div className="completion-stats">
+                <div><strong>{Math.floor(elapsedSeconds / 60)}m</strong><span>Duration</span></div>
+                <div><strong>{workingSets}</strong><span>Work sets</span></div>
+                <div><strong>{formatNumber(displayWeight(totalVolumeKg, data.profile.unit))}</strong><span>{data.profile.unit} volume</span></div>
+              </div>
+            </div>
+          )}
           {confirm === "finish" && hasFailedMutation(w.id) && (
             <div className="notice">
               <h3>A previous change was not saved.</h3>
@@ -1021,6 +1249,7 @@ export function Workout() {
               run(
                 async () => {
                   if (confirm === "finish") {
+                    vibrate([30, 35, 55]);
                     if (hasFailedMutation(w.id))
                       await acknowledgeFailedMutation(w.id);
                     await finishWorkout(w.id);

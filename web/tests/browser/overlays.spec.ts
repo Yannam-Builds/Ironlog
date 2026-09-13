@@ -168,23 +168,12 @@ test("exercise options block background taps and set editing restores keyboard f
     .click();
   const options = page.getByRole("dialog", { name: exerciseName, exact: true });
   await expect(options).toBeVisible();
-  // Tap where Minimize sits behind the backdrop: dismiss, never navigate away.
-  const minimize = await page
-    .getByRole("button", { name: "Minimize workout" })
-    .boundingBox();
-  expect(minimize).not.toBeNull();
-  const point = {
-    x: minimize!.x + minimize!.width / 2,
-    y: minimize!.y + minimize!.height / 2,
-  };
-  expect(
-    await page.evaluate(
-      ({ x, y }) => !!document.elementFromPoint(x, y)?.closest("dialog"),
-      point,
-    ),
-  ).toBe(true);
+  // Tap the top-layer backdrop: dismiss the sheet without reaching any workout
+  // control underneath. The native-style header can grow with text settings,
+  // so derive a point above the sheet instead of assuming a control coordinate.
   const box = await options.boundingBox();
-  expect(box!.y).toBeGreaterThan(point.y);
+  expect(box).not.toBeNull();
+  const point = { x: 8, y: Math.max(2, box!.y / 2) };
   await page.mouse.click(point.x, point.y);
   await expect(options).toHaveCount(0);
   await expect(

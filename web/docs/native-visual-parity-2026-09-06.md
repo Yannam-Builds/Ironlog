@@ -52,3 +52,14 @@ Compose controls and animations are executable Kotlin rather than image assets. 
 - Primary route content now enters with a short pager-style horizontal transition. Newly logged set rows, expanded detail content, active-plan badges, and the Ledger XP bar reproduce the visible Compose fade, slide, scale, and 800 ms progress motions.
 - The five primary tabs now behave as an ordered pager: a horizontal swipe advances exactly one tab, works in both directions, follows the pointer before settling, resists movement past Home and Settings, and yields to vertical scrolling and nested horizontal lists. Form fields and sliders keep direct gesture ownership, and completed swipes suppress compatibility clicks so controls underneath the release point do not activate.
 - Every continuous or entrance animation remains disabled by the existing `prefers-reduced-motion` rule. Motion parity tests cover pointer reordering, keyboard reordering, top-plan activation, and the Home shine attachment.
+
+## 13 September 2026 — active workout parity
+
+- The active workout header now follows the Compose card structure with a rolling elapsed-time pill, explicit minimize action, and live volume comparison against the latest completed session with the same name.
+- Exercise cards use native-style drag handles. Mouse, touch, and pen dragging lifts the held card and animates surrounding cards into place; Arrow Up and Arrow Down provide the same persistent reorder for keyboard users.
+- Logged sets now expose the Compose set label, tappable W/WU/DS/F/AMRAP type badge, and inline RPE/RIR chip. Set types cycle in the same native order and continue through the serialized IndexedDB mutation boundary.
+- The rest banner now has a circular progress treatment, rolling digits, last-set context, and a completion pulse. Browsers with vibration support receive short confirmation patterns for logging, reordering, and completion.
+- The finish sheet now previews duration, work-set count, and total volume with the native completion mark and a short theme-colored burst. The app still commits only after the explicit save action.
+- The native volume card and fun load comparisons are present below the exercise list. All new motion inherits the global reduced-motion override.
+
+Automated coverage now verifies persistent keyboard and pointer exercise reordering, set-type cycling, completion-summary rendering, full workout persistence, and the existing reload/rest/warmup journey.

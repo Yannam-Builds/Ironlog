@@ -17,6 +17,22 @@ beforeEach(async () => {
   window.location.hash = "#/home";
 });
 afterEach(cleanup);
+const sessionExercise = (id: string, name: string) => ({
+  id,
+  exerciseId: id,
+  name,
+  sets: 3,
+  reps: "8",
+  restSeconds: 90,
+  notes: "",
+  supersetGroup: "",
+  isWarmup: false,
+  tracking: "weight_reps" as const,
+  muscle: "Chest",
+  equipment: "Barbell",
+  pendingWarmups: [],
+  loggedSets: [],
+});
 it("converts an unlogged weight draft when another tab changes units", async () => {
   await saveProfile({ name: "Test Athlete", onboarded: true });
   const w = await startWorkout();
@@ -47,6 +63,43 @@ it("converts an unlogged weight draft when another tab changes units", async () 
     await saveProfile({ unit: "lb" });
   });
   await waitFor(() => expect(screen.getByLabelText("LB")).toHaveValue(143.3));
+});
+it("matches native workout reorder controls and set-type cycling", async () => {
+  await saveProfile({ name: "Motion Athlete", onboarded: true });
+  const started = await startWorkout();
+  await mutateWorkout(started.id, started.revision, (workout) => {
+    workout.exercises.push(
+      sessionExercise("bench", "Bench Press"),
+      sessionExercise("row", "Barbell Row"),
+    );
+    workout.exercises[0].loggedSets.push({
+      id: "working-set",
+      weightKg: 80,
+      reps: 8,
+      durationSeconds: 0,
+      distanceKm: 0,
+      kind: "normal",
+      notes: "",
+      loggedAt: Date.now(),
+    });
+  });
+  window.location.hash = "#/workout";
+  render(<App />);
+
+  const rowHandle = await screen.findByRole("button", { name: "Drag to reorder Barbell Row" });
+  await act(async () => fireEvent.keyDown(rowHandle, { key: "ArrowUp" }));
+  await waitFor(async () => {
+    expect((await readSnapshot()).workouts[0].exercises.map((exercise) => exercise.id)).toEqual(["row", "bench"]);
+  });
+
+  const type = screen.getByRole("button", { name: "Set type for set 1" });
+  expect(type).toHaveTextContent("W");
+  await waitFor(() => expect(type).toBeEnabled());
+  await act(async () => fireEvent.click(type));
+  await waitFor(async () => {
+    expect((await readSnapshot()).workouts[0].exercises[1].loggedSets[0].kind).toBe("warmup");
+  });
+  expect(screen.getByLabelText("Workout volume")).toHaveTextContent("Volume:");
 });
 it.each(["empty", "warmup", "future"] as const)(
   "does not show readiness from %s-only history",
