@@ -44,9 +44,18 @@ test("a workout can be logged and completed inside the website phone", async ({
   await card.getByRole("button", { name: "Log", exact: true }).click();
   await expect(card.locator(".sets .set-row")).toHaveCount(1);
   await card.getByRole("button", { name: /Options for/ }).click();
-  await app
-    .getByRole("button", { name: "Plate calculator", exact: true })
-    .click();
+  // Keep the embedded phone itself in the outer viewport before scrolling the
+  // sheet. Mobile browser engines otherwise disagree about which nested
+  // viewport should satisfy click actionability.
+  await page.locator(".phone-frame").scrollIntoViewIfNeeded();
+  const plateCalculator = app.getByRole("button", {
+    name: "Plate calculator",
+    exact: true,
+  });
+  await plateCalculator.evaluate((button) =>
+    button.scrollIntoView({ block: "center", inline: "nearest" }),
+  );
+  await plateCalculator.click();
   await expect(
     app.getByRole("img", {
       name: "20 kg bar, 1 × 20 kg each side, 1 × 2.5 kg each side",

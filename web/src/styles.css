@@ -896,8 +896,12 @@ legend {
   opacity: 0.96;
 }
 .route-stage {
-  animation: ironlog-route-in 280ms cubic-bezier(0.2, 0.82, 0.2, 1) both;
+  animation: ironlog-route-next-in 280ms cubic-bezier(0.2, 0.82, 0.2, 1) both;
 }
+.app-content { touch-action: pan-y; }
+.app-content.tab-swiping { user-select: none; }
+.app-content.swipe-click-shield .route-stage { pointer-events: none; }
+.route-stage.route-previous { animation-name: ironlog-route-previous-in; }
 .plan-drag-handle {
   width: 44px;
   height: 44px;
@@ -1732,8 +1736,12 @@ details[open] > :not(summary) {
   from { transform: translateX(-600px); }
   to { transform: translateX(1800px); }
 }
-@keyframes ironlog-route-in {
+@keyframes ironlog-route-next-in {
   from { opacity: 0; transform: translateX(18px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes ironlog-route-previous-in {
+  from { opacity: 0; transform: translateX(-18px); }
   to { opacity: 1; transform: translateX(0); }
 }
 @keyframes ironlog-expand-content {

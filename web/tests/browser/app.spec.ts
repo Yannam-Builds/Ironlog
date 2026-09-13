@@ -205,6 +205,40 @@ test("plan cards reorder by pointer and the top plan becomes active", async ({ p
     direction: "alternate",
   });
 });
+test("primary tabs swipe one page at a time in both directions", async ({ page }) => {
+  await onboard(page);
+  const swipe = async (fromX: number, toX: number, fromY = 120, toY = 120) => {
+    await page.mouse.move(fromX, fromY);
+    await page.mouse.down();
+    await page.mouse.move(toX, toY, { steps: 8 });
+    await page.mouse.up();
+  };
+
+  await swipe(330, 70);
+  await expect(page.getByRole("heading", { name: "Plans", exact: true })).toBeVisible();
+  await swipe(330, 70);
+  await expect(page.getByRole("heading", { name: "History", exact: true })).toBeVisible();
+  await swipe(330, 70);
+  await expect(page.getByRole("heading", { name: "Stats", exact: true })).toBeVisible();
+  await swipe(330, 70);
+  await expect(page.getByRole("heading", { name: "Training Console", exact: true })).toBeVisible();
+  await swipe(330, 70);
+  await expect(page.getByRole("heading", { name: "Training Console", exact: true })).toBeVisible();
+
+  await swipe(70, 330);
+  await expect(page.getByRole("heading", { name: "Stats", exact: true })).toBeVisible();
+  await swipe(70, 330);
+  await expect(page.getByRole("heading", { name: "History", exact: true })).toBeVisible();
+  await swipe(70, 330);
+  await expect(page.getByRole("heading", { name: "Plans", exact: true })).toBeVisible();
+
+  await swipe(190, 180, 250, 440);
+  await expect(page.getByRole("heading", { name: "Plans", exact: true })).toBeVisible();
+  await swipe(70, 330);
+  await expect(page.getByRole("heading", { name: "QA Athlete", exact: true })).toBeVisible();
+  await swipe(70, 330);
+  await expect(page.getByRole("heading", { name: "QA Athlete", exact: true })).toBeVisible();
+});
 test("every route, themes, narrow and large-text layouts", async ({
   page,
 }, testInfo) => {

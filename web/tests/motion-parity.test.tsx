@@ -72,3 +72,21 @@ it("applies the native animated shine to the Home workout card", async () => {
   const eyebrow = await screen.findByText("Today’s workout");
   expect(eyebrow.closest("section")).toHaveClass("animated-card-shine");
 });
+
+it("navigates one adjacent primary tab from a touch swipe", async () => {
+  Object.defineProperties(HTMLElement.prototype, {
+    setPointerCapture: { configurable: true, value: vi.fn() },
+    hasPointerCapture: { configurable: true, value: vi.fn(() => true) },
+    releasePointerCapture: { configurable: true, value: vi.fn() },
+  });
+  render(<App />);
+  await screen.findByRole("heading", { name: "Plans" });
+  const main = document.getElementById("main-content")!;
+
+  fireEvent.pointerDown(main, { pointerId: 42, pointerType: "touch", clientX: 320, clientY: 160 });
+  fireEvent.pointerMove(main, { pointerId: 42, pointerType: "touch", clientX: 80, clientY: 164 });
+  fireEvent.pointerUp(main, { pointerId: 42, pointerType: "touch", clientX: 80, clientY: 164 });
+
+  await screen.findByRole("heading", { name: "History" });
+  expect(window.location.hash).toBe("#/log");
+});

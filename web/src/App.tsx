@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, lazy, Suspense, type CSSProperties } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, lazy, Suspense, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import { readSnapshot, subscribeSnapshot, reconcileBadges } from "./data/store";
 import type { AppSnapshot } from "./domain/types";
 import { deriveSnapshot } from "./domain/engine";
@@ -22,6 +22,7 @@ import { Settings } from "./features/Settings";
 import { Intelligence } from "./features/Intelligence";
 import { Research } from "./research";
 const tabs = ["Home", "Plans", "Log", "Stats", "Settings"];
+const tabRoutes = tabs.map((tab) => tab.toLowerCase());
 const detailTitles: Record<string, string> = {
   workout: "ACTIVE WORKOUT",
   recovery: "MUSCLE RECOVERY",
@@ -47,6 +48,20 @@ export function App() {
   const [now, setNow] = useState(Date.now());
   const [online, setOnline] = useState(navigator.onLine);
   const main = useRef<HTMLElement>(null);
+  const routeRef = useRef(route);
+  routeRef.current = route;
+  const routeDirection = useRef<"next" | "previous">("next");
+  const swipe = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    currentX: number;
+    startedAt: number;
+    axis?: "horizontal" | "vertical";
+  } | undefined>(undefined);
+  const swipeTimer = useRef<number | undefined>(undefined);
+  const clickShieldTimer = useRef<number | undefined>(undefined);
+  const suppressClickUntil = useRef(0);
   useLayoutEffect(() => {
     // Focus the committed route before it can be interacted with. A deferred
     // animation frame can otherwise steal focus between Enter's key events.
@@ -63,7 +78,13 @@ export function App() {
   }, []);
   useEffect(() => {
     const hash = () => {
-      setRoute(location.hash.replace(/^#\//, "") || "home");
+      const nextRoute = location.hash.replace(/^#\//, "") || "home";
+      const from = tabRoutes.indexOf(routeRef.current);
+      const to = tabRoutes.indexOf(nextRoute);
+      if (from >= 0 && to >= 0 && from !== to) {
+        routeDirection.current = to > from ? "next" : "previous";
+      }
+      setRoute(nextRoute);
     };
     const visible = () => {
       if (document.visibilityState === "visible") {
@@ -92,6 +113,74 @@ export function App() {
       window.removeEventListener("storage", theme);
     };
   }, []);
+  useEffect(() => () => {
+    if (swipeTimer.current !== undefined) window.clearTimeout(swipeTimer.current);
+    if (clickShieldTimer.current !== undefined) window.clearTimeout(clickShieldTimer.current);
+  }, []);
+
+  const swipeStage = () => main.current?.querySelector<HTMLElement>(".route-stage");
+  const clearSwipeStage = () => {
+    const stage = swipeStage();
+    if (stage) stage.removeAttribute("style");
+    main.current?.classList.remove("tab-swiping");
+  };
+  const cancelTabSwipe = () => {
+    const stage = swipeStage();
+    swipe.current = undefined;
+    if (!stage) return;
+    if (swipeTimer.current !== undefined) window.clearTimeout(swipeTimer.current);
+    stage.style.animation = "none";
+    stage.style.transition = "transform 180ms cubic-bezier(0.2, 0.82, 0.2, 1), opacity 180ms ease";
+    stage.style.transform = "translate3d(0, 0, 0)";
+    stage.style.opacity = "1";
+    swipeTimer.current = window.setTimeout(() => {
+      clearSwipeStage();
+      swipeTimer.current = undefined;
+    }, 190);
+  };
+  const finishTabSwipe = (event: ReactPointerEvent<HTMLElement>, cancelled = false) => {
+    const gesture = swipe.current;
+    if (!gesture || gesture.pointerId !== event.pointerId) return;
+    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    const dx = gesture.currentX - gesture.startX;
+    const elapsed = Math.max(1, performance.now() - gesture.startedAt);
+    const velocity = Math.abs(dx) / elapsed;
+    const currentIndex = tabRoutes.indexOf(routeRef.current);
+    const nextIndex = dx < 0 ? currentIndex + 1 : currentIndex - 1;
+    const qualifies = !cancelled && gesture.axis === "horizontal" &&
+      (Math.abs(dx) >= Math.max(56, (main.current?.clientWidth ?? innerWidth) * 0.18) ||
+        (Math.abs(dx) >= 28 && velocity >= 0.55)) &&
+      nextIndex >= 0 && nextIndex < tabRoutes.length;
+    if (!qualifies) {
+      cancelTabSwipe();
+      return;
+    }
+    event.preventDefault();
+    swipe.current = undefined;
+    suppressClickUntil.current = performance.now() + 400;
+    main.current?.classList.add("swipe-click-shield");
+    if (clickShieldTimer.current !== undefined) window.clearTimeout(clickShieldTimer.current);
+    clickShieldTimer.current = window.setTimeout(() => {
+      main.current?.classList.remove("swipe-click-shield");
+      clickShieldTimer.current = undefined;
+    }, 450);
+    routeDirection.current = dx < 0 ? "next" : "previous";
+    const stage = swipeStage();
+    if (stage) {
+      stage.style.animation = "none";
+      stage.style.transition = "transform 150ms cubic-bezier(0.4, 0, 1, 1), opacity 150ms ease";
+      stage.style.transform = `translate3d(${dx < 0 ? "-32%" : "32%"}, 0, 0)`;
+      stage.style.opacity = "0.55";
+    }
+    if (swipeTimer.current !== undefined) window.clearTimeout(swipeTimer.current);
+    swipeTimer.current = window.setTimeout(() => {
+      clearSwipeStage();
+      navigate(tabRoutes[nextIndex]);
+      swipeTimer.current = undefined;
+    }, 150);
+  };
   const run = async (work: () => Promise<unknown>, message?: string) => {
     if (running.current) return false;
     running.current = true;
@@ -253,8 +342,68 @@ export function App() {
               tabIndex={-1}
               ref={main}
               className="app-content"
+              onClickCapture={(event) => {
+                if (performance.now() < suppressClickUntil.current) {
+                  event.preventDefault();
+                  event.stopPropagation();
+                }
+              }}
+              onPointerDownCapture={(event) => {
+                if ((event.pointerType === "mouse" && event.button !== 0) ||
+                  tabRoutes.indexOf(routeRef.current) < 0) return;
+                const target = event.target as HTMLElement;
+                if (target.closest("input, textarea, select, [contenteditable=true], [role=slider], [data-swipe-ignore]")) return;
+                let node: HTMLElement | null = target;
+                while (node && node !== event.currentTarget) {
+                  const style = getComputedStyle(node);
+                  if ((style.overflowX === "auto" || style.overflowX === "scroll") &&
+                    node.scrollWidth > node.clientWidth + 1) return;
+                  node = node.parentElement;
+                }
+                if (swipeTimer.current !== undefined) {
+                  window.clearTimeout(swipeTimer.current);
+                  swipeTimer.current = undefined;
+                  clearSwipeStage();
+                }
+                swipe.current = {
+                  pointerId: event.pointerId,
+                  startX: event.clientX,
+                  startY: event.clientY,
+                  currentX: event.clientX,
+                  startedAt: performance.now(),
+                };
+              }}
+              onPointerMoveCapture={(event) => {
+                const gesture = swipe.current;
+                if (!gesture || gesture.pointerId !== event.pointerId) return;
+                gesture.currentX = event.clientX;
+                const dx = event.clientX - gesture.startX;
+                const dy = event.clientY - gesture.startY;
+                if (!gesture.axis && Math.max(Math.abs(dx), Math.abs(dy)) >= 9) {
+                  gesture.axis = Math.abs(dx) > Math.abs(dy) * 1.15 ? "horizontal" : "vertical";
+                  if (gesture.axis === "horizontal") {
+                    event.currentTarget.classList.add("tab-swiping");
+                    window.getSelection()?.removeAllRanges();
+                    try { event.currentTarget.setPointerCapture(event.pointerId); } catch {}
+                  }
+                }
+                if (gesture.axis !== "horizontal") return;
+                event.preventDefault();
+                const index = tabRoutes.indexOf(routeRef.current);
+                const atBoundary = (dx > 0 && index === 0) || (dx < 0 && index === tabRoutes.length - 1);
+                const shownDx = atBoundary ? dx * 0.24 : dx;
+                const stage = swipeStage();
+                if (stage) {
+                  stage.style.animation = "none";
+                  stage.style.transition = "none";
+                  stage.style.transform = `translate3d(${shownDx}px, 0, 0)`;
+                  stage.style.opacity = String(Math.max(0.72, 1 - Math.abs(shownDx) / 700));
+                }
+              }}
+              onPointerUpCapture={(event) => finishTabSwipe(event)}
+              onPointerCancelCapture={(event) => finishTabSwipe(event, true)}
             >
-              <div key={route} className="route-stage">
+              <div key={route} className={`route-stage route-${routeDirection.current}`}>
                 {screen}
               </div>
             </main>
