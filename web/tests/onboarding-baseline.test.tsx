@@ -8,6 +8,7 @@ import {
   saveProfile,
 } from "../src/data/store";
 import { deriveSnapshot } from "../src/domain/engine";
+import { calculateOnboardingBaseline } from "../src/domain/onboarding-baseline";
 import {
   defaultProfile,
   type AppSnapshot,
@@ -66,8 +67,44 @@ const expectedSignals: TrainingSignals = {
   endurance: 208,
   agility: 129,
   discipline: 325,
-  recovery: 241,
+  recovery: 249,
 };
+
+it("uses the native performance calibration inputs instead of neutral placeholders", () => {
+  const baseline = calculateOnboardingBaseline(
+    {
+      ...defaultProfile,
+      trainingAgeMonths: 24,
+      historicalTrainingDaysPerWeek: 4,
+      weeklyGoal: 4,
+      onboardingBodyweightKg: 80,
+      hasPastTraining: true,
+      hasGymAccess: true,
+      baselinePushups: 40,
+      baselinePullups: 10,
+      baselineBenchKg: 100,
+      baselineLatPulldownKg: 80,
+      baselineMileRunSeconds: 420,
+    },
+    123,
+  );
+
+  expect(baseline).toMatchObject({
+    estimatedLifetimeSessions: 417,
+    xp: 8_340,
+    grade: "Titanium",
+    seededAt: 123,
+    stats: {
+      strength: 488,
+      power: 431,
+      hypertrophy: 384,
+      endurance: 391,
+      agility: 412,
+      discipline: 332,
+      recovery: 254,
+    },
+  });
+});
 
 const onboardingAnswers = {
   onboarded: true,
@@ -346,6 +383,6 @@ it("previews the estimate honestly before onboarding is committed", () => {
   expect(screen.getByText(/titanium.*provisional/i)).toBeInTheDocument();
   expect(screen.getByText(/6,600 XP/i)).toBeInTheDocument();
   expect(
-    screen.getByText(/does not ask for lift or run performance checks/i),
+    screen.getByText(/performance checks are optional/i),
   ).toBeInTheDocument();
 });

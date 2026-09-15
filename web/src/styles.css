@@ -1477,6 +1477,87 @@ body.plan-reordering {
 .onboard-actions .button {
   flex: 1;
 }
+.onboarding-step > .button {
+  width: 100%;
+  margin-top: calc(14px * var(--ui-spacing, 1));
+}
+.onboarding-baseline-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: calc(10px * var(--ui-spacing, 1));
+  margin-top: calc(16px * var(--ui-spacing, 1));
+}
+.onboarding-options {
+  display: grid;
+  gap: calc(10px * var(--ui-spacing, 1));
+  margin: calc(20px * var(--ui-spacing, 1)) 0;
+}
+.onboarding-options > button {
+  min-height: 76px;
+  padding: calc(15px * var(--ui-spacing, 1));
+  border: 1px solid var(--cardBorder);
+  border-radius: 18px;
+  background: var(--card);
+  color: var(--text);
+  text-align: left;
+  display: grid;
+  gap: 5px;
+  transition: border-color 180ms ease, background 180ms ease, transform 180ms ease;
+}
+.onboarding-options > button[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--accentSoft);
+  transform: translateY(-1px);
+}
+.onboarding-options > button span {
+  color: var(--subtext);
+  line-height: 1.4;
+}
+.weekday-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+  border: 0;
+  padding: 0;
+  margin: calc(20px * var(--ui-spacing, 1)) 0;
+}
+.weekday-grid legend {
+  grid-column: 1 / -1;
+  margin-bottom: 8px;
+  color: var(--subtext);
+  font-weight: var(--type-w700, 700);
+}
+.weekday-grid label {
+  position: relative;
+}
+.weekday-grid input {
+  position: absolute;
+  opacity: 0;
+}
+.weekday-grid span {
+  min-height: 48px;
+  border: 1px solid var(--cardBorder);
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  color: var(--subtext);
+  font-size: 0.72rem;
+  font-weight: var(--type-w700, 700);
+}
+.weekday-grid input:checked + span {
+  color: var(--accentText, #fff);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.weekday-grid input:focus-visible + span {
+  outline: 3px solid color-mix(in srgb, var(--accent) 50%, transparent);
+  outline-offset: 2px;
+}
+.calibration-preview {
+  display: grid;
+  gap: 6px;
+  margin-top: calc(18px * var(--ui-spacing, 1));
+}
 .onboarding > a {
   font-size: 0.75rem;
   display: block;
@@ -1946,6 +2027,12 @@ figcaption {
   .onboarding {
     padding: calc(20px * var(--ui-spacing, 1));
   }
+  .onboarding-baseline-grid {
+    grid-template-columns: 1fr;
+  }
+  .weekday-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
   .three-col {
     grid-template-columns: 1fr 1fr;
   }
@@ -2062,3 +2149,22 @@ body.workout-reordering { cursor: grabbing; user-select: none; }
   color: var(--text);
   border: 1px solid var(--muted);
 }
+.choice-fieldset { border: 0; margin: 0; padding: 0; }
+.choice-fieldset legend { color: var(--subtext); font-size: .78rem; font-weight: 700; margin-bottom: 8px; }
+.choice-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.choice-chip {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--cardBorder);
+  border-radius: 999px;
+  color: var(--subtext);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: .82rem;
+  min-height: 40px;
+  padding: 8px 12px;
+}
+.choice-chip input { height: 1px; opacity: 0; position: absolute; width: 1px; }
+.choice-chip.selected { background: color-mix(in srgb, var(--accent) 18%, var(--surface)); border-color: var(--accent); color: var(--accent); }
+.choice-chip:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+.choice-chip.disabled { cursor: not-allowed; opacity: .42; }

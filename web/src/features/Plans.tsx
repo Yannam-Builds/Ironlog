@@ -22,6 +22,8 @@ import {
 } from "../data/store";
 import { decodePlans, encodePlan } from "../domain/codecs";
 import { instantiatePlan } from "../domain/plans";
+import { trackingOptions } from "../domain/tracking";
+import { AIPlan } from "./plans/AIPlan";
 import type {
   Exercise,
   Plan,
@@ -42,6 +44,23 @@ export function ExercisePicker({
   const [muscle, setMuscle] = useState("Chest");
   const [equipment, setEquipment] = useState("Barbell");
   const [tracking, setTracking] = useState<Tracking>("weight_reps");
+  const [movementPattern, setMovementPattern] = useState("");
+  const [difficulty, setDifficulty] = useState("");
+  const [secondaryMuscles, setSecondaryMuscles] = useState<string[]>([]);
+  const muscleOptions = [
+    "Chest", "Back", "Shoulders", "Biceps", "Triceps", "Forearms", "Abs",
+    "Obliques", "Glutes", "Quads", "Hamstrings", "Calves", "Lower Back",
+  ];
+  const trackingLabels: Record<string, string> = {
+    weight_reps: "Weight × reps",
+    bodyweight_reps: "Bodyweight × reps",
+    bodyweight_plus_weight_reps: "Bodyweight + weight × reps",
+    assisted_bodyweight: "Assisted bodyweight × reps",
+    duration: "Duration",
+    duration_weight: "Duration & weight",
+    duration_distance: "Duration & distance",
+    cardio: "Cardio duration",
+  };
   const list = data.exercises
     .filter((e) => e.name.toLowerCase().includes(query.toLowerCase()))
     .slice(0, 50);
@@ -62,39 +81,56 @@ export function ExercisePicker({
       {custom ? (
         <>
           <Field label="Primary muscle">
-            <select value={muscle} onChange={(e) => setMuscle(e.target.value)}>
-              {[
-                "Chest",
-                "Back",
-                "Shoulders",
-                "Biceps",
-                "Triceps",
-                "Quadriceps",
-                "Hamstrings",
-                "Glutes",
-                "Calves",
-                "Abdominals",
-                "Cardio",
-              ].map((x) => (
+            <select value={muscle} onChange={(e) => {
+              setMuscle(e.target.value);
+              setSecondaryMuscles((current) => current.filter((value) => value !== e.target.value));
+            }}>
+              {muscleOptions.map((x) => (
                 <option key={x}>{x}</option>
               ))}
             </select>
           </Field>
+          <fieldset className="choice-fieldset">
+            <legend>Secondary muscles (optional)</legend>
+            <div className="choice-chips">
+              {muscleOptions.map((option) => (
+                <label className={`choice-chip ${secondaryMuscles.includes(option) ? "selected" : ""} ${option === muscle ? "disabled" : ""}`} key={option}>
+                  <input
+                    type="checkbox"
+                    checked={secondaryMuscles.includes(option)}
+                    disabled={option === muscle}
+                    onChange={() => setSecondaryMuscles((current) => current.includes(option)
+                      ? current.filter((value) => value !== option)
+                      : [...current, option])}
+                  />
+                  {option}
+                </label>
+              ))}
+            </div>
+          </fieldset>
           <Field label="Equipment">
-            <input
-              value={equipment}
-              onChange={(e) => setEquipment(e.target.value)}
-            />
+            <select value={equipment} onChange={(e) => setEquipment(e.target.value)}>
+              {["Barbell", "Dumbbell", "Cable", "Machine", "Bodyweight", "Band", "Kettlebell", "Other"].map((option) => <option key={option}>{option}</option>)}
+            </select>
           </Field>
           <Field label="Tracking">
             <select
               value={tracking}
               onChange={(e) => setTracking(e.target.value as Tracking)}
             >
-              <option value="weight_reps">Weight × reps</option>
-              <option value="bodyweight_reps">Bodyweight × reps</option>
-              <option value="duration">Duration</option>
-              <option value="duration_distance">Duration & distance</option>
+              {trackingOptions.map((option) => <option value={option} key={option}>{trackingLabels[option] ?? option}</option>)}
+            </select>
+          </Field>
+          <Field label="Movement pattern">
+            <select value={movementPattern} onChange={(e) => setMovementPattern(e.target.value)}>
+              <option value="">Not set</option>
+              {["Push", "Pull", "Hinge", "Squat", "Carry", "Rotation", "Isolation"].map((option) => <option key={option}>{option}</option>)}
+            </select>
+          </Field>
+          <Field label="Difficulty">
+            <select value={difficulty} onChange={(e) => setDifficulty(e.target.value)}>
+              <option value="">Not set</option>
+              {["beginner", "intermediate", "advanced", "expert"].map((option) => <option key={option} value={option}>{option[0].toUpperCase() + option.slice(1)}</option>)}
             </select>
           </Field>
           <Button
@@ -106,6 +142,13 @@ export function ExercisePicker({
                 muscle,
                 equipment,
                 tracking,
+                category: "strength",
+                movementPattern: movementPattern || undefined,
+                difficulty: difficulty || undefined,
+                secondaryMuscles,
+                primaryMuscles: [muscle],
+                isBodyweight: equipment === "Bodyweight" || tracking.includes("bodyweight"),
+                requiresExternalLoad: ["weight_reps", "duration_weight"].includes(tracking),
                 custom: true,
               };
               void run(() => saveExercise(ex)).then((ok) => {
@@ -165,10 +208,11 @@ export const planned = (e: Exercise): PlannedExercise => ({
 export function Plans() {
   const { data, run, busy } = useApp();
   const [library, setLibrary] = useState(false);
+  const [programQuery, setProgramQuery] = useState("");
+  const [programCategory, setProgramCategory] = useState("All");
+  const [selectedProgram, setSelectedProgram] = useState<Plan>();
   const [importing, setImporting] = useState(false);
   const [aiBuilder, setAiBuilder] = useState(false);
-  const [aiGoal, setAiGoal] = useState("General Fitness");
-  const [aiDays, setAiDays] = useState(3);
   const [raw, setRaw] = useState("");
   const [result, setResult] = useState("");
   const [orderedIds, setOrderedIds] = useState(() => data.plans.map((plan) => plan.id));
@@ -201,6 +245,12 @@ export function Plans() {
   const orderedPlans = orderedIds
     .map((id) => data.plans.find((plan) => plan.id === id))
     .filter((plan): plan is Plan => Boolean(plan));
+  const programCategories = ["All", ...Array.from(new Set(templates.map((template) => template.goal || "General Fitness")))];
+  const filteredPrograms = templates.filter((template) => {
+    const inCategory = programCategory === "All" || template.goal === programCategory;
+    const query = programQuery.trim().toLowerCase();
+    return inCategory && (!query || `${template.name} ${template.description} ${template.goal}`.toLowerCase().includes(query));
+  });
 
   useLayoutEffect(() => {
     const cards = Array.from(
@@ -432,37 +482,57 @@ export function Plans() {
         <Icon name="plus" />New plan
       </Button>
       {library && (
-        <Sheet title="Program library" onClose={() => setLibrary(false)}>
-          <p>
-            32 programs from the current native app. Review the exercise
-            selection for your equipment and experience.
-          </p>
-          {templates.map((p) => (
-            <button
-              className="list-row"
-              key={p.id}
-              disabled={busy}
-              onClick={() => {
-                const copy = instantiatePlan(p as Plan, {
-                  order: data.plans.length,
-                });
-                void run(() => savePlan(copy)).then((ok) => {
-                  if (ok) {
-                    setLibrary(false);
-                    navigate(`plan/${copy.id}`);
-                  }
-                });
-              }}
-            >
-              <div>
-                <strong>{p.name}</strong>
-                <small>
-                  {p.days.length} days · {p.description}
-                </small>
-              </div>
-              <Icon name="plus" />
-            </button>
-          ))}
+        <Sheet title={selectedProgram ? selectedProgram.name : "Program library"} onClose={() => {
+          if (selectedProgram) setSelectedProgram(undefined);
+          else setLibrary(false);
+        }}>
+          {selectedProgram ? <>
+            <div className="program-detail-badges">
+              <span className="pill">{selectedProgram.days.length}× / week</span>
+              <span className="pill">{selectedProgram.goal}</span>
+            </div>
+            <p>{selectedProgram.description}</p>
+            <div className="program-day-preview">
+              {selectedProgram.days.map((day) => <div className="list-row" key={day.id}>
+                <strong>{day.name}</strong><small>{day.exercises.length} exercises</small>
+              </div>)}
+            </div>
+            <Button variant="secondary" onClick={() => setSelectedProgram(undefined)}>Back to programs</Button>
+            <Button disabled={busy} onClick={() => {
+              const copy = instantiatePlan(selectedProgram, { order: data.plans.length });
+              void run(() => savePlan(copy)).then((ok) => {
+                if (ok) {
+                  setSelectedProgram(undefined);
+                  setLibrary(false);
+                  navigate(`plan/${copy.id}`);
+                }
+              });
+            }}>Add to my plans</Button>
+          </> : <>
+            <p>Programs from the native library, ready to review before adding.</p>
+            <Field label="Search programs">
+              <input value={programQuery} onChange={(event) => setProgramQuery(event.target.value)} placeholder="Name, goal, or description" />
+            </Field>
+            <div className="choice-chips" aria-label="Program categories">
+              {programCategories.map((category) => <button
+                type="button"
+                className={`choice-chip ${programCategory === category ? "selected" : ""}`}
+                aria-pressed={programCategory === category}
+                key={category}
+                onClick={() => setProgramCategory(category)}
+              >{category}</button>)}
+            </div>
+            {filteredPrograms.map((program) => (
+              <button className="list-row" key={program.id} onClick={() => setSelectedProgram(program as Plan)}>
+                <div>
+                  <strong>{program.name}</strong>
+                  <small>{program.days.length} days · {program.goal} · {program.description}</small>
+                </div>
+                <Icon name="right" />
+              </button>
+            ))}
+            {!filteredPrograms.length && <Empty title={`No programs match “${programQuery.trim()}”`}><p>Try another name, goal, or category.</p></Empty>}
+          </>}
         </Sheet>
       )}
       {importing && (
@@ -514,38 +584,7 @@ export function Plans() {
         </Sheet>
       )}
       {aiBuilder && (
-        <Sheet title="Create with AI" onClose={() => setAiBuilder(false)}>
-          <p>Build a local starting plan from IronLog’s current program library. You can edit every exercise afterward.</p>
-          <Field label="Goal">
-            <select value={aiGoal} onChange={(event) => setAiGoal(event.target.value)}>
-              <option>General Fitness</option>
-              <option>Hypertrophy</option>
-              <option>Strength</option>
-              <option>Endurance</option>
-            </select>
-          </Field>
-          <Field label="Training days">
-            <select value={aiDays} onChange={(event) => setAiDays(Number(event.target.value))}>
-              {[2, 3, 4, 5, 6].map((days) => <option key={days} value={days}>{days} days</option>)}
-            </select>
-          </Field>
-          <Button disabled={busy} onClick={() => {
-            const goal = aiGoal.toLowerCase();
-            const matches = templates.filter((template) => template.days.length === aiDays);
-            const source = matches.find((template) =>
-              `${template.name} ${template.description}`.toLowerCase().includes(goal),
-            ) ?? matches[0] ?? templates[0];
-            const copy = instantiatePlan(source as Plan, { order: data.plans.length });
-            copy.name = `${aiGoal} ${aiDays}-Day Plan`;
-            copy.goal = aiGoal;
-            void run(() => savePlan(copy)).then((ok) => {
-              if (ok) {
-                setAiBuilder(false);
-                navigate(`plan/${copy.id}`);
-              }
-            });
-          }}>Generate plan</Button>
-        </Sheet>
+        <AIPlan onClose={() => setAiBuilder(false)} />
       )}
     </>
   );
@@ -561,6 +600,17 @@ export function PlanEditor({ id }: { id: string }) {
   );
   const [addTo, setAddTo] = useState<string>();
   const [confirm, setConfirm] = useState(false);
+  const [confirmClose, setConfirmClose] = useState(false);
+  const [notesSettings, setNotesSettings] = useState(false);
+  const [confirmDeleteNotes, setConfirmDeleteNotes] = useState(false);
+  const [notesVisible, setNotesVisible] = useState(data.profile.planExerciseNotesVisible);
+  const dirty = Boolean(draft && baseline && JSON.stringify(draft) !== JSON.stringify(baseline));
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
   if (!draft)
     return (
       <Empty title="Plan not found">
@@ -575,7 +625,11 @@ export function PlanEditor({ id }: { id: string }) {
   return (
     <>
       <div className="page-title">
-        <h1>Edit plan</h1>
+        <div className="row">
+          <Button variant="ghost" onClick={() => dirty ? setConfirmClose(true) : navigate("plans")}>Back to plans</Button>
+          <h1>Edit plan</h1>
+        </div>
+        <IconButton name="note" label="Plan note settings" onClick={() => setNotesSettings(true)} />
         <IconButton
           name="share"
           label="Export plan JSON"
@@ -690,16 +744,16 @@ export function PlanEditor({ id }: { id: string }) {
                   />
                 </Field>
               </div>
-              <Field label="Exercise notes">
-                <textarea
-                  value={ex.notes}
-                  onChange={(e) =>
-                    edit((p) => {
-                      p.days[di].exercises[ei].notes = e.target.value;
-                    })
-                  }
-                />
-              </Field>
+              {notesVisible && <Field label="Exercise notes">
+                  <textarea
+                    value={ex.notes}
+                    onChange={(e) =>
+                      edit((p) => {
+                        p.days[di].exercises[ei].notes = e.target.value;
+                      })
+                    }
+                  />
+                </Field>}
               <div className="row">
                 <Field label="Superset group">
                   <input
@@ -738,6 +792,24 @@ export function PlanEditor({ id }: { id: string }) {
                   Move up
                 </Button>
               )}
+              {ei < day.exercises.length - 1 && (
+                <Button variant="ghost" onClick={() => edit((p) => {
+                  const list = p.days[di].exercises;
+                  [list[ei], list[ei + 1]] = [list[ei + 1], list[ei]];
+                })}>Move down</Button>
+              )}
+              {draft.days.length > 1 && <Field label={`Move ${ex.name} to day`}>
+                <select value={day.id} onChange={(event) => {
+                  const targetId = event.target.value;
+                  if (targetId === day.id) return;
+                  edit((p) => {
+                    const [moved] = p.days[di].exercises.splice(ei, 1);
+                    p.days.find((candidate) => candidate.id === targetId)?.exercises.push(moved);
+                  });
+                }}>
+                  {draft.days.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.name}</option>)}
+                </select>
+              </Field>}
             </div>
           ))}
           <Button variant="secondary" onClick={() => setAddTo(day.id)}>
@@ -827,6 +899,40 @@ export function PlanEditor({ id }: { id: string }) {
           >
             Delete plan
           </Button>
+        </Sheet>
+      )}
+      {notesSettings && (
+        <Sheet title="Plan notes" onClose={() => setNotesSettings(false)}>
+          <label className="check-label">
+            <input type="checkbox" checked={notesVisible} onChange={(event) => {
+              const next = event.target.checked;
+              setNotesVisible(next);
+              void run(() => saveProfile({ planExerciseNotesVisible: next }));
+            }} />
+            Show exercise notes
+          </label>
+          <p className="muted">Hiding notes changes only the editor display. Saved notes remain available.</p>
+          <Button variant="danger" onClick={() => setConfirmDeleteNotes(true)}>Delete all notes in this plan</Button>
+        </Sheet>
+      )}
+      {confirmDeleteNotes && (
+        <Sheet title="Delete all plan notes?" onClose={() => setConfirmDeleteNotes(false)}>
+          <p>This removes the plan description and every exercise note in {draft.name}.</p>
+          <Button variant="danger" onClick={() => {
+            edit((plan) => {
+              plan.description = "";
+              plan.days.forEach((day) => day.exercises.forEach((exercise) => { exercise.notes = ""; }));
+            });
+            setConfirmDeleteNotes(false);
+            setNotesSettings(false);
+          }}>Confirm delete all notes</Button>
+        </Sheet>
+      )}
+      {confirmClose && (
+        <Sheet title="Discard plan edits?" onClose={() => setConfirmClose(false)}>
+          <p>Your unsaved plan changes will be lost.</p>
+          <Button variant="danger" onClick={() => navigate("plans")}>Discard and leave</Button>
+          <Button variant="secondary" onClick={() => setConfirmClose(false)}>Keep editing</Button>
         </Sheet>
       )}
     </>

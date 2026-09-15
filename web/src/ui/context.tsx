@@ -1,9 +1,8 @@
 import { createContext, useContext, type ReactNode } from "react";
 import type { AppSnapshot, Workout } from "../domain/types";
 import { deriveSnapshot } from "../domain/engine";
-export const navigate = (route: string) => {
-  window.location.hash = `#/${route}`;
-};
+import { navigateTo } from "./navigation";
+export const navigate = navigateTo;
 export type AppContextValue = {
   error?: string;
   data: AppSnapshot;

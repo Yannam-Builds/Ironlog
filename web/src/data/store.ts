@@ -219,6 +219,30 @@ export async function saveProfile(partial: Partial<Profile>) {
     });
   });
 }
+
+/** Completes first-run setup and optional starter-plan creation as one commit. */
+export async function completeOnboarding(
+  partial: Partial<Profile>,
+  starterPlan?: Plan,
+) {
+  await db.transaction("rw", db.profiles, db.plans, async () => {
+    const row = await db.profiles.get("local");
+    const validPlan = starterPlan ? planSchema.parse(starterPlan) : undefined;
+    const profile = profileSchema.parse({
+      ...defaultProfile,
+      ...row,
+      ...partial,
+      onboarded: true,
+      onboardingStep: 10,
+      activePlanId: validPlan?.id ?? row?.activePlanId,
+    });
+    if (validPlan) await db.plans.put(validPlan);
+    await db.profiles.put({
+      ...recomputeOnboardingBaseline(profile),
+      id: "local",
+    });
+  });
+}
 export async function readExerciseNextNote(exerciseId: string): Promise<string> {
   if (!exerciseId.trim()) throw Error("Exercise identity is required.");
   return (await db.profiles.get("local"))?.exerciseNextNotes?.[`exercise_next_note:${exerciseId}`] ?? "";

@@ -1,0 +1,74 @@
+# Kotlin-to-web parity audit — 14 September 2026
+
+Status: source audit and implementation planning complete; implementation and fresh runtime acceptance remain open. This report supersedes the remaining-work claims in the earlier chat, not the historical test evidence in older reports.
+
+## Scope and evidence
+
+The user requested an audit and plan only for now. Target: all browser-capable Kotlin behavior, controls, screen structure, assets, animations, transitions, and data contracts. No application source, deployment, APK, or Android working-tree changes were made by this audit. The 5 September brief is product context; its old instruction to implement immediately is superseded by the current planning-only request. QR sharing remains deliberately removed. No accounts, subscriptions, or automatic cloud synchronization are introduced.
+
+Evidence is current source inspection, route tracing, existing test inventory, and historical parity documentation. No fresh browser/device comparison or application tests were run in this documentation pass. Source-confirmed missing behavior is distinguished from unverified visual fidelity. A file inventory is not a line-by-line audit of every implementation.
+
+| Checkout | Observed state | Use |
+| --- | --- | --- |
+| `Z:/KOTLIN/IronLogWeb` | Clean before audit; `511c232` | Web implementation and documentation tree |
+| `Z:/KOTLIN/_github_publish_ironlog` | Clean; `511c232` | Publication reference; not modified |
+| `Z:/KOTLIN/UnifiedPort` | HEAD `861674b`; substantial tracked and untracked work | Current Kotlin working-tree reference; preserve all work |
+
+The companion CSVs record SHA-256 for 254 native application source files and 47 web source/generated files. Native source comparison also normalizes CRLF to LF: **six native paths differ** between UnifiedPort and the Android copy inside IronLogWeb, rather than the 253 raw-byte mismatches caused mostly by line endings. Three of the six are absent from the web checkout's Android copy: `RecentPerformance.kt`, `RecentPerformanceSheet.kt`, and `WorkoutRestControls.kt`. The other three are `BackupValidation.kt`, `RecoveryReadinessEngine.kt`, and `ActiveWorkoutScreen.kt`.
+
+This matters: UnifiedPort has region-local recovery/failure handling while the Android source copy in IronLogWeb still has session-wide modifiers. Do not regress the already ported web fixes by mechanically synchronizing from the older copy. Neither Git HEAD alone identifies the running APK. Slice P00 must bind visual evidence to a built reference before any exact-motion acceptance claim.
+
+Native paths below are relative to `Z:/KOTLIN/UnifiedPort/app/src/main/java/com/ironlog/app/`. Web paths are relative to `Z:/KOTLIN/IronLogWeb/web/`.
+
+## Confirmed gaps and verification backlog
+
+Legend: **G** = source-confirmed gap; **P** = implemented subset with confirmed gaps; **V** = existing capability requiring differential/runtime verification. P0 is dependency/data correctness, P1 is user-visible workflow parity, P2 is finishing/acceptance. IDs map directly to the implementation plan.
+
+| ID / priority | Surface and native authority | Current web evidence | Remaining work / acceptance |
+| --- | --- | --- | --- |
+| P00 / P0 | Source and release identity | Six normalized Android-source divergences; historical screenshots/test reports | Pin reference, reconcile divergent contracts, build a complete destination/action/settings ledger; match captured APK to source |
+| P01 / P0 | `navigation/AppNavigator.kt`, tab bar, shared components | `ui/navigation.ts` now owns parent routes, in-app history, direct-link fallback and browser Back/Forward; five-tab swipe remains | P: draft interception outside Plan Editor, scroll restoration, nested-gesture evidence and exact native detail/pager transitions |
+| P02 / P1 | `OnboardingScreen.kt`, `onboarding/steps/*`, `BaselineCalibrationEngine.kt` | Ten browser-adapted pages, persisted draft fields, native calibration fixtures and atomic profile/starter-plan completion are implemented | P: wheel looping/snapping, legacy four-step migration, injected final-write retry and full visual/runtime evidence |
+| P03 / P0 | `domain/ai/ExerciseResolutionEngine.kt`, library/custom exercise screens | Native resolution scoring/thresholds are ported; imports auto-link strong matches and report review candidates; custom creation covers all web tracking modes and native metadata | P: reusable full library/detail/editor destination, edit safeguards for logged tracking changes and interactive candidate selection |
+| P04 / P1 | `plans/PlanEditorScreen.kt`, ordering/move helpers, ProgramPicker | Program search/category/detail preview, stable cross-day moves, Move up/down, note visibility/delete scope and unsaved-close guard are implemented | P: pointer drag inside editor, shared progression policy/goal overrides, stale-conflict recovery UI and complete geometry evidence |
+| P05 / P1 | `plans/AIPlanScreen.kt`, `AIPlanGymProfile.kt` | Manual intro→quiz→prompt→catalog→paste→preview flow validates canonical JSON, reports unknowns and imports only after review | P: selected gym context, interactive review-resolution picker, duplicate retry UX and full native presentation evidence |
+| P06 / P1 | `TrainingIntelligenceScreen.kt`, `ProgramInsightsScreen.kt`, recommendation/policy engines | `Intelligence.tsx:5`: next-region text and plan set counts; simple progression is present elsewhere | G: full built-in recommendations, policy precedence, planned-vs-completed insights, volume bands, adherence, trend/deload/plateau rules and evidence explanations |
+| P07 / P1 | `CloudAiEngine.kt`, `CloudAiCard.kt`, `WorkoutCloudDebrief.kt`, `CloudStatsSummaryHost.kt` | `Intelligence.tsx` explicitly has no provider/key configuration or network AI | G: optional provider/model setup, validated request/response workflows, native mode gating, workout debrief and stats summary. Cloud access is feasible; Android Gemini Nano binding is excluded |
+| P08 / P1 | `history/HistoricalWorkoutEditor.kt`, calendar/date policies, HistoryScreen | `Progress.tsx:50`: Log past workout navigates Home; `:289`: Calendar navigates Log | G: actual calendar and past-workout creation. P: HistoryDetail can rename/edit/delete sets but lacks full historical editor. Native historical entry explicitly has no live timer/celebration |
+| P09 / P1 | `stats/ExerciseProgressScreen.kt`, `VolumeAnalyticsScreen.kt`, StatsScreen | `Progress.tsx:341`: per-session external-load bars filtered by name; no exercise-progress route | G: typed exercise metric tabs, range filters, PR points, training-max dialog, session drilldown; native volume trend, consistency, balance, radar and equivalent-set charts |
+| P10 / P1 | bodyweight/measurements screens and analytics | `Progress.tsx:403`: combined logging/list, BMI and basic deltas | P: distinct native destinations, goals, moving averages, range/trend dialogs, measurement cards and progress sharing; use canonical current bodyweight |
+| P11 / P1 | `ProgressPhotosScreen.kt`, compare/viewer state helpers | `Progress.tsx:573`: file upload, two dropdown-selected images, delete | P: calendar date selection, full-screen viewer, notes editing/discard, compare state, native viewer gestures, share latest/export all/clear-all confirmations; browser camera/file equivalents |
+| P12 / P1 | RecoveryMap/Heatmap/Circuit, region evidence, StatusWindow | `Recovery.tsx`: selectable front/back, score sheet, manual check-in and Ledger/Circuit | P: range/trend, source and contributing exercise evidence, native check-in controls/notes, region pain selection, suggestions, expanded Ledger breakdown. V: existing body-map transforms, badges and circuit transitions |
+| P13 / P1 | `ActiveWorkoutScreen.kt`, rest controls and recent performance | `Workout.tsx`: reorder, type/effort chips, targets, warm-up queue, scoped swaps, rest, finish burst | P: native superset interactions beyond text labels, notes hide/delete scope, video action where native supports it, control/keyboard anchoring and rest picker fidelity. V: existing core logging, targets, warm-ups, celebrations; do not rebuild them |
+| P14 / P1 | SettingsConsoleModel and settings destination screens | `Settings.tsx:78`: destination rows scroll through one page; limited profile controls | P: native subpages, keyword matching, complete browser-capable settings with observable consumers, edit existing gyms, full library entry, tutorial replay, scoped clear-history/reset-PR actions |
+| P15 / P0 | ImportExportRepository, backup validation, calibration/ledger persistence | `domain/codecs.ts`, `data/store.ts`, `domain-parity.md`: transactional replace/ZIP and partial Android codec | P: remaining calibration/events/settings, reviewed history append/merge, native importer formats, complete field portability ledger; preserve photo-byte boundary and existing validation |
+| P16 / P2 | Global appearance/motion and all above screens | Extracted fonts/themes/PNG assets; CSS approximation and motion tests | V/P: all icon usages (not only tabs), configurable shine/glass/motion, wheel mechanics, shared surface states, reduced motion, gestures, dimensions and animation timings; native state-based comparison required |
+| P17 / P2 | Integrated browser release acceptance | Existing browser suite + historical green CI | V: fresh complete-week journeys, source-based differential fixtures, physical Safari/Home Screen and Android comparison, update/offline/data recovery, performance and release handoff |
+
+## Corrections to earlier remaining-work lists
+
+- Native onboarding currently has 10 pages, not nine; permission content will adapt to the browser.
+- Finite plate inventory, primary-muscle arrays/contribution maps, immutable exercise snapshots, warm-up queue, target editing, set effort/type editing, workout drag, basic superset labels, finish burst, photo pair selection, core recovery/circuit, fonts, themes, and native artwork export already exist.
+- Presence of these features does not establish exact visual or behavioral identity. Their remaining work is limited to documented differences and verification.
+- Calendar and past-workout entry are not implemented by the similarly named buttons. Their actual destinations were traced.
+- The source does not establish that all chart/detail/control interactions match. Earlier descriptions of the five main screens as parity-complete were too broad.
+- Health Connect recovery blending is not added to this backlog. The brief says native Health Connect measurements are contextual, and the Android integration is excluded anyway.
+- QR sharing was deliberately removed and must stay removed. Camera/photo upload and file sharing remain in scope because browser equivalents exist.
+
+## Platform exclusions and retained equivalents
+
+Exclude the Android bindings themselves: Health Connect, Glance/launcher widgets, foreground service and notification channel/PendingIntent operations, wallpaper Monet extraction, Android URI access, Android Gemini Nano runtime, guaranteed background alarms and OS-managed scheduled backups. Do not create nonfunctional controls that promise these integrations.
+
+Retain browser-capable equivalents: photo/file picking and optional supported camera capture, file download/share with fallback, manual recovery input, persisted rest deadlines/recovery on resume, optional supported vibration and wake lock, static labeled Monet palette, local backup/restore, and optional cloud AI. Do not promise browser notification or background execution guarantees. No replacement on-device model or unrelated infrastructure project is required for parity.
+
+## Completion standard
+
+All G/P rows must have their behavior implemented and tested; all V rows need actual comparison evidence. Every native reachable screen/action/control and portable setting must map to a web destination/consumer or an explicit platform exclusion. No route-label substitutions count as completion. Match data, units, dates, mutation scope and lifecycle first; then appearance, input response, gestures and motion. Record intentional accessibility adaptations explicitly. No invented percentage or bug-free guarantee.
+
+See [implementation plan](../../../docs/superpowers/plans/2026-09-14-web-native-parity.md), [native source inventory](native-source-inventory.csv), and [web source inventory](web-source-inventory.csv).
+
+## Documentation verification and handoff
+
+14 September 2026: all 18 audit IDs map to 18 plan slices; relative document links resolve; the 47 web source hashes and 254 native source hashes remain unchanged after planning; `git diff --check` exits 0. New files are uncommitted documentation only. No fresh app test/build, deployment or device acceptance is claimed. Next implementation entry is P00 reference/contract pinning followed by P01 navigation. Preserve the current Kotlin working tree and recheck these inventories if another task changes it.
+
+15 September 2026 implementation checkpoint: P01–P05 received the concrete increments recorded above. New regression coverage includes navigation parents/history, ten-stage onboarding and calibration fixtures, native exercise resolution/import review, custom exercise metadata, plan editor moves/notes/close protection, and the reviewed manual AI flow. `npm run check`, 31 Vitest files / 173 tests, `npm run build`, and `npm run verify:output` all pass. Production output contains 185 verified files. The build still reports the pre-existing font URL resolution notices and a 544.41 kB main chunk warning. No deployment or physical-device parity claim was made. Kotlin reference and publication checkouts were not modified.

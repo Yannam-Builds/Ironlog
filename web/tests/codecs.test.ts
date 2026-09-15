@@ -51,6 +51,7 @@ const library: Exercise[] = [
     muscle: "chest",
     equipment: "barbell",
     tracking: "weight_reps",
+    movementPattern: "push",
   },
 ];
 const raw = {
@@ -98,6 +99,37 @@ describe("portable formats", () => {
     expect(imported.name).toBe(plan.name);
     expect(imported.id).not.toBe(plan.id);
     expect(imported.days[0].exercises[0].notes).toBe("slow");
+  });
+  it("auto-links only strong fuzzy exercise matches", () => {
+    const strongLibrary: Exercise[] = [{
+      ...library[0],
+      name: "Barbell Bench Press",
+    }];
+    const decoded = decodePlans(JSON.stringify({
+      name: "Fuzzy",
+      days: [{ exercises: [{ name: "barbell benhc press" }] }],
+    }), strongLibrary);
+    expect(decoded.plans[0].days[0].exercises[0]).toMatchObject({
+      exerciseId: "bench",
+      name: "Barbell Bench Press",
+    });
+    expect(decoded.result.unresolved).toBe(0);
+  });
+  it("keeps review-level exercise matches unlinked and reports candidates", () => {
+    const reviewLibrary: Exercise[] = [
+      ...library,
+      { id: "incline", name: "Incline Dumbbell Press", muscle: "chest", equipment: "dumbbell", tracking: "weight_reps" },
+    ];
+    const decoded = decodePlans(JSON.stringify({
+      name: "Review",
+      days: [{ exercises: [{ name: "incline press" }] }],
+    }), reviewLibrary);
+    expect(decoded.plans[0].days[0].exercises[0]).toMatchObject({
+      exerciseId: "",
+      name: "incline press",
+    });
+    expect(decoded.result.unresolved).toBe(1);
+    expect(decoded.result.warnings[0]).toMatch(/Review candidates: Incline Dumbbell Press/);
   });
   it("roundtrips Android relationships and honest unsupported photo warning", () => {
     const plans = decodePlans(JSON.stringify(raw), library).plans;

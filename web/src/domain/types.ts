@@ -6,6 +6,8 @@ export interface ExerciseMetadata {
   category?: string;
   isBodyweight?: boolean;
   requiresExternalLoad?: boolean;
+  movementPattern?: string;
+  difficulty?: string;
 }
 export type SetKind = "normal" | "warmup" | "failure" | "drop" | "amrap";
 export interface Exercise extends ExerciseMetadata {
@@ -111,12 +113,24 @@ export interface OnboardingLedgerBaseline {
 export interface Profile {
   name: string;
   age: number;
+  yearOfBirth: number;
   heightCm: number;
   weightKg: number;
+  onboardingBodyweightKg?: number;
   experience: string;
   goal: string;
+  progressionStyle: string;
+  goalMode: string;
+  selectedTrainingDays: number[];
   trainingAgeMonths: number;
   historicalTrainingDaysPerWeek: number;
+  hasPastTraining: boolean;
+  hasGymAccess: boolean;
+  baselinePushups: number;
+  baselinePullups: number;
+  baselineBenchKg: number;
+  baselineLatPulldownKg: number;
+  baselineMileRunSeconds: number;
   weeklyGoal: number;
   sessionMinutes: number;
   coaching: string;
@@ -132,6 +146,7 @@ export interface Profile {
   /** Total physical plates, shared between both sides. Missing means unlimited. */
   plateInventory?: { weightKg: number; quantity: number }[];
   keepAwake: boolean;
+  planExerciseNotesVisible: boolean;
   exerciseNextNotes?: Record<string, string>;
   badgeUnlocks: Record<string, number>;
   ledgerBaseline?: OnboardingLedgerBaseline;
@@ -185,12 +200,23 @@ export interface ImportResult {
 export const defaultProfile: Profile = {
   name: "",
   age: 25,
+  yearOfBirth: 2000,
   heightCm: 170,
   weightKg: 70,
   experience: "beginner",
   goal: "General Fitness",
+  progressionStyle: "LINEAR",
+  goalMode: "STRENGTH",
+  selectedTrainingDays: [0, 2, 4],
   trainingAgeMonths: 0,
   historicalTrainingDaysPerWeek: 3,
+  hasPastTraining: false,
+  hasGymAccess: true,
+  baselinePushups: 0,
+  baselinePullups: 0,
+  baselineBenchKg: 0,
+  baselineLatPulldownKg: 0,
+  baselineMileRunSeconds: 0,
   weeklyGoal: 3,
   sessionMinutes: 60,
   coaching: "balanced",
@@ -203,6 +229,7 @@ export const defaultProfile: Profile = {
   barKg: 20,
   platesKg: [20, 15, 10, 5, 2.5, 1.25],
   keepAwake: true,
+  planExerciseNotesVisible: true,
   exerciseNextNotes: {},
   badgeUnlocks: {},
   recoveryWeeks: [],

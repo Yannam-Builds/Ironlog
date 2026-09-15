@@ -21,6 +21,7 @@ import { Recovery, Ledger } from "./features/Recovery";
 import { Settings } from "./features/Settings";
 import { Intelligence } from "./features/Intelligence";
 import { Research } from "./research";
+import { backFrom } from "./ui/navigation";
 const tabs = ["Home", "Plans", "Log", "Stats", "Settings"];
 const tabRoutes = tabs.map((tab) => tab.toLowerCase());
 const detailTitles: Record<string, string> = {
@@ -310,15 +311,7 @@ export function App() {
                 <IconButton
                   name="back"
                   label="Back"
-                  onClick={() =>
-                    navigate(
-                      route.startsWith("plan/")
-                        ? "plans"
-                        : route.startsWith("history/")
-                          ? "log"
-                          : "home",
-                    )
-                  }
+                  onClick={() => backFrom(route)}
                 />
                 <strong>
                   {route.startsWith("plan/")
