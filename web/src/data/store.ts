@@ -551,6 +551,16 @@ export async function deleteGym(id: string) {
 export async function deleteWorkout(id: string) {
   return serialize(id, () => db.workouts.delete(id));
 }
+export async function saveHistoricalWorkout(workout: Workout) {
+  const valid = workoutSchema.parse(workout);
+  if (valid.status !== "completed" || valid.completedAt === undefined || valid.completedAt < valid.startedAt)
+    throw Error("Historical workouts must be completed with valid chronology.");
+  await db.transaction("rw", db.workouts, async () => {
+    if (await db.workouts.get(valid.id)) throw Error("Workout already exists.");
+    await db.workouts.add(valid);
+  });
+  return valid;
+}
 export async function restoreSnapshot(snapshot: AppSnapshot) {
   const valid = snapshotSchema.parse(snapshot);
   for (const key of [

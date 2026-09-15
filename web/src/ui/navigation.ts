@@ -9,6 +9,7 @@ export const routeFromHash = (hash = window.location.hash) =>
 export function parentRoute(route: string): string {
   if (route.startsWith("plan/")) return "plans";
   if (route.startsWith("history/")) return "log";
+  if (route === "calendar") return "log";
   if (["body", "photos", "analytics"].includes(route)) return "stats";
   return "home";
 }

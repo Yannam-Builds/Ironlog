@@ -20,6 +20,7 @@ import {
 import { Recovery, Ledger } from "./features/Recovery";
 import { Settings } from "./features/Settings";
 import { Intelligence } from "./features/Intelligence";
+import { HistoricalWorkoutEditor, WorkoutCalendar } from "./features/history/HistoryTools";
 import { Research } from "./research";
 import { backFrom } from "./ui/navigation";
 const tabs = ["Home", "Plans", "Log", "Stats", "Settings"];
@@ -227,7 +228,7 @@ export function App() {
   const detail = !["home", "plans", "log", "stats", "settings"].includes(route);
   const selectedTabRoute = route.startsWith("plan/")
     ? "plans"
-    : route.startsWith("history/")
+    : route.startsWith("history/") || route === "calendar"
       ? "log"
       : ["analytics", "body", "photos"].includes(route)
         ? "stats"
@@ -246,8 +247,12 @@ export function App() {
       <Workout />
     ) : route === "log" ? (
       <History />
+    ) : route === "history/new" || route.startsWith("history/new/") ? (
+      <HistoricalWorkoutEditor initialDate={route.startsWith("history/new/") ? route.slice(12) : undefined} />
     ) : route.startsWith("history/") ? (
       <HistoryDetail key={route} id={route.slice(8)} />
+    ) : route === "calendar" ? (
+      <WorkoutCalendar />
     ) : route === "stats" ? (
       <Stats />
     ) : route === "settings" ? (

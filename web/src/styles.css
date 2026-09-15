@@ -1883,6 +1883,59 @@ details[open] > :not(summary) {
   border-bottom: 1px solid var(--cardBorder);
   margin-bottom: calc(15px * var(--ui-spacing, 1));
 }
+.workout-calendar {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+  margin: 18px 0 24px;
+}
+.calendar-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  margin-top: 18px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  text-align: center;
+}
+.workout-calendar > div {
+  min-height: 74px;
+  padding: 8px;
+  border: 1px solid var(--cardBorder);
+  border-radius: 12px;
+  background: var(--surface);
+  overflow: hidden;
+}
+.workout-calendar > div:first-child { grid-column-start: var(--first-day); }
+.workout-calendar > div.has-workout { border-color: var(--accent); }
+.workout-calendar button {
+  display: block;
+  width: 100%;
+  margin-top: 5px;
+  padding: 4px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  font: inherit;
+  font-size: 0.68rem;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.workout-calendar .calendar-day {
+  margin: 0;
+  padding: 0;
+  color: var(--text);
+  background: transparent;
+  font-size: 0.82rem;
+}
+.workout-calendar .calendar-day:disabled { color: var(--muted); opacity: 0.5; }
+@media (max-width: 560px) {
+  .workout-calendar { gap: 3px; }
+  .workout-calendar > div { min-height: 58px; padding: 5px; border-radius: 8px; }
+  .workout-calendar button { font-size: 0; min-height: 8px; padding: 0; background: var(--accent); }
+}
 .history-row {
   display: flex;
   align-items: center;
