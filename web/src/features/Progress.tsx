@@ -319,7 +319,7 @@ export function Stats() {
         Estimated one-rep max from retained working sets. Warmups excluded.
       </p>
       {d.prs.map((pr) => (
-        <div className="list-row" key={pr.exerciseId}>
+        <button className="list-row" key={pr.exerciseId} onClick={() => navigate(`exercise/${encodeURIComponent(pr.exerciseId)}`)}>
           <div>
             <strong>{pr.name}</strong>
             <small>
@@ -330,7 +330,7 @@ export function Stats() {
           <strong>
             {displayWeight(pr.oneRmKg, data.profile.unit)} {data.profile.unit}
           </strong>
-        </div>
+        </button>
       ))}
       {!d.prs.length && (
         <p>Log weighted working sets to build your record book.</p>

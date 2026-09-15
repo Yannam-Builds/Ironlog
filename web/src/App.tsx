@@ -13,7 +13,6 @@ import {
   History,
   HistoryDetail,
   Stats,
-  Analytics,
   Body,
   Photos,
 } from "./features/Progress";
@@ -21,6 +20,8 @@ import { Recovery, Ledger } from "./features/Recovery";
 import { Settings } from "./features/Settings";
 import { Intelligence } from "./features/Intelligence";
 import { HistoricalWorkoutEditor, WorkoutCalendar } from "./features/history/HistoryTools";
+import { ExerciseProgress } from "./features/stats/ExerciseProgress";
+import { VolumeAnalytics } from "./features/stats/VolumeAnalytics";
 import { Research } from "./research";
 import { backFrom } from "./ui/navigation";
 const tabs = ["Home", "Plans", "Log", "Stats", "Settings"];
@@ -230,7 +231,7 @@ export function App() {
     ? "plans"
     : route.startsWith("history/") || route === "calendar"
       ? "log"
-      : ["analytics", "body", "photos"].includes(route)
+      : route.startsWith("exercise/") || ["analytics", "body", "photos"].includes(route)
         ? "stats"
         : ["workout", "recovery", "ledger", "intelligence", "research"].includes(route)
           ? "home"
@@ -266,7 +267,9 @@ export function App() {
     ) : route === "photos" ? (
       <Photos />
     ) : route === "analytics" ? (
-      <Analytics />
+      <VolumeAnalytics />
+    ) : route.startsWith("exercise/") ? (
+      <ExerciseProgress key={route} identity={decodeURIComponent(route.slice(9))} />
     ) : route === "intelligence" ? (
       <Intelligence />
     ) : route === "research" ? (
