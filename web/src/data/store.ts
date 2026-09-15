@@ -528,6 +528,10 @@ export async function saveExercise(e: Exercise) {
 export async function saveMeasurement(m: Measurement) {
   await db.measurements.put(snapshotSchema.shape.measurements.element.parse(m));
 }
+export async function saveMeasurements(rows: Measurement[]) {
+  const valid = rows.map((row) => snapshotSchema.shape.measurements.element.parse(row));
+  await db.transaction("rw", db.measurements, async () => { await db.measurements.bulkPut(valid); });
+}
 export async function deleteMeasurement(id: string) {
   await db.measurements.delete(id);
 }

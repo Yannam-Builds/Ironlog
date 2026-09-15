@@ -11,7 +11,7 @@ export function parentRoute(route: string): string {
   if (route.startsWith("history/")) return "log";
   if (route === "calendar") return "log";
   if (route.startsWith("exercise/")) return "analytics";
-  if (["body", "photos", "analytics"].includes(route)) return "stats";
+  if (["body", "measurements", "photos", "analytics"].includes(route)) return "stats";
   return "home";
 }
 

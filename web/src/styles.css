@@ -2026,6 +2026,20 @@ details[open] > :not(summary) {
 .bmi-card {
   margin-top: calc(24px * var(--ui-spacing, 1));
 }
+.body-series { display: block; width: 100%; min-height: 110px; margin: 12px 0; overflow: visible; }
+.body-series polyline { fill: none; stroke: var(--chartPrimary); stroke-width: 3; stroke-linejoin: round; stroke-linecap: round; }
+.body-series .goal-line { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 6 5; }
+.body-summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 16px 0; }
+.body-summary-grid > div { display: grid; gap: 6px; min-height: 78px; padding: 12px; border: 1px solid var(--cardBorder); border-radius: 14px; background: var(--card); }
+.body-summary-grid span { color: var(--muted); font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; }
+.measurement-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.measurement-card { display: grid; gap: 7px; width: 100%; min-height: 130px; color: var(--text); text-align: left; cursor: pointer; }
+.measurement-card > strong { color: var(--accent); font-size: 1.5rem; }
+.measurement-card .body-series { min-height: 56px; height: 56px; margin: 2px 0 0; }
+@media (max-width: 520px) {
+  .body-summary-grid { grid-template-columns: repeat(2, 1fr); }
+  .measurement-grid { grid-template-columns: 1fr; }
+}
 .photo-entry {
   margin-top: calc(25px * var(--ui-spacing, 1));
 }

@@ -127,6 +127,8 @@ export interface Profile {
   yearOfBirth: number;
   heightCm: number;
   weightKg: number;
+  goalWeightKg?: number;
+  measurementGoals?: Record<string, number>;
   onboardingBodyweightKg?: number;
   experience: string;
   goal: string;
@@ -214,6 +216,7 @@ export const defaultProfile: Profile = {
   yearOfBirth: 2000,
   heightCm: 170,
   weightKg: 70,
+  measurementGoals: {},
   experience: "beginner",
   goal: "General Fitness",
   progressionStyle: "LINEAR",

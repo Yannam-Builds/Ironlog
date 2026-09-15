@@ -133,6 +133,8 @@ export const profileSchema = z.object({
   yearOfBirth: z.number().int().min(1900).max(3000).default(2000),
   heightCm: number,
   weightKg: number,
+  goalWeightKg: z.number().positive().optional(),
+  measurementGoals: z.record(z.string(), z.number().positive()).default({}),
   onboardingBodyweightKg: z.number().positive().optional(),
   experience: z.string(),
   goal: z.string(),

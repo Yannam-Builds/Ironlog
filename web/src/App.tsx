@@ -13,7 +13,6 @@ import {
   History,
   HistoryDetail,
   Stats,
-  Body,
   Photos,
 } from "./features/Progress";
 import { Recovery, Ledger } from "./features/Recovery";
@@ -22,6 +21,7 @@ import { Intelligence } from "./features/Intelligence";
 import { HistoricalWorkoutEditor, WorkoutCalendar } from "./features/history/HistoryTools";
 import { ExerciseProgress } from "./features/stats/ExerciseProgress";
 import { VolumeAnalytics } from "./features/stats/VolumeAnalytics";
+import { BodyMeasurements, BodyWeight } from "./features/body/BodyComposition";
 import { Research } from "./research";
 import { backFrom } from "./ui/navigation";
 const tabs = ["Home", "Plans", "Log", "Stats", "Settings"];
@@ -31,6 +31,7 @@ const detailTitles: Record<string, string> = {
   recovery: "MUSCLE RECOVERY",
   ledger: "IRON LEDGER",
   body: "BODY TRACKER",
+  measurements: "BODY MEASUREMENTS",
   photos: "PROGRESS PHOTOS",
   analytics: "VOLUME ANALYTICS",
   intelligence: "ATHLETE PROFILE",
@@ -231,7 +232,7 @@ export function App() {
     ? "plans"
     : route.startsWith("history/") || route === "calendar"
       ? "log"
-      : route.startsWith("exercise/") || ["analytics", "body", "photos"].includes(route)
+      : route.startsWith("exercise/") || ["analytics", "body", "measurements", "photos"].includes(route)
         ? "stats"
         : ["workout", "recovery", "ledger", "intelligence", "research"].includes(route)
           ? "home"
@@ -263,7 +264,9 @@ export function App() {
     ) : route === "ledger" ? (
       <Ledger />
     ) : route === "body" ? (
-      <Body />
+      <BodyWeight />
+    ) : route === "measurements" ? (
+      <BodyMeasurements />
     ) : route === "photos" ? (
       <Photos />
     ) : route === "analytics" ? (
