@@ -48,6 +48,13 @@ export const planSchema = z.object({
   ),
   order: z.number().finite(),
   templateId: z.string().optional(),
+  progressionRules: z.object({
+    progressionModel: z.string(), blockLengthWeeks: z.number().int().min(1).max(52),
+    currentWeek: z.number().int().min(1).max(52), deloadEveryWeeks: z.number().int().min(1).max(52),
+    percent1RM: z.number().int().min(50).max(95), rpeTarget: z.number().int().min(1).max(10),
+    rirTarget: z.number().int().min(0).max(10),
+  }).optional(),
+  exerciseProgressionOverrides: z.record(z.string(), z.string()).optional(),
 });
 export const workoutSchema = z.object({
   id,

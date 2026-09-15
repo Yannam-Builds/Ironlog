@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useApp, navigate, hasTrainingHistory } from "../ui/context";
 import { manualPlanPrompt } from "../domain/manual-prompt";
 import { Button, Field } from "../ui/components";
+import { computeProgramInsights, resolveProgressionPolicy } from "../domain/program-intelligence";
 export function Intelligence() {
   const { data, derived: d, run } = useApp();
   const [equipment, setEquipment] = useState("Barbell, dumbbells, cables");
@@ -23,34 +24,23 @@ export function Intelligence() {
         </Button>
       </section>
       <h2>Program insights</h2>
-      {data.plans.map((plan) => (
-        <section className="insight" key={plan.id}>
+      {data.plans.map((plan) => {
+        const insight = computeProgramInsights(plan, data.workouts, p.weeklyGoal);
+        const policy = resolveProgressionPolicy(undefined, plan.progressionRules, p.progressionStyle);
+        return <section className="insight" key={plan.id}>
           <h3>{plan.name}</h3>
-          <p>
-            {plan.days.length} training days ·{" "}
-            {plan.days.reduce(
-              (n, day) =>
-                n +
-                day.exercises
-                  .filter((e) => !e.isWarmup)
-                  .reduce((s, e) => s + e.sets, 0),
-              0,
-            )}{" "}
-            planned working sets per rotation
-          </p>
-          {plan.days.map((day) => (
-            <div className="list-row" key={day.id}>
-              <strong>{day.name}</strong>
-              <span>
-                {day.exercises
-                  .filter((e) => !e.isWarmup)
-                  .reduce((n, e) => n + e.sets, 0)}{" "}
-                sets
-              </span>
-            </div>
-          ))}
-        </section>
-      ))}
+          <p>{plan.days.length} training days · {plan.days.reduce((n, day) => n + day.exercises.filter((exercise) => !exercise.isWarmup).reduce((sum, exercise) => sum + exercise.sets, 0), 0)} planned working sets per rotation</p>
+          <div className="insight-metrics">
+            <div><strong>{insight.adherencePct}%</strong><small>Adherence</small><progress max="100" value={insight.adherencePct} /></div>
+            <div><strong>{insight.consistencyPct}%</strong><small>Weeks hitting goal</small><progress max="100" value={insight.consistencyPct} /></div>
+          </div>
+          <p className="muted">Based on {insight.weekCount} week{insight.weekCount === 1 ? "" : "s"} · {insight.sessionsPerWeek.toFixed(1)} sessions/week</p>
+          {insight.perDay.map((day) => <div className="list-row" key={day.id}><strong>{day.name}</strong><span>×{day.count}</span></div>)}
+          <p><strong>{policy.label}</strong> · {policy.source.replaceAll("_", " ")}</p>
+          <p>{insight.recommendation}</p>
+          <Button variant="secondary" onClick={() => navigate(`plan/${plan.id}`)}>Review plan</Button>
+        </section>;
+      })}
       <section>
         <h2>Build a plan with an external AI</h2>
         <p>

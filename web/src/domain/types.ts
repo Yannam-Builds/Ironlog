@@ -45,6 +45,17 @@ export interface Plan {
   days: PlanDay[];
   order: number;
   templateId?: string;
+  progressionRules?: ProgramRules;
+  exerciseProgressionOverrides?: Record<string, string>;
+}
+export interface ProgramRules {
+  progressionModel: string;
+  blockLengthWeeks: number;
+  currentWeek: number;
+  deloadEveryWeeks: number;
+  percent1RM: number;
+  rpeTarget: number;
+  rirTarget: number;
 }
 export interface LoggedSet {
   id: string;

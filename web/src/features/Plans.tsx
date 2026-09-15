@@ -622,6 +622,10 @@ export function PlanEditor({ id }: { id: string }) {
     recipe(p);
     setDraft(p);
   };
+  const defaultRules = { progressionModel: "double_progression", blockLengthWeeks: 4, currentWeek: 1, deloadEveryWeeks: 4, percent1RM: 75, rpeTarget: 8, rirTarget: 2 };
+  const editRules = (field: keyof typeof defaultRules, value: string | number) => edit((plan) => {
+    plan.progressionRules = { ...defaultRules, ...plan.progressionRules, [field]: value };
+  });
   return (
     <>
       <div className="page-title">
@@ -667,6 +671,20 @@ export function PlanEditor({ id }: { id: string }) {
           }
         />
       </Field>
+      <section className="card">
+        <h2>Progression policy</h2>
+        <p className="muted">Used for explainable recommendations. IronLog never changes the plan automatically.</p>
+        <Field label="Progression model"><select value={draft.progressionRules?.progressionModel ?? defaultRules.progressionModel} onChange={(event) => editRules("progressionModel", event.target.value)}>
+          <option value="double_progression">Double progression</option><option value="linear">Linear</option><option value="percent_1rm">Percent of estimated 1RM</option><option value="rpe_rir">RPE / RIR</option>
+        </select></Field>
+        <div className="three-col">
+          <Field label="Block weeks"><input type="number" min="1" max="52" value={draft.progressionRules?.blockLengthWeeks ?? 4} onChange={(event) => editRules("blockLengthWeeks", Number(event.target.value))} /></Field>
+          <Field label="Current week"><input type="number" min="1" max="52" value={draft.progressionRules?.currentWeek ?? 1} onChange={(event) => editRules("currentWeek", Number(event.target.value))} /></Field>
+          <Field label="Deload every"><input type="number" min="1" max="52" value={draft.progressionRules?.deloadEveryWeeks ?? 4} onChange={(event) => editRules("deloadEveryWeeks", Number(event.target.value))} /></Field>
+        </div>
+        {(draft.progressionRules?.progressionModel ?? defaultRules.progressionModel) === "percent_1rm" && <Field label="Percent estimated 1RM"><input type="number" min="50" max="95" value={draft.progressionRules?.percent1RM ?? 75} onChange={(event) => editRules("percent1RM", Number(event.target.value))} /></Field>}
+        {(draft.progressionRules?.progressionModel ?? defaultRules.progressionModel) === "rpe_rir" && <div className="two-col"><Field label="RPE target"><input type="number" min="1" max="10" value={draft.progressionRules?.rpeTarget ?? 8} onChange={(event) => editRules("rpeTarget", Number(event.target.value))} /></Field><Field label="RIR target"><input type="number" min="0" max="10" value={draft.progressionRules?.rirTarget ?? 2} onChange={(event) => editRules("rirTarget", Number(event.target.value))} /></Field></div>}
+      </section>
       {draft.days.map((day, di) => (
         <section className="card plan-day" key={day.id}>
           <div className="row">
