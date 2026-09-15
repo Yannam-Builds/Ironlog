@@ -1,4 +1,5 @@
 import type { Plan, ProgramRules, Workout } from "./types";
+import { estimatedOneRm, validWorkingSet } from "./tracking";
 
 export type PolicySource = "exercise_override" | "plan_rules" | "global_setting" | "conservative_default";
 export type ResolvedPolicy = { id: string; label: string; strategy: string; source: PolicySource; minimumEffortMargin: number; maximumLoadIncreaseRatio: number; percent1RM: number; rpeTarget: number; rirTarget: number };
@@ -42,4 +43,68 @@ export function computeProgramInsights(plan: Plan | undefined, workouts: Workout
   const consistencyPct = Math.max(0, Math.min(100, Math.round(hit / weekCount * 100)));
   const recommendation = adherencePct < 50 ? "Adherence is low. Reduce planned days or shorten sessions to build the habit first." : adherencePct < 85 ? "Stay steady. Focus on showing up consistently before adding volume." : consistencyPct >= 80 ? "Consistency is strong. Progress a key lift only when target reps and technique are repeatable; schedule easier work when fatigue is accumulating." : "Keep the current structure and review performance and recovery before changing volume.";
   return { sessionsPerWeek, adherencePct, consistencyPct, weekCount, perDay: plan?.days.map((day) => ({ id: day.id, name: day.name, count: eligible.filter((workout) => workout.dayId === day.id || workout.name.toLowerCase().includes(day.name.toLowerCase())).length })) ?? [], recommendation };
+}
+
+export type VolumeLandmark = { sets: number; status: "low" | "optimal" | "high"; min: number; max: number; optimal: number };
+export type TrainingIntelligence = {
+  setsByMuscle: Record<string, number>;
+  volumeLandmarks: Record<string, VolumeLandmark>;
+  movementBalance: { Push: number; Pull: number; Legs: number };
+  prLast30: number; prPrev30: number; prTrend: "accelerating" | "steady" | "slowing"; prVelocity30d: number;
+  bestWindow: string; trainingAgeYears: number; trainingAgeLabel: string; trainingAgeTip: string;
+  neuralFatigue: { isFlagged: boolean; consecutiveDays: number; lastHeavyExercises: string[] };
+};
+const groups = ["Chest", "Back", "Legs", "Shoulders", "Arms", "Core"] as const;
+const baseBands: Record<string, [number, number, number]> = { Chest: [10, 20, 14], Back: [10, 22, 16], Legs: [12, 22, 16], Shoulders: [8, 16, 12], Arms: [8, 16, 12], Core: [6, 16, 10] };
+function groupFor(text: string) {
+  const value = text.toLowerCase();
+  if (/chest|pec/.test(value)) return "Chest";
+  if (/back|lat|row/.test(value)) return "Back";
+  if (/shoulder|delt/.test(value)) return "Shoulders";
+  if (/bicep|tricep|curl|forearm/.test(value)) return "Arms";
+  if (/quad|hamstring|glute|calf|leg|squat|deadlift/.test(value)) return "Legs";
+  if (/core|abs|plank|crunch|oblique/.test(value)) return "Core";
+}
+const dayKey = (timestamp: number) => { const d = new Date(timestamp); return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`; };
+const ageDays = (timestamp: number, now: number) => Math.floor((new Date(now).setHours(0, 0, 0, 0) - new Date(timestamp).setHours(0, 0, 0, 0)) / 86400000);
+
+export function buildTrainingIntelligence(workouts: Workout[], profile: { goalMode: string; weeklyGoalDays: number }, now = Date.now()): TrainingIntelligence {
+  const history = workouts.filter((workout) => workout.status === "completed" && workout.startedAt <= now && workout.exercises.some((exercise) => exercise.loggedSets.some((set) => validWorkingSet(exercise, set))));
+  const weekStart = monday(now), raw = Object.fromEntries(groups.map((group) => [group, 0])) as Record<string, number>;
+  history.filter((workout) => workout.startedAt >= weekStart).forEach((workout) => workout.exercises.forEach((exercise) => {
+    const count = exercise.loggedSets.filter((set) => validWorkingSet(exercise, set)).length;
+    const group = groupFor(`${exercise.muscle} ${exercise.primaryMuscles?.join(" ") ?? ""} ${exercise.name} ${exercise.category ?? ""}`);
+    if (group) raw[group] += count;
+  }));
+  const goalScale = profile.goalMode.trim().toLowerCase() === "strength" ? .78 : ["general_fitness", "general fitness", "performance", "endurance"].includes(profile.goalMode.trim().toLowerCase()) ? .68 : 1;
+  const scale = goalScale * (Math.max(1, Math.min(7, profile.weeklyGoalDays)) <= 2 ? .82 : 1);
+  const volumeLandmarks = Object.fromEntries(groups.map((group) => {
+    const [baseMin, baseMax, baseOptimal] = baseBands[group], min = Math.max(4, Math.round(baseMin * scale)), max = Math.max(min + 4, Math.round(baseMax * scale)), optimal = Math.max(min, Math.min(max, Math.round(baseOptimal * scale))), sets = raw[group];
+    return [group, { sets, status: sets < min ? "low" : sets > max ? "high" : "optimal", min, max, optimal }];
+  })) as Record<string, VolumeLandmark>;
+  const push = raw.Chest + raw.Shoulders, pull = raw.Back, legs = raw.Legs, total = Math.max(1, push + pull + legs);
+  const movementBalance = { Push: Math.trunc(push * 100 / total), Pull: Math.trunc(pull * 100 / total), Legs: Math.trunc(legs * 100 / total) };
+  let prLast30 = 0, prPrev30 = 0; const best = new Map<string, number>();
+  history.slice().sort((a, b) => a.startedAt - b.startedAt).forEach((workout) => {
+    let sessionPr = false;
+    workout.exercises.forEach((exercise) => {
+      const values = exercise.loggedSets.map((set) => estimatedOneRm(exercise, set)).filter((value): value is number => value !== undefined);
+      if (!values.length) return; const current = Math.max(...values), key = exercise.exerciseId || exercise.name, previous = best.get(key);
+      if (previous !== undefined && current > previous) sessionPr = true; best.set(key, Math.max(previous ?? 0, current));
+    });
+    if (sessionPr) { const age = ageDays(workout.startedAt, now); if (age >= 0 && age <= 30) prLast30++; else if (age <= 60) prPrev30++; }
+  });
+  const recent = history.filter((workout) => ageDays(workout.startedAt, now) <= 30), prTrend = prLast30 > prPrev30 ? "accelerating" : prLast30 < prPrev30 ? "slowing" : "steady";
+  const windows: Record<string, number[]> = { Morning: [], Afternoon: [], Evening: [], Night: [] };
+  recent.forEach((workout) => { const hour = new Date(workout.startedAt).getHours(), bucket = hour >= 5 && hour <= 11 ? "Morning" : hour <= 16 ? "Afternoon" : hour <= 20 ? "Evening" : "Night"; const volume = workout.exercises.flatMap((exercise) => exercise.loggedSets.map((set) => validWorkingSet(exercise, set) ? set.weightKg * set.reps : 0)).reduce((sum, value) => sum + value, 0); if (volume > 0) windows[bucket].push(volume); });
+  const eligibleWindows = Object.entries(windows).filter(([, values]) => values.length >= 3), leading = eligibleWindows.sort((a, b) => b[1].reduce((s, v) => s + v, 0) / b[1].length - a[1].reduce((s, v) => s + v, 0) / a[1].length)[0];
+  const bestWindow = leading ? `${leading[0]} leads your logged session volume (${leading[1].length} sessions).` : "Log at least 3 sessions in one time window to compare performance.";
+  const oldest = history.length ? Math.min(...history.map((workout) => workout.startedAt)) : now, months = history.length ? Math.max(0, (new Date(now).getFullYear() - new Date(oldest).getFullYear()) * 12 + new Date(now).getMonth() - new Date(oldest).getMonth()) : 0;
+  const trainingAgeLabel = history.length < 12 || months < 3 ? "Building baseline" : history.length < 50 || months < 12 ? "Developing" : history.length < 150 || months < 36 ? "Established" : "Highly experienced";
+  const trainingAgeTip = trainingAgeLabel === "Building baseline" ? "Repeat key movements and progress only when technique and target reps are stable." : trainingAgeLabel === "Developing" ? "Use small, repeatable increases while keeping recovery sustainable." : "Review your response history before changing the program.";
+  const heavy = new Map<string, { at: number; names: string[] }>();
+  history.filter((workout) => ageDays(workout.startedAt, now) <= 14).forEach((workout) => { const names = workout.exercises.filter((exercise) => /squat|deadlift|bench press|overhead press|ohp|barbell row|power clean|front squat|sumo|romanian/.test(exercise.name.toLowerCase()) && exercise.loggedSets.some((set) => estimatedOneRm(exercise, set) !== undefined && ((set.rpe ?? 0) >= 8 || (set.rir ?? 99) <= 2 || (set.reps >= 1 && set.reps <= 6)))).map((exercise) => exercise.name); if (names.length) heavy.set(dayKey(workout.startedAt), { at: workout.startedAt, names }); });
+  const heavyDays = [...heavy.values()].sort((a, b) => b.at - a.at); let consecutiveDays = 0, previous: number | undefined; const lastHeavyExercises: string[] = [];
+  if (heavyDays[0] && ageDays(heavyDays[0].at, now) <= 2) for (const day of heavyDays) { if (previous !== undefined && ageDays(day.at, previous) !== 1) break; consecutiveDays++; day.names.forEach((name) => { if (lastHeavyExercises.length < 3 && !lastHeavyExercises.includes(name)) lastHeavyExercises.push(name); }); previous = day.at; }
+  return { setsByMuscle: raw, volumeLandmarks, movementBalance, prLast30, prPrev30, prTrend, prVelocity30d: recent.length ? Math.min(1, prLast30 / recent.length) : 0, bestWindow, trainingAgeYears: months / 12, trainingAgeLabel, trainingAgeTip, neuralFatigue: { isFlagged: consecutiveDays >= 3, consecutiveDays, lastHeavyExercises } };
 }

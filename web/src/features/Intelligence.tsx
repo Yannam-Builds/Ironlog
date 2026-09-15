@@ -2,13 +2,14 @@ import { useState } from "react";
 import { useApp, navigate, hasTrainingHistory } from "../ui/context";
 import { manualPlanPrompt } from "../domain/manual-prompt";
 import { Button, Field } from "../ui/components";
-import { computeProgramInsights, resolveProgressionPolicy } from "../domain/program-intelligence";
+import { buildTrainingIntelligence, computeProgramInsights, resolveProgressionPolicy } from "../domain/program-intelligence";
 export function Intelligence() {
   const { data, derived: d, run } = useApp();
   const [equipment, setEquipment] = useState("Barbell, dumbbells, cables");
   const [limitations, setLimitations] = useState("");
   const p = data.profile;
   const prompt = manualPlanPrompt(p, equipment, limitations);
+  const intelligence = buildTrainingIntelligence(data.workouts, { goalMode: p.goalMode, weeklyGoalDays: p.weeklyGoal });
   return (
     <>
       <h1>Training intelligence</h1>
@@ -22,6 +23,24 @@ export function Intelligence() {
         <Button variant="secondary" onClick={() => navigate("recovery")}>
           Review recovery
         </Button>
+      </section>
+      <section className="card">
+        <h2>Weekly training load</h2>
+        <p className="muted">Weighted working-set equivalents against goal-adjusted reference bands.</p>
+        {Object.entries(intelligence.volumeLandmarks).map(([muscle, landmark]) => <div className="list-row" key={muscle}>
+          <div><strong>{muscle}</strong><small>{landmark.min}–{landmark.max} reference band</small></div>
+          <span className={`pill ${landmark.status}`}>{landmark.sets} · {landmark.status}</span>
+        </div>)}
+        <p>Push {intelligence.movementBalance.Push}% · Pull {intelligence.movementBalance.Pull}% · Legs {intelligence.movementBalance.Legs}%</p>
+      </section>
+      <section className="card">
+        <h2>Performance evidence</h2>
+        <div className="insight-metrics"><div><strong>{intelligence.prLast30}</strong><small>PR sessions · last 30 days</small></div><div><strong>{intelligence.prTrend}</strong><small>Compared with prior 30 days</small></div></div>
+        <p>{intelligence.bestWindow}</p>
+        <p><strong>{intelligence.trainingAgeLabel}</strong> · {intelligence.trainingAgeTip}</p>
+        {intelligence.neuralFatigue.isFlagged
+          ? <p className="warning-panel">Heavy compound work appears on {intelligence.neuralFatigue.consecutiveDays} consecutive days. Consider an easier session and review recovery.</p>
+          : <p className="muted">No three-day heavy-compound sequence is visible in recent valid logs.</p>}
       </section>
       <h2>Program insights</h2>
       {data.plans.map((plan) => {
