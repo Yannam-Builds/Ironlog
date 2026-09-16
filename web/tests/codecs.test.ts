@@ -166,7 +166,7 @@ describe("portable formats", () => {
   it("web archive preserves photo bytes, notes, all records and schema", async () => {
     const blob = new Blob(["private-test-only"], { type: "image/png" });
     const snapshot: AppSnapshot = {
-      profile: defaultProfile,
+      profile: { ...defaultProfile, badgeUnlocks: { first_workout: 1_700_000_000_000 }, recoveryWeeks: ["2026-W37"] },
       plans: [],
       workouts: [],
       exercises: library,
@@ -180,7 +180,7 @@ describe("portable formats", () => {
     expect(await decoded.photos[0].blob.text()).toBe("private-test-only");
     expect(decoded.photos[0].notes).toBe("test");
     expect(decoded.photos[0].capturedAt).toBe(42);
-    expect(decoded.profile).toEqual(defaultProfile);
+    expect(decoded.profile).toEqual({ ...defaultProfile, badgeUnlocks: { first_workout: 1_700_000_000_000 }, recoveryWeeks: ["2026-W37"] });
   });
   it("rejects unknown versions and malformed JSON before mutation", () => {
     expect(() => decodePlans("{", library)).toThrow();

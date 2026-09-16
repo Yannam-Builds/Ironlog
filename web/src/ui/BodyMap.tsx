@@ -30,6 +30,7 @@ export function BodyMap({
     <svg
       className="body-map"
       viewBox={`${v.x} ${v.y} ${v.width} ${v.height}`}
+      preserveAspectRatio="xMidYMin meet"
       role="img"
       aria-label={`${side} muscle recovery estimate. Detailed values listed below.`}
     >
@@ -47,10 +48,15 @@ export function BodyMap({
         return (
           <g
             key={muscle}
+            className={region ? "body-map-region" : undefined}
             fill={color}
             stroke="var(--bg)"
             strokeWidth="2"
+            role={region ? "button" : undefined}
+            tabIndex={region ? 0 : undefined}
+            aria-label={region ? `Open ${region} recovery evidence` : undefined}
             onClick={() => region && onSelect?.(region)}
+            onKeyDown={(event) => { if (region && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); onSelect?.(region); } }}
           >
             {Object.values(segments)
               .flat()

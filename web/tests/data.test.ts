@@ -267,8 +267,9 @@ describe("transactional workout repository", () => {
       });
       await finishWorkout(w.id);
     }
-    await completeRecoveryCircuit();
-    await expect(completeRecoveryCircuit()).rejects.toThrow("already");
+    const concurrent = await Promise.allSettled([completeRecoveryCircuit(), completeRecoveryCircuit()]);
+    expect(concurrent.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(concurrent.filter((result) => result.status === "rejected")).toHaveLength(1);
     const s = await readSnapshot();
     expect(s.profile.recoveryWeeks).toHaveLength(1);
     expect(s.workouts).toHaveLength(2);

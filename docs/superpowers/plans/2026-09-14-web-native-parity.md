@@ -168,8 +168,8 @@ Files: modify `src/features/Recovery.tsx`, `src/ui/BodyMap.tsx`, `src/domain/eng
 - [x] Add recovery ranges/trend, last-trained/contributing exercises/source evidence and native next-actions; keep estimates and unknown coverage honest.
 - [x] Extend manual check-in with native notes/region selection and score controls; pain must remain visible across all recommendations.
 - [x] Compare native Ledger sections, stat/badge detail, baseline-vs-proof presentation and circuit stages; fill actual gaps while preserving durable unlock semantics.
-- [ ] Verify body-map draw/hit transforms with front/back, narrow landscape, large type and region boundaries. Never use visual nudges to compensate for coordinate errors.
-- [ ] Test expired check-in, no history, short workload without reward, baseline overlap, single eligible circuit/week, concurrent save and restored unlock timestamps.
+- [x] Verify body-map draw/hit transforms with front/back, narrow landscape, large type and region boundaries. Never use visual nudges to compensate for coordinate errors.
+- [x] Test expired check-in, no history, short workload without reward, baseline overlap, single eligible circuit/week, concurrent save and restored unlock timestamps.
 
 Acceptance: all consumers agree at a fixed clock; every displayed body region opens its corresponding evidence; existing circuit and badge work remains intact.
 

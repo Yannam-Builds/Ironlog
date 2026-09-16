@@ -1282,6 +1282,8 @@ body.plan-reordering {
   color: var(--subtext);
   transition: background-color 200ms ease, color 200ms ease, transform 140ms ease;
 }
+.body-map-region { cursor: pointer; }
+.body-map-region:focus { outline: none; filter: brightness(1.18); stroke: var(--accent); stroke-width: 4px; }
 .segmented button:active { transform: scale(0.96); }
 .segmented button[aria-pressed="true"] {
   background: var(--accent);
