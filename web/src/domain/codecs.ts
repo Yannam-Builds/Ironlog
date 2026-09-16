@@ -795,6 +795,7 @@ export async function encodeWebBackup(
     photos.push({
       id: p.id,
       date: p.date,
+      capturedAt: p.capturedAt,
       notes: p.notes,
       path,
       mime: p.blob.type,
@@ -844,6 +845,7 @@ export async function decodeWebBackup(
       z.object({
         id: z.string().min(1),
         date: z.string(),
+        capturedAt: z.number().optional(),
         notes: z.string(),
         path: z.string().regex(/^photos\/[^/]+\.bin$/),
         mime: z.string(),
@@ -868,6 +870,7 @@ export async function decodeWebBackup(
     return {
       id: p.id,
       date: p.date,
+      capturedAt: p.capturedAt,
       notes: p.notes,
       blob: new Blob([files[p.path].slice().buffer as ArrayBuffer], {
         type: p.mime,

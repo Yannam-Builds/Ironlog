@@ -36,6 +36,7 @@ async function photoToStorage(photo: Photo): Promise<PhotoBytes> {
   return {
     id: photo.id,
     date: photo.date,
+    capturedAt: photo.capturedAt,
     notes: photo.notes,
     mimeType: photo.blob.type,
     bytes: new Uint8Array(await photo.blob.arrayBuffer()),
@@ -46,6 +47,7 @@ function photoFromStorage(photo: StoredPhoto): Photo {
   return {
     id: photo.id,
     date: photo.date,
+    capturedAt: photo.capturedAt,
     notes: photo.notes,
     blob: new Blob([new Uint8Array(photo.bytes)], { type: photo.mimeType }),
   };
@@ -542,6 +544,9 @@ export async function savePhoto(p: Photo) {
 }
 export async function deletePhoto(id: string) {
   await db.photos.delete(id);
+}
+export async function deleteAllPhotos() {
+  await db.transaction("rw", db.photos, async () => { await db.photos.clear(); });
 }
 export async function saveCheckin(c: RecoveryCheckin) {
   await db.checkins.put(snapshotSchema.shape.checkins.element.parse(c));

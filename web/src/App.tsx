@@ -13,7 +13,6 @@ import {
   History,
   HistoryDetail,
   Stats,
-  Photos,
 } from "./features/Progress";
 import { Recovery, Ledger } from "./features/Recovery";
 import { Settings } from "./features/Settings";
@@ -22,6 +21,7 @@ import { HistoricalWorkoutEditor, WorkoutCalendar } from "./features/history/His
 import { ExerciseProgress } from "./features/stats/ExerciseProgress";
 import { VolumeAnalytics } from "./features/stats/VolumeAnalytics";
 import { BodyMeasurements, BodyWeight } from "./features/body/BodyComposition";
+import { ProgressPhotos } from "./features/body/ProgressPhotos";
 import { Research } from "./research";
 import { backFrom } from "./ui/navigation";
 const tabs = ["Home", "Plans", "Log", "Stats", "Settings"];
@@ -268,7 +268,7 @@ export function App() {
     ) : route === "measurements" ? (
       <BodyMeasurements />
     ) : route === "photos" ? (
-      <Photos />
+      <ProgressPhotos />
     ) : route === "analytics" ? (
       <VolumeAnalytics />
     ) : route.startsWith("exercise/") ? (

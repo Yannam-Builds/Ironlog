@@ -189,6 +189,7 @@ export const snapshotSchema = z.object({
     z.object({
       id,
       date: z.string(),
+      capturedAt: number.optional(),
       notes: z.string(),
       blob: z.instanceof(Blob),
     }),

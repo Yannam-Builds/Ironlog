@@ -171,7 +171,7 @@ describe("portable formats", () => {
       workouts: [],
       exercises: library,
       measurements: [],
-      photos: [{ id: "p", date: "2026-08-31", notes: "test", blob }],
+      photos: [{ id: "p", date: "2026-08-31", capturedAt: 42, notes: "test", blob }],
       checkins: [],
       gyms: [],
     };
@@ -179,6 +179,7 @@ describe("portable formats", () => {
     const decoded = await decodeWebBackup(zipped);
     expect(await decoded.photos[0].blob.text()).toBe("private-test-only");
     expect(decoded.photos[0].notes).toBe("test");
+    expect(decoded.photos[0].capturedAt).toBe(42);
     expect(decoded.profile).toEqual(defaultProfile);
   });
   it("rejects unknown versions and malformed JSON before mutation", () => {

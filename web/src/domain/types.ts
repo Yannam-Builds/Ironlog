@@ -176,6 +176,7 @@ export interface Measurement {
 export interface Photo {
   id: string;
   date: string;
+  capturedAt?: number;
   notes: string;
   blob: Blob;
 }

@@ -154,10 +154,10 @@ Acceptance: measurement history and goals survive reload/backup; native chart an
 
 Files: replace Photos implementation in `src/features/Progress.tsx` with `src/features/body/ProgressPhotos.tsx`; create `src/features/body/PhotoViewer.tsx`, `src/domain/photo-selection.ts`, `tests/photo-selection.test.ts`, `tests/browser/photos-parity.spec.ts`; extend store/codecs only for required notes/metadata. Native: photo screen and compare/viewer helpers.
 
-- [ ] Add date calendar, Filter day/Compare dates, deterministic before/after selection and native empty/missing-image presentation.
-- [ ] Add full-screen viewer, actual native supported zoom/pan/compare controls, editable notes and unsaved dismissal guard. Do not invent gestures absent from the pinned native version.
-- [ ] Add camera/file picker equivalents and native share/latest, export-all and clear-all flows with confirmation and download fallback. Release object URLs and preserve photo bytes in ZIP.
-- [ ] Test same-day photos, selection after deletion, notes reload, pinch vs tab swipe, cancelled picker, oversized/invalid file and backup restored bytes.
+- [x] Add date calendar, Filter day/Compare dates, deterministic before/after selection and native empty/missing-image presentation.
+- [x] Add full-screen viewer, actual native supported zoom/pan/compare controls, editable notes and unsaved dismissal guard. Do not invent gestures absent from the pinned native version.
+- [x] Add camera/file picker equivalents and native share/latest, export-all and clear-all flows with confirmation and download fallback. Release object URLs and preserve photo bytes in ZIP.
+- [x] Test same-day photos, selection after deletion, notes reload, pinch vs tab swipe, cancelled picker, oversized/invalid file and backup restored bytes. The pinned native viewer has no pinch gesture, so the regression asserts the comparison slider and absence of the removed web-only zoom control.
 
 Acceptance: viewer/compare behavior and exported content match native intent; photo URIs are never treated as transferable bytes.
 
