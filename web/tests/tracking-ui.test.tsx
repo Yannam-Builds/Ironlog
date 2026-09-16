@@ -16,4 +16,11 @@ it('captures library interpretation into a plan session before later library edi
  await bootstrap([e]);await db.plans.put({id:'p',name:'Routine',description:'',goal:'',order:0,days:[{id:'d',name:'Day',color:'',exercises:[{id:'slot',exerciseId:'hold',name:e.name,sets:3,reps:'60',restSeconds:0,notes:'',supersetGroup:'',isWarmup:false}]}]});
  const w=await startWorkout('p','d');expect(w.exercises[0]).toMatchObject({primaryMuscles:['chest'],muscleContributions:{pec_major:1},requiresExternalLoad:true,category:'strength'});
 });
+it('assigns and removes a session-only superset group',async()=>{
+ let w=await startWorkout();w=await mutateWorkout(w.id,w.revision,x=>x.exercises.push({id:'bench-slot',exerciseId:'bench',name:'Bench Press',sets:3,reps:'8',restSeconds:90,notes:'',supersetGroup:'',isWarmup:false,tracking:'weight_reps',muscle:'chest',equipment:'barbell',pendingWarmups:[],loggedSets:[]}));const name=w.exercises[0].name;window.location.hash='#/workout';render(<App/>);
+ fireEvent.click(await screen.findByRole('button',{name:`Options for ${name}`}));fireEvent.click(screen.getByRole('button',{name:'Superset group'}));fireEvent.click(screen.getByRole('button',{name:'Group A'}));
+ await waitFor(async()=>expect((await readSnapshot()).workouts[0].exercises[0].supersetGroup).toBe('A'));
+ fireEvent.click(screen.getByRole('button',{name:`Options for ${name}`}));fireEvent.click(screen.getByRole('button',{name:'Superset group'}));fireEvent.click(screen.getByRole('button',{name:'No superset'}));
+ await waitFor(async()=>expect((await readSnapshot()).workouts[0].exercises[0].supersetGroup).toBe(''));
+});
 

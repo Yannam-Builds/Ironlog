@@ -325,6 +325,7 @@ function ExerciseCard({
   const [swapping, setSwapping] = useState(false);
   const [replacement, setReplacement] = useState<Exercise>();
   const [targets, setTargets] = useState(false);
+  const [superset, setSuperset] = useState(false);
   const [targetDraft, setTargetDraft] = useState({
     sets: e.sets,
     reps: e.reps,
@@ -705,6 +706,7 @@ function ExerciseCard({
           >
             Targets, tracking & notes
           </Button>
+          <Button variant="secondary" onClick={() => { setMenu(false); setSuperset(true); }}>Superset group</Button>
           <Button
             variant="secondary"
             disabled={mode !== "weight_reps" || kg <= 0}
@@ -823,6 +825,7 @@ function ExerciseCard({
           </Button>
         </Sheet>
       )}
+      {superset && <Sheet title="Superset" onClose={() => setSuperset(false)}>{[["", "No superset"], ["A", "Group A"], ["B", "Group B"], ["C", "Group C"]].map(([value, label]) => <Button key={label} variant={(e.supersetGroup ?? "") === value ? "primary" : "secondary"} onClick={() => mutate((exercise) => { exercise.supersetGroup = value; }, "Superset updated").then((ok) => { if (ok) setSuperset(false); })}>{label}</Button>)}</Sheet>}
       {targets && (
         <Sheet
           title="Targets & exercise notes"
