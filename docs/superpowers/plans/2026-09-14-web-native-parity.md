@@ -165,9 +165,9 @@ Acceptance: viewer/compare behavior and exported content match native intent; ph
 
 Files: modify `src/features/Recovery.tsx`, `src/ui/BodyMap.tsx`, `src/domain/engine.ts`, `src/domain/badges.ts`, store/types/codecs; create `tests/recovery-evidence.test.ts`, `tests/browser/recovery-ledger-parity.spec.ts`. Native: RecoveryMap/Heatmap/Circuit, region presentation and StatusWindow.
 
-- [ ] Add recovery ranges/trend, last-trained/contributing exercises/source evidence and native next-actions; keep estimates and unknown coverage honest.
-- [ ] Extend manual check-in with native notes/region selection and score controls; pain must remain visible across all recommendations.
-- [ ] Compare native Ledger sections, stat/badge detail, baseline-vs-proof presentation and circuit stages; fill actual gaps while preserving durable unlock semantics.
+- [x] Add recovery ranges/trend, last-trained/contributing exercises/source evidence and native next-actions; keep estimates and unknown coverage honest.
+- [x] Extend manual check-in with native notes/region selection and score controls; pain must remain visible across all recommendations.
+- [x] Compare native Ledger sections, stat/badge detail, baseline-vs-proof presentation and circuit stages; fill actual gaps while preserving durable unlock semantics.
 - [ ] Verify body-map draw/hit transforms with front/back, narrow landscape, large type and region boundaries. Never use visual nudges to compensate for coordinate errors.
 - [ ] Test expired check-in, no history, short workload without reward, baseline overlap, single eligible circuit/week, concurrent save and restored unlock timestamps.
 

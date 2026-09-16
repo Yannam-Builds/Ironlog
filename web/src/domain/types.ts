@@ -187,6 +187,7 @@ export interface RecoveryCheckin {
   sleep: number;
   energy: number;
   painRegions: string[];
+  notes?: string;
 }
 export interface Gym {
   id: string;

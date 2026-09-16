@@ -202,6 +202,7 @@ export const snapshotSchema = z.object({
       sleep: z.number().int().min(0).max(5),
       energy: z.number().int().min(0).max(5),
       painRegions: z.array(z.string()),
+      notes: z.string().optional(),
     }),
   ),
   gyms: z.array(

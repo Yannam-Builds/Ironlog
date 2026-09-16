@@ -2313,3 +2313,23 @@ body.workout-reordering { cursor: grabbing; user-select: none; }
 .insight-metrics strong { color: var(--accent); font-size: 1.5rem; }
 .insight-metrics small { color: var(--subtext); }
 .insight-metrics progress { accent-color: var(--accent); inline-size: 100%; }
+.recovery-ranges { grid-template-columns: repeat(4, 1fr); }
+.recovery-trend svg { width: 100%; height: 120px; margin-top: 10px; }
+.recovery-trend svg line { stroke: var(--accent); stroke-width: 2.5; stroke-linecap: round; }
+.recovery-trend svg circle { fill: var(--accent); stroke: var(--card); stroke-width: 1.5; }
+.recovery-trend .trend-low { fill: color-mix(in srgb, var(--danger) 10%, transparent); }
+.recovery-trend .trend-mid { fill: color-mix(in srgb, var(--warning) 8%, transparent); }
+.recovery-trend .trend-high { fill: color-mix(in srgb, var(--success) 7%, transparent); }
+.recovery-trend .row { justify-content: space-between; }
+.score-choices { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+.score-choices button { min-height: 48px; border: 1px solid var(--cardBorder); border-radius: 9px; background: transparent; color: var(--muted); }
+.score-choices button[aria-checked="true"] { border-color: var(--accent); background: var(--accentSoft); color: var(--accent); font-weight: 800; }
+.danger-text { color: var(--danger); }
+.badge-list .locked { opacity: .55; filter: grayscale(.7); }
+.badge-list .list-row p { margin: 4px 0 0; color: var(--muted); font-size: .78rem; }
+.grade-grid > div { display: grid; gap: 4px; justify-items: center; }
+.grade-grid small { color: var(--muted); text-align: center; }
+.circuit-grid { display: grid; gap: 10px; }
+.circuit-grid > button { display: grid; gap: 5px; padding: 14px; border: 1px solid var(--cardBorder); border-radius: 14px; background: var(--surface); color: var(--text); text-align: left; }
+.circuit-grid > button[aria-pressed="true"] { border: 2px solid var(--accent); background: var(--accentSoft); }
+.circuit-grid > button small { color: var(--muted); }
