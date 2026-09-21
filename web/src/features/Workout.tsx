@@ -36,6 +36,8 @@ import {
   logSet,
   swapExercise,
   newId,
+  saveProfile,
+  clearActiveWorkoutExerciseNotes,
 } from "../data/store";
 import { plateCalculation, warmupTargets } from "../domain/engine";
 import { progressionSuggestion } from "../domain/engine";
@@ -75,6 +77,8 @@ const volumeComparison = (kg: number) =>
 const vibrate = (pattern: number | number[]) => {
   if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") navigator.vibrate(pattern);
 };
+export const exerciseTutorialUrl = (exerciseName: string) =>
+  `https://www.youtube.com/results?search_query=${encodeURIComponent(exerciseName)}+exercise+tutorial`;
 export function PlateView({
   loadKg,
   barKg,
@@ -425,7 +429,7 @@ function ExerciseCard({
           options before logging.
         </p>
       )}
-      {e.notes && <p className="exercise-note">{e.notes}</p>}
+      {p.planExerciseNotesVisible && e.notes && <p className="exercise-note">{e.notes}</p>}
       <ExerciseNextNote key={e.exerciseId} exerciseId={e.exerciseId} />
       <RecentPerformanceControl exercise={e} dayId={w.dayId} />
       <div className="sets">
@@ -707,6 +711,15 @@ function ExerciseCard({
             Targets, tracking & notes
           </Button>
           <Button variant="secondary" onClick={() => { setMenu(false); setSuperset(true); }}>Superset group</Button>
+          <a
+            className="button secondary"
+            href={exerciseTutorialUrl(e.name)}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => setMenu(false)}
+          >
+            Watch on YouTube
+          </a>
           <Button
             variant="secondary"
             disabled={mode !== "weight_reps" || kg <= 0}
@@ -916,6 +929,9 @@ export function Workout() {
   const [adding, setAdding] = useState(false);
   const [confirm, setConfirm] = useState<"finish" | "discard">();
   const [acknowledged, setAcknowledged] = useState(false);
+  const [workoutMenu, setWorkoutMenu] = useState(false);
+  const [notesSettings, setNotesSettings] = useState(false);
+  const [confirmDeleteNotes, setConfirmDeleteNotes] = useState(false);
   const [now, setNow] = useState(Date.now());
   const [orderedExerciseIds, setOrderedExerciseIds] = useState<string[]>([]);
   const [draggingExerciseId, setDraggingExerciseId] = useState<string>();
@@ -1056,11 +1072,14 @@ export function Workout() {
           <span className="elapsed-pill"><RollingTimerText value={`${String(Math.floor(elapsedSeconds / 60)).padStart(2, "0")}:${String(elapsedSeconds % 60).padStart(2, "0")}`} /></span>
           <small>elapsed</small>
         </div>
-        <button
-          className="text-button workout-minimize"
-          aria-label="Minimize workout"
-          onClick={() => navigate("home")}
-        >MINIMIZE</button>
+        <div className="workout-header-controls">
+          <button
+            className="text-button workout-minimize"
+            aria-label="Minimize workout"
+            onClick={() => navigate("home")}
+          >MINIMIZE</button>
+          <IconButton name="more" label="Workout options" onClick={() => setWorkoutMenu(true)} />
+        </div>
         {totalVolumeKg > 0 && (
           <p className={`live-volume${previousVolumeKg > totalVolumeKg ? " behind" : ""}`}>
             You’ve lifted {previousVolumeKg > totalVolumeKg ? "↓" : "↑"} {formatNumber(displayWeight(totalVolumeKg, data.profile.unit))} {data.profile.unit}
@@ -1197,6 +1216,65 @@ export function Workout() {
             })
           }
         />
+      )}
+      {workoutMenu && (
+        <Sheet title="Workout options" onClose={() => setWorkoutMenu(false)}>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setWorkoutMenu(false);
+              setNotesSettings(true);
+            }}
+          >
+            Exercise notes
+          </Button>
+        </Sheet>
+      )}
+      {notesSettings && (
+        <Sheet title="Workout exercise notes" onClose={() => setNotesSettings(false)}>
+          <Switch
+            label="Show exercise notes"
+            checked={data.profile.planExerciseNotesVisible}
+            onChange={(visible) => {
+              void run(
+                () => saveProfile({ planExerciseNotesVisible: visible }),
+                visible ? "Exercise notes shown" : "Exercise notes hidden",
+              );
+            }}
+          />
+          <Button
+            variant="danger"
+            disabled={busy || !w.exercises.some((exercise) => exercise.notes.trim())}
+            onClick={() => {
+              setNotesSettings(false);
+              setConfirmDeleteNotes(true);
+            }}
+          >
+            Delete notes from this session
+          </Button>
+        </Sheet>
+      )}
+      {confirmDeleteNotes && (
+        <Sheet title="Delete workout exercise notes?" onClose={() => setConfirmDeleteNotes(false)}>
+          <p>This removes every exercise-level note from the active workout. The source plan is unchanged.</p>
+          <Button
+            variant="danger"
+            disabled={busy}
+            onClick={() =>
+              run(
+                () => clearActiveWorkoutExerciseNotes(w.id, w.revision),
+                "Workout exercise notes deleted",
+              ).then((ok) => {
+                if (ok) setConfirmDeleteNotes(false);
+              })
+            }
+          >
+            Confirm delete notes
+          </Button>
+          <Button variant="ghost" disabled={busy} onClick={() => setConfirmDeleteNotes(false)}>
+            Cancel
+          </Button>
+        </Sheet>
       )}
       {confirm && (
         <Sheet

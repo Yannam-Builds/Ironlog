@@ -2223,6 +2223,7 @@ body.workout-reordering { cursor: grabbing; user-select: none; }
 .workout-header-card h1 { margin: 5px 0 0; font-size: 1.55rem; overflow-wrap: anywhere; }
 .workout-header-actions { display: grid; justify-items: center; gap: 3px; }
 .workout-header-actions small { color: var(--subtext); font-size: 0.65rem; }
+.workout-header-controls { display: flex; align-items: center; justify-content: flex-end; gap: 2px; }
 .elapsed-pill { display: inline-flex; padding: 7px 10px; border-radius: 999px; background: var(--faint, var(--surface)); font-size: 0.82rem; font-weight: var(--type-w700, 700); font-variant-numeric: tabular-nums; }
 .workout-minimize { min-height: 44px; padding: 0 7px; font-size: 0.72rem; font-weight: var(--type-w800, 800); letter-spacing: 0.08em; }
 .live-volume { grid-column: 1 / -1; margin: 0; color: var(--success); font-size: 0.76rem; font-weight: var(--type-w600, 600); }
@@ -2253,7 +2254,8 @@ body.workout-reordering { cursor: grabbing; user-select: none; }
 @keyframes ironlog-confetti { from { opacity: 1; translate: 0 0; } to { opacity: 0; translate: 0 78px; rotate: 100deg; } }
 @media (max-width: 430px) {
   .workout-header-card { grid-template-columns: minmax(0, 1fr) auto; }
-  .workout-minimize { grid-column: 2; grid-row: 2; min-height: 32px; }
+  .workout-header-controls { grid-column: 2; grid-row: 2; }
+  .workout-minimize { min-height: 32px; }
   .workout-header-actions { grid-column: 2; grid-row: 1; }
   .set-row { gap: 6px; }
   .set-index-label { width: 36px; flex-basis: 36px; }

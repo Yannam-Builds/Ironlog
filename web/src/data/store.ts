@@ -417,6 +417,16 @@ export function mutateWorkout(
     }),
   );
 }
+export function clearActiveWorkoutExerciseNotes(
+  id: string,
+  expectedRevision: number,
+): Promise<Workout> {
+  return mutateWorkout(id, expectedRevision, (workout) => {
+    workout.exercises.forEach((exercise) => {
+      exercise.notes = "";
+    });
+  });
+}
 export function finishWorkout(id: string): Promise<Workout> {
   return serialize(id, () =>
     db.transaction("rw", db.workouts, async () => {

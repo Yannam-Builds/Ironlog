@@ -32,7 +32,9 @@ it("persists native score controls, notes and pain that stays visible in recomme
 
 it("runs the native choose-start-complete circuit stages once for the eligible week", async () => {
   const goal = (await readSnapshot()).profile.weeklyGoal;
-  for (let index = 1; index < goal - 1; index++) await db.workouts.put({ ...workout, id: `session-${index}`, startedAt: workout.startedAt - index * 3_600_000, completedAt: workout.completedAt! - index * 3_600_000 });
+  await db.workouts.clear();
+  const completedAt = Date.now() - 1_000;
+  for (let index = 0; index < goal - 1; index++) await db.workouts.put({ ...workout, id: `session-${index}`, startedAt: completedAt - 3_600_000, completedAt });
   history.replaceState(null, "", "#/ledger"); render(<App />);
   fireEvent.click(await screen.findByRole("button", { name: "Open recovery circuit" }));
   fireEvent.click(screen.getByRole("button", { name: /Core Circuit/ }));

@@ -23,4 +23,25 @@ it('assigns and removes a session-only superset group',async()=>{
  fireEvent.click(screen.getByRole('button',{name:`Options for ${name}`}));fireEvent.click(screen.getByRole('button',{name:'Superset group'}));fireEvent.click(screen.getByRole('button',{name:'No superset'}));
  await waitFor(async()=>expect((await readSnapshot()).workouts[0].exercises[0].supersetGroup).toBe(''));
 });
+it('hides or deletes active exercise notes with native scope and exposes the tutorial action',async()=>{
+ await bootstrap([{id:'bench',name:'Bench Press',muscle:'chest',equipment:'barbell',tracking:'weight_reps'}]);
+ let w=await startWorkout();w=await mutateWorkout(w.id,w.revision,x=>x.exercises.push({id:'bench-slot',exerciseId:'bench',name:'Bench Press',sets:3,reps:'8',restSeconds:90,notes:'Keep shoulder blades pinned',supersetGroup:'',isWarmup:false,tracking:'weight_reps',muscle:'chest',equipment:'barbell',pendingWarmups:[],loggedSets:[]}));
+ window.location.hash='#/workout';render(<App/>);
+ expect(await screen.findByText('Keep shoulder blades pinned')).toBeVisible();
+ fireEvent.click(screen.getByRole('button',{name:'Workout options'}));
+ fireEvent.click(screen.getByRole('button',{name:'Exercise notes'}));
+ fireEvent.click(screen.getByRole('switch',{name:'Show exercise notes'}));
+ await waitFor(()=>expect(screen.queryByText('Keep shoulder blades pinned')).not.toBeInTheDocument());
+ expect((await readSnapshot()).workouts[0].exercises[0].notes).toBe('Keep shoulder blades pinned');
+ expect((await readSnapshot()).profile.planExerciseNotesVisible).toBe(false);
+ fireEvent.click(screen.getByRole('button',{name:'Delete notes from this session'}));
+ expect(screen.getByText('This removes every exercise-level note from the active workout. The source plan is unchanged.')).toBeVisible();
+ fireEvent.click(screen.getByRole('button',{name:'Confirm delete notes'}));
+ await waitFor(async()=>expect((await readSnapshot()).workouts[0].exercises[0].notes).toBe(''));
+ fireEvent.click(screen.getByRole('button',{name:'Options for Bench Press'}));
+ const tutorial=screen.getByRole('link',{name:'Watch on YouTube'});
+ expect(tutorial).toHaveAttribute('href','https://www.youtube.com/results?search_query=Bench%20Press+exercise+tutorial');
+ expect(tutorial).toHaveAttribute('target','_blank');
+ expect(tutorial).toHaveAttribute('rel','noopener noreferrer');
+});
 

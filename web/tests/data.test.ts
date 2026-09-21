@@ -3,9 +3,11 @@ import {
   bootstrap,
   db,
   readSnapshot,
+  saveProfile,
   savePlan,
   startWorkout,
   mutateWorkout,
+  clearActiveWorkoutExerciseNotes,
   finishWorkout,
   addWarmups,
   logSet,
@@ -217,6 +219,30 @@ describe("transactional workout repository", () => {
     expect((await db.plans.get("plan"))?.days[0].exercises[0].exerciseId).toBe(
       "row",
     );
+  });
+  it("clears only exercise-level notes from the active workout", async () => {
+    await saveProfile({ exerciseNextNotes: { "exercise_next_note:bench": "Pause at the chest" } });
+    let active = await startWorkout("plan", "day");
+    active = await mutateWorkout(active.id, active.revision, (workout) => {
+      workout.notes = "Session reflection";
+      workout.exercises[0].loggedSets.push({ ...set, notes: "Set-specific cue" });
+    });
+    const completed = {
+      ...active,
+      id: "completed-with-notes",
+      status: "completed" as const,
+      completedAt: Date.now(),
+      revision: 0,
+    };
+    await db.workouts.put(completed);
+
+    const cleared = await clearActiveWorkoutExerciseNotes(active.id, active.revision);
+    expect(cleared.exercises[0].notes).toBe("");
+    expect(cleared.exercises[0].loggedSets[0].notes).toBe("Set-specific cue");
+    expect(cleared.notes).toBe("Session reflection");
+    expect((await db.plans.get("plan"))?.days[0].exercises[0].notes).toBe("tempo");
+    expect((await db.workouts.get(completed.id))?.exercises[0].notes).toBe("tempo");
+    expect((await readSnapshot()).profile.exerciseNextNotes?.["exercise_next_note:bench"]).toBe("Pause at the chest");
   });
   it("rejects malformed restore without removing any current data", async () => {
     const before = await readSnapshot();
