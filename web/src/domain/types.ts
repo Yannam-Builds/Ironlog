@@ -157,6 +157,7 @@ export interface Profile {
   restSeconds: number;
   barKg: number;
   platesKg: number[];
+  activeGymId?: string;
   /** Total physical plates, shared between both sides. Missing means unlimited. */
   plateInventory?: { weightKg: number; quantity: number }[];
   keepAwake: boolean;

@@ -163,6 +163,7 @@ export const profileSchema = z.object({
   restSeconds: number,
   barKg: number,
   platesKg: z.array(z.number().positive()),
+  activeGymId: z.string().optional(),
   plateInventory: z.array(z.object({ weightKg: z.number().finite().positive(), quantity: z.number().int().nonnegative() })).optional(),
   keepAwake: z.boolean(),
   planExerciseNotesVisible: z.boolean().default(true),

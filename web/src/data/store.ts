@@ -599,7 +599,12 @@ export async function saveGym(g: Gym) {
   await db.gyms.put(snapshotSchema.shape.gyms.element.parse(g));
 }
 export async function deleteGym(id: string) {
-  await db.gyms.delete(id);
+  await db.transaction("rw", db.gyms, db.profiles, async () => {
+    await db.gyms.delete(id);
+    const profile = await db.profiles.get("local");
+    if (profile?.activeGymId === id)
+      await db.profiles.put({ ...profile, activeGymId: undefined });
+  });
 }
 export async function deleteWorkout(id: string) {
   return serialize(id, () => db.workouts.delete(id));

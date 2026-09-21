@@ -51,6 +51,7 @@ export function Settings() {
   const [library, setLibrary] = useState(false);
   const [gym, setGym] = useState(false);
   const [gymName, setGymName] = useState("");
+  const [editingGymId, setEditingGymId] = useState<string>();
   const [bar, setBar] = useState(String(p.barKg));
   const [plates, setPlates] = useState(p.platesKg.join(", "));
   const [finitePlates, setFinitePlates] = useState(p.plateInventory !== undefined);
@@ -197,6 +198,7 @@ export function Settings() {
           setFinitePlates(p.plateInventory !== undefined);
           setQuantities(p.plateInventory?.map(x => x.quantity).join(", ") ?? "");
           setGymName("");
+          setEditingGymId(undefined);
           setGym(true);
         }}>
           <strong>Gym & plate setup</strong>
@@ -493,10 +495,11 @@ export function Settings() {
                     counts.some(x => !Number.isSafeInteger(x) || x < 0)))
                   throw Error("Enter one nonnegative whole quantity for each plate size");
                 const plateInventory = finitePlates ? values.map((weightKg, i) => ({ weightKg, quantity: counts[i] })) : undefined;
-                await saveProfile({ barKg, platesKg: values, plateInventory });
-                if (gymName.trim())
+                const gymId = editingGymId ?? (gymName.trim() ? newId() : undefined);
+                await saveProfile({ barKg, platesKg: values, plateInventory, activeGymId: gymId ?? p.activeGymId });
+                if (gymId && gymName.trim())
                   await saveGym({
-                    id: newId(),
+                    id: gymId,
                     name: gymName.trim(),
                     barKg,
                     platesKg: values,
@@ -515,7 +518,7 @@ export function Settings() {
                 onClick={() =>
                   run(
                     async () => {
-                      await saveProfile({ barKg: g.barKg, platesKg: g.platesKg, plateInventory: g.plateInventory });
+                      await saveProfile({ barKg: g.barKg, platesKg: g.platesKg, plateInventory: g.plateInventory, activeGymId: g.id });
                       setBar(String(g.barKg));
                       setPlates((g.plateInventory?.map(x => x.weightKg) ?? g.platesKg).join(", "));
                       setFinitePlates(g.plateInventory !== undefined);
@@ -526,8 +529,20 @@ export function Settings() {
                   )
                 }
               >
-                {g.name} · {g.barKg} kg bar · {g.plateInventory === undefined ? "Unlimited pairs" : "Saved physical quantities"}
+                {g.name}{p.activeGymId === g.id ? " · Active" : ""} · {g.barKg} kg bar · {g.plateInventory === undefined ? "Unlimited pairs" : "Saved physical quantities"}
               </button>
+              <IconButton
+                name="edit"
+                label={`Edit ${g.name}`}
+                onClick={() => {
+                  setEditingGymId(g.id);
+                  setGymName(g.name);
+                  setBar(String(g.barKg));
+                  setPlates((g.plateInventory?.map(x => x.weightKg) ?? g.platesKg).join(", "));
+                  setFinitePlates(g.plateInventory !== undefined);
+                  setQuantities(g.plateInventory?.map(x => x.quantity).join(", ") ?? "");
+                }}
+              />
               <IconButton
                 name="trash"
                 label={`Delete ${g.name}`}
