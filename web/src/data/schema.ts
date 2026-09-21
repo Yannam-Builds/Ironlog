@@ -68,6 +68,7 @@ export const workoutSchema = z.object({
   notes: z.string(),
   rating: number.optional(),
   restEndsAt: number.optional(),
+  restPausedRemainingMs: z.number().int().nonnegative().optional(),
   restUsed: z.boolean(),
   revision: z.number().int().nonnegative(),
   imported: z.boolean().optional(),

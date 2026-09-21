@@ -96,6 +96,7 @@ export interface Workout {
   notes: string;
   rating?: number;
   restEndsAt?: number;
+  restPausedRemainingMs?: number;
   restUsed: boolean;
   revision: number;
   imported?: boolean;

@@ -427,6 +427,38 @@ export function clearActiveWorkoutExerciseNotes(
     });
   });
 }
+export type WorkoutRestControl = "add30" | "pause" | "resume" | "skip";
+export function controlWorkoutRest(
+  id: string,
+  expectedRevision: number,
+  control: WorkoutRestControl,
+  now = Date.now(),
+): Promise<Workout> {
+  return mutateWorkout(id, expectedRevision, (workout) => {
+    const paused = workout.restPausedRemainingMs;
+    const running = workout.restEndsAt !== undefined && workout.restEndsAt > now;
+    if (control === "skip") {
+      workout.restEndsAt = undefined;
+      workout.restPausedRemainingMs = undefined;
+      return;
+    }
+    if (control === "add30") {
+      if (paused !== undefined) workout.restPausedRemainingMs = paused + 30_000;
+      else if (running) workout.restEndsAt = workout.restEndsAt! + 30_000;
+      else throw Error("Rest timer is not active");
+      return;
+    }
+    if (control === "pause") {
+      if (!running) throw Error("Rest timer is not running");
+      workout.restPausedRemainingMs = Math.max(0, workout.restEndsAt! - now);
+      workout.restEndsAt = undefined;
+      return;
+    }
+    if (paused === undefined || paused <= 0) throw Error("Rest timer is not paused");
+    workout.restEndsAt = now + paused;
+    workout.restPausedRemainingMs = undefined;
+  });
+}
 export function finishWorkout(id: string): Promise<Workout> {
   return serialize(id, () =>
     db.transaction("rw", db.workouts, async () => {
@@ -442,6 +474,7 @@ export function finishWorkout(id: string): Promise<Workout> {
         Math.round((w.completedAt - w.startedAt) / 1000),
       );
       w.restEndsAt = undefined;
+      w.restPausedRemainingMs = undefined;
       w.revision++;
       await db.workouts.put(w);
       return w;
@@ -456,6 +489,7 @@ export function discardWorkout(id: string) {
         ...w,
         status: "discarded",
         restEndsAt: undefined,
+        restPausedRemainingMs: undefined,
         revision: w.revision + 1,
       });
     }),

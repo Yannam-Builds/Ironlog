@@ -1781,6 +1781,11 @@ details > summary {
   font-variant-numeric: tabular-nums;
   font-size: 1.5rem;
 }
+.rest-copy { display: grid; gap: 2px; min-width: 0; flex: 1 1 120px; }
+.rest-copy > small:first-child { color: var(--subtext); font-size: 0.7rem; letter-spacing: 0.08em; }
+.rest-controls { display: flex; align-items: center; justify-content: flex-end; gap: 2px; flex: 1 1 190px; }
+.rest-controls button { min-width: 48px; padding-inline: 8px; font-size: 0.75rem; font-weight: var(--type-w700, 700); }
+.rest-banner.paused .rest-progress-ring { background: var(--faint) !important; }
 details[open] > :not(summary) {
   animation: ironlog-expand-content 220ms cubic-bezier(0.2, 0.82, 0.2, 1) both;
 }
@@ -1843,7 +1848,7 @@ details[open] > :not(summary) {
   from { opacity: 0; transform: translateY(8px) scale(0.985); }
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
-.rest-banner span {
+.rest-banner > span {
   font-size: 0.8rem;
   color: var(--subtext);
   flex: 1;

@@ -38,6 +38,7 @@ import {
   newId,
   saveProfile,
   clearActiveWorkoutExerciseNotes,
+  controlWorkoutRest,
 } from "../data/store";
 import { plateCalculation, warmupTargets } from "../domain/engine";
 import { progressionSuggestion } from "../domain/engine";
@@ -387,6 +388,7 @@ function ExerciseCard({
       } else ex.loggedSets.push(set);
       if (ex.restSeconds > 0) {
         workout.restEndsAt = Date.now() + ex.restSeconds * 1000;
+        workout.restPausedRemainingMs = undefined;
         workout.restUsed = true;
       }
     }, "Set logged").then((ok) => {
@@ -1012,7 +1014,10 @@ export function Workout() {
         <Button onClick={() => navigate("home")}>Go Home</Button>
       </Empty>
     );
-  const remaining = Math.max(0, Math.ceil(((w.restEndsAt ?? 0) - now) / 1000));
+  const restPaused = w.restPausedRemainingMs !== undefined;
+  const remaining = restPaused
+    ? Math.max(0, Math.ceil(w.restPausedRemainingMs! / 1000))
+    : Math.max(0, Math.ceil(((w.restEndsAt ?? 0) - now) / 1000));
   const lastPerformed = latestPerformedSet(w, now);
   const orderedExercises = orderedExerciseIds
     .map((id) => w.exercises.find((exercise) => exercise.id === id))
@@ -1087,30 +1092,25 @@ export function Workout() {
           </p>
         )}
       </div>
-      {w.restEndsAt && (
-        <aside className={`rest-banner${remaining === 0 ? " complete" : ""}`} role="status">
+      {(w.restEndsAt || restPaused) && (
+        <aside className={`rest-banner${remaining === 0 ? " complete" : ""}${restPaused ? " paused" : ""}`} role="status">
           <span className="rest-progress-ring" style={{ background: `conic-gradient(var(--accent) ${restProgress * 360}deg, var(--faint) 0deg)` }} aria-hidden="true">
             <Icon name={remaining === 0 ? "check" : "timer"} size={19} />
           </span>
-          <strong>
-            <RollingTimerText value={remaining
-              ? `${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, "0")}`
-              : "Rest complete"} />
-          </strong>
-          <span>Rest timer
+          <div className="rest-copy">
+            <small>{restPaused ? "REST PAUSED" : "REST"}</small>
+            <strong>
+              <RollingTimerText value={remaining
+                ? `${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, "0")}`
+                : "Rest complete"} />
+            </strong>
             {lastPerformed && <small className="rest-context">{lastPerformed.exercise.name}<br />{recentSetLabel(lastPerformed.exercise, lastPerformed.set, data.profile.unit, displayWeight)}</small>}
-          </span>
-          <button
-            onClick={() =>
-              run(() =>
-                mutateWorkout(w.id, w.revision, (x) => {
-                  x.restEndsAt = undefined;
-                }),
-              )
-            }
-          >
-            Dismiss
-          </button>
+          </div>
+          <div className="rest-controls" aria-label="Rest controls">
+            <button disabled={busy || remaining === 0} aria-label="Add 30 seconds" onClick={() => run(() => controlWorkoutRest(w.id, w.revision, "add30"))}>+30s</button>
+            <button disabled={busy || remaining === 0} aria-label={restPaused ? "Resume rest" : "Pause rest"} onClick={() => run(() => controlWorkoutRest(w.id, w.revision, restPaused ? "resume" : "pause"))}>{restPaused ? "RESUME" : "PAUSE"}</button>
+            <button disabled={busy} aria-label="Skip rest" onClick={() => run(() => controlWorkoutRest(w.id, w.revision, "skip"))}>SKIP</button>
+          </div>
         </aside>
       )}
       <div ref={exerciseListRef} className="workout-exercise-list" aria-label="Workout exercises">

@@ -8,6 +8,7 @@ import {
   startWorkout,
   mutateWorkout,
   clearActiveWorkoutExerciseNotes,
+  controlWorkoutRest,
   finishWorkout,
   addWarmups,
   logSet,
@@ -243,6 +244,23 @@ describe("transactional workout repository", () => {
     expect((await db.plans.get("plan"))?.days[0].exercises[0].notes).toBe("tempo");
     expect((await db.workouts.get(completed.id))?.exercises[0].notes).toBe("tempo");
     expect((await readSnapshot()).profile.exerciseNextNotes?.["exercise_next_note:bench"]).toBe("Pause at the chest");
+  });
+  it("persists add, pause, resume and skip rest controls in mutation order", async () => {
+    const now = 1_800_000_000_000;
+    let active = await startWorkout("plan", "day");
+    active = await mutateWorkout(active.id, active.revision, (workout) => {
+      workout.restEndsAt = now + 90_000;
+      workout.restUsed = true;
+    });
+    active = await controlWorkoutRest(active.id, active.revision, "pause", now);
+    expect(active).toMatchObject({ restEndsAt: undefined, restPausedRemainingMs: 90_000 });
+    active = await controlWorkoutRest(active.id, active.revision, "add30", now + 10_000);
+    expect(active.restPausedRemainingMs).toBe(120_000);
+    active = await controlWorkoutRest(active.id, active.revision, "resume", now + 20_000);
+    expect(active).toMatchObject({ restEndsAt: now + 140_000, restPausedRemainingMs: undefined });
+    active = await controlWorkoutRest(active.id, active.revision, "skip", now + 30_000);
+    expect(active.restEndsAt).toBeUndefined();
+    expect(active.restPausedRemainingMs).toBeUndefined();
   });
   it("rejects malformed restore without removing any current data", async () => {
     const before = await readSnapshot();

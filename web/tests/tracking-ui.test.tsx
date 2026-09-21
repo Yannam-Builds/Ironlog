@@ -44,4 +44,19 @@ it('hides or deletes active exercise notes with native scope and exposes the tut
  expect(tutorial).toHaveAttribute('target','_blank');
  expect(tutorial).toHaveAttribute('rel','noopener noreferrer');
 });
+it('persists native rest add, pause, resume and skip controls across reload',async()=>{
+ let w=await startWorkout();w=await mutateWorkout(w.id,w.revision,x=>{x.restEndsAt=Date.now()+90_000;x.restUsed=true;});
+ window.location.hash='#/workout';render(<App/>);
+ fireEvent.click(await screen.findByRole('button',{name:'Pause rest'}));
+ await waitFor(async()=>expect((await readSnapshot()).workouts[0].restPausedRemainingMs).toBeGreaterThan(80_000));
+ cleanup();render(<App/>);
+ expect(await screen.findByRole('button',{name:'Resume rest'})).toBeVisible();
+ const before=(await readSnapshot()).workouts[0].restPausedRemainingMs!;
+ fireEvent.click(screen.getByRole('button',{name:'Add 30 seconds'}));
+ await waitFor(async()=>expect((await readSnapshot()).workouts[0].restPausedRemainingMs).toBe(before+30_000));
+ fireEvent.click(screen.getByRole('button',{name:'Resume rest'}));
+ await waitFor(async()=>expect((await readSnapshot()).workouts[0].restEndsAt).toBeGreaterThan(Date.now()+100_000));
+ fireEvent.click(screen.getByRole('button',{name:'Skip rest'}));
+ await waitFor(()=>expect(screen.queryByRole('button',{name:'Skip rest'})).not.toBeInTheDocument());
+});
 
