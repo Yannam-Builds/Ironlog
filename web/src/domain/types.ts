@@ -165,6 +165,10 @@ export interface Profile {
   badgeUnlocks: Record<string, number>;
   ledgerBaseline?: OnboardingLedgerBaseline;
   recoveryWeeks: string[];
+  /** Workouts and sets at or before this instant do not define current PR baselines. */
+  prResetAt?: number;
+  /** Consumed during the next full app startup so settings does not vanish immediately. */
+  tutorialRestartPending?: boolean;
   lastBackupAt?: number;
 }
 export interface Measurement {

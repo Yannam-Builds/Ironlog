@@ -189,10 +189,10 @@ Acceptance: fast logging does not jump the list, lose edits, double-finish or af
 
 Files: modify `src/features/Settings.tsx`, `src/App.tsx`, types/store/codecs and appearance modules; create `src/features/settings/SettingsPages.tsx`, `src/features/settings/GymProfiles.tsx`, `tests/settings-parity.test.tsx`, `tests/browser/settings-parity.spec.ts`. Native: SettingsConsoleModel, SettingsScreen, GymProfiles/Editor, appearance cards, About/tutorial paths.
 
-- [ ] Create focused native Training, Intelligence, Appearance, adapted Notifications, Data & Privacy and About destinations; use native multi-term keyword matching and correct Back behavior.
+- [x] Create focused native Training, Intelligence, Appearance, adapted Notifications, Data & Privacy and About destinations; use native multi-term keyword matching and correct Back behavior.
 - [ ] Implement every browser-capable P00 settings row with real consumers, defaults, reload and portability. Include independent shine/glass/motion controls and native tutorial replay semantics.
 - [ ] Replace comma-only gym editing with native controls where applicable; allow editing saved profiles and active identity while retaining finite plate quantities and odd-spare handling.
-- [ ] Implement scoped clear-history and reset-PR behavior from native mutation policy with explicit confirmation; preserve plans/photos/baseline/durable awards as the authority specifies.
+- [x] Implement scoped clear-history and reset-PR behavior from native mutation policy with explicit confirmation; preserve plans/photos/baseline/durable awards as the authority specifies.
 - [ ] Test settings search, each toggle's effect and restart, gym edit/use/delete, destructive cancel and independent effect settings. Excluded OS settings must not look functional.
 
 Acceptance: no setting exists solely as a saved value without a consumer; each destination and browser-capable action is mapped and tested.

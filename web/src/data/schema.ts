@@ -170,6 +170,8 @@ export const profileSchema = z.object({
   badgeUnlocks: z.record(z.string(), number),
   ledgerBaseline: onboardingLedgerBaselineSchema.optional(),
   recoveryWeeks: z.array(z.string()),
+  prResetAt: number.optional(),
+  tutorialRestartPending: z.boolean().optional(),
   lastBackupAt: number.optional(),
 });
 export const snapshotSchema = z.object({

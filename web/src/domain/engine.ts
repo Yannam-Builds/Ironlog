@@ -333,6 +333,8 @@ export function deriveSnapshot(snapshot: AppSnapshot, now = Date.now()) {
     for (const e of w.exercises)
       for (const s of e.loggedSets) {
         volumeKg += externalLoadVolume(e, s);
+        if ((s.loggedAt || w.startedAt) <= (snapshot.profile.prResetAt ?? 0))
+          continue;
         const one = estimatedOneRm(e, s);
         if (one === undefined) continue;
         const key = e.exerciseId || e.name.toLowerCase();

@@ -604,6 +604,21 @@ export async function deleteGym(id: string) {
 export async function deleteWorkout(id: string) {
   return serialize(id, () => db.workouts.delete(id));
 }
+/** Mirrors Android's history clear: completed sessions go; active and discarded rows remain. */
+export async function clearCompletedHistory() {
+  await Promise.allSettled([...queue.values()]);
+  await db.transaction("rw", db.workouts, async () => {
+    await db.workouts.where("status").equals("completed").delete();
+  });
+}
+/** Starts a new PR era without deleting the workouts that produced the old records. */
+export async function resetPersonalRecords(now = Date.now()) {
+  if (!Number.isFinite(now) || now <= 0) throw Error("PR reset timestamp must be positive");
+  await saveProfile({ prResetAt: now });
+}
+export async function scheduleTutorialRestart() {
+  await saveProfile({ tutorialRestartPending: true });
+}
 export async function saveHistoricalWorkout(workout: Workout) {
   const valid = workoutSchema.parse(workout);
   if (valid.status !== "completed" || valid.completedAt === undefined || valid.completedAt < valid.startedAt)

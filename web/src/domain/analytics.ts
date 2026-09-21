@@ -21,7 +21,7 @@ export type ExerciseTrendRow = {
 const normalized = (value: string) => value.trim().toLocaleLowerCase();
 const exerciseMatches = (exercise: SessionExercise, identity: string) => exercise.exerciseId === identity || normalized(exercise.name) === normalized(identity);
 
-export function buildExerciseTrend(workouts: Workout[], identity: string): ExerciseTrendRow[] {
+export function buildExerciseTrend(workouts: Workout[], identity: string, prResetAt = 0): ExerciseTrendRow[] {
   const rows = workouts.filter((workout) => workout.status === "completed").flatMap((workout) => workout.exercises.filter((exercise) => exerciseMatches(exercise, identity)).flatMap((exercise) => {
     const sets = exercise.loggedSets.filter((set) => validWorkingSet(exercise, set));
     if (!sets.length) return [];
@@ -38,14 +38,16 @@ export function buildExerciseTrend(workouts: Workout[], identity: string): Exerc
       durationSeconds: timed ? sets.reduce((sum, set) => sum + set.durationSeconds, 0) : undefined,
       distanceKm: sets.reduce((sum, set) => sum + set.distanceKm, 0),
       workingSets: sets.length, loadAvailable, volumeAvailable, isPr: false,
-    } satisfies ExerciseTrendRow];
+      prEligible: sets.some((set) => (set.loggedAt || workout.startedAt) > prResetAt),
+    } satisfies ExerciseTrendRow & { prEligible: boolean }];
   })).sort((a, b) => a.date - b.date);
   let best = -Infinity;
   return rows.map((row) => {
     const value = row.estimatedOneRmKg;
-    const isPr = value !== undefined && value > best;
-    if (value !== undefined) best = Math.max(best, value);
-    return { ...row, isPr };
+    const isPr = row.prEligible && value !== undefined && value > best;
+    if (row.prEligible && value !== undefined) best = Math.max(best, value);
+    const { prEligible: _prEligible, ...publicRow } = row;
+    return { ...publicRow, isPr };
   });
 }
 

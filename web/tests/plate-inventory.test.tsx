@@ -45,6 +45,7 @@ it("saves physical quantities in a gym and restores unlimited semantics when sel
   await db.gyms.put({ id: "old", name: "Old gym", barKg: 20, platesKg: [20] });
   window.location.hash = "#/settings";
   render(<App />);
+  fireEvent.click(await screen.findByRole("button", { name: /^Training/ }));
   fireEvent.click(await screen.findByRole("button", { name: /Gym & plate setup/ }));
   fireEvent.change(screen.getByLabelText("Profile name"), { target: { value: "Home" } });
   fireEvent.click(screen.getByLabelText("Limit to my physical plates"));

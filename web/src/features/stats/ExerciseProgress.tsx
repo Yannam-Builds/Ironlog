@@ -15,7 +15,10 @@ function TrendChart({ rows, metric, unit }: { rows: ExerciseTrendRow[]; metric: 
 
 export function ExerciseProgress({ identity }: { identity: string }) {
   const { data } = useApp();
-  const allRows = useMemo(() => buildExerciseTrend(data.workouts, identity), [data.workouts, identity]);
+  const allRows = useMemo(
+    () => buildExerciseTrend(data.workouts, identity, data.profile.prResetAt),
+    [data.workouts, data.profile.prResetAt, identity],
+  );
   const [range, setRange] = useState<(typeof ranges)[number][0]>("ALL"), [activeMetric, setActiveMetric] = useState("E1RM"), [showTm, setShowTm] = useState(false);
   const rows = filterExerciseTrend(allRows, ranges.find(([label]) => label === range)?.[1]);
   const tabs = exerciseProgressTabs(rows), metric = tabs.includes(activeMetric) ? activeMetric : tabs[0], name = allRows[0]?.name ?? identity;
