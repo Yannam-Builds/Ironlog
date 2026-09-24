@@ -1,5 +1,12 @@
-import { expect, it } from "vitest";
+import { afterAll, beforeAll, expect, it } from "vitest";
 import { buildHistoricalWorkout, resolveLocalDateTime } from "../src/domain/historical-workout";
+
+const originalTimezone = process.env.TZ;
+beforeAll(() => { process.env.TZ = "Europe/Warsaw"; });
+afterAll(() => {
+  if (originalTimezone === undefined) delete process.env.TZ;
+  else process.env.TZ = originalTimezone;
+});
 
 it("rejects a Warsaw DST gap instead of silently moving the workout", () => {
   expect(() => resolveLocalDateTime("2026-03-29", "02:30", "earlier")).toThrow(/does not exist/);
