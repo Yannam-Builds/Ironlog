@@ -1106,25 +1106,14 @@ body.plan-reordering {
   padding: calc(25px * var(--ui-spacing, 1));
   border-color: var(--accentBorder);
 }
-.animated-card-shine::before {
-  content: "";
+.card-shine-layer {
   position: absolute;
-  z-index: -1;
-  top: -100%;
+  z-index: 0;
+  inset: 0;
   left: 0;
-  width: 900px;
-  height: 300%;
+  width: 100%;
+  height: 100%;
   pointer-events: none;
-  background: linear-gradient(
-    135deg,
-    color-mix(in srgb, var(--accent) 3%, transparent) 0%,
-    color-mix(in srgb, var(--accent) 20%, transparent) 35%,
-    color-mix(in srgb, var(--accent) 28%, transparent) 65%,
-    color-mix(in srgb, var(--accent) 4%, transparent) 100%
-  );
-  transform: translateX(-600px);
-  animation: ironlog-card-shine 5000ms linear infinite alternate;
-  will-change: transform;
 }
 .today-card > * {
   position: relative;
@@ -1832,10 +1821,6 @@ details[open] > :not(summary) {
 @keyframes ironlog-timer-digit-in {
   from { opacity: 0.3; transform: translateY(100%); }
   to { opacity: 1; transform: translateY(0); }
-}
-@keyframes ironlog-card-shine {
-  from { transform: translateX(-600px); }
-  to { transform: translateX(1800px); }
 }
 @keyframes ironlog-route-next-in {
   from { opacity: 0; transform: translateX(18px); }

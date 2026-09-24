@@ -1,3 +1,4 @@
+import { useId } from "react";
 import { useApp, navigate, hasTrainingHistory } from "../ui/context";
 import { Button, Fox, Grade, Icon, Progress } from "../ui/components";
 import { BodyMap } from "../ui/BodyMap";
@@ -10,6 +11,26 @@ import {
 } from "../domain/engine";
 import { externalLoadVolume } from "../domain/tracking";
 import { isoWeekKey } from "../domain/dates";
+
+/** Exact browser counterpart of CardGradient.kt's moving user-space brush. */
+function NativeCardShine() {
+  const gradientId = `card-shine-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
+  return (
+    <svg className="card-shine-layer" aria-hidden="true" preserveAspectRatio="none">
+      <defs>
+        <linearGradient id={gradientId} gradientUnits="userSpaceOnUse" x1="-600" y1="0" x2="300" y2="100%">
+          <stop offset="0" stopColor="var(--accent)" stopOpacity="0.03" />
+          <stop offset="0.35" stopColor="var(--accent)" stopOpacity="0.2" />
+          <stop offset="0.65" stopColor="var(--accent)" stopOpacity="0.28" />
+          <stop offset="1" stopColor="var(--accent)" stopOpacity="0.04" />
+          <animate attributeName="x1" values="-600;1800;-600" dur="10s" calcMode="linear" repeatCount="indefinite" />
+          <animate attributeName="x2" values="300;2700;300" dur="10s" calcMode="linear" repeatCount="indefinite" />
+        </linearGradient>
+      </defs>
+      <rect width="100%" height="100%" fill={`url(#${gradientId})`} />
+    </svg>
+  );
+}
 
 export function Home() {
   const { data, derived: d, run, busy } = useApp();
@@ -176,6 +197,7 @@ export function Home() {
 
       {(plan || active) && (
         <section className={`card today-card native-card${data.profile.cardShineEnabled ? " animated-card-shine" : ""}`}>
+          {data.profile.cardShineEnabled && <NativeCardShine />}
           <div className="row">
             <span className="eyebrow">Today’s workout</span>
             <Icon name="log" />

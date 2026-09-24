@@ -75,7 +75,23 @@ it("applies the native animated shine to the Home workout card", async () => {
   render(<App />);
   fireEvent.click(await screen.findByRole("link", { name: "Home" }));
   const eyebrow = await screen.findByText("Today’s workout");
-  expect(eyebrow.closest("section")).toHaveClass("animated-card-shine");
+  const card = eyebrow.closest("section")!;
+  expect(card).toHaveClass("animated-card-shine");
+  const gradient = card.querySelector("linearGradient")!;
+  expect(gradient).toHaveAttribute("gradientUnits", "userSpaceOnUse");
+  expect(gradient).toHaveAttribute("x1", "-600");
+  expect(gradient).toHaveAttribute("x2", "300");
+  expect(gradient).toHaveAttribute("y1", "0");
+  expect(gradient).toHaveAttribute("y2", "100%");
+  expect([...gradient.querySelectorAll("stop")].map((stop) => [
+    stop.getAttribute("offset"), stop.getAttribute("stop-opacity"),
+  ])).toEqual([["0", "0.03"], ["0.35", "0.2"], ["0.65", "0.28"], ["1", "0.04"]]);
+  const animations = gradient.querySelectorAll("animate");
+  expect(animations).toHaveLength(2);
+  expect(animations[0]).toHaveAttribute("values", "-600;1800;-600");
+  expect(animations[1]).toHaveAttribute("values", "300;2700;300");
+  expect(animations[0]).toHaveAttribute("dur", "10s");
+  expect(animations[0]).toHaveAttribute("calcMode", "linear");
 });
 
 it("navigates one adjacent primary tab from a touch swipe", async () => {
