@@ -1,20 +1,9 @@
 import { test, expect, type Page } from "@playwright/test";
+import { completeOnboarding } from "./onboarding";
 
 async function onboard(page: Page) {
   await page.goto("app/");
-  await page.getByLabel("Your name").fill("Overlay QA");
-  for (const heading of [
-    "What are you training for?",
-    "Your training, your pace.",
-    "A starting point.",
-  ]) {
-    await page.getByRole("button", { name: "Continue", exact: true }).click();
-    await expect(page.getByRole("heading", { name: heading })).toBeVisible();
-  }
-  await page
-    .getByRole("button", { name: "Start training", exact: true })
-    .click();
-  await expect(page.getByRole("heading", { name: "Overlay QA" })).toBeVisible();
+  await completeOnboarding(page, "Overlay QA");
 }
 
 test("route focus does not steal a newly focused control on a delayed frame", async ({ page }) => {
@@ -61,6 +50,7 @@ test("all themes keep sheets opaque, modal and keyboard dismissible", async ({
     "Light",
   ]) {
     await page.goto("app/#/settings");
+    await page.getByRole("button", { name: /^Appearance/ }).click();
     await page
       .getByRole("button", {
         name: theme === "Monet" ? /^Monet/ : theme,

@@ -54,9 +54,12 @@ it('persists native rest add, pause, resume and skip controls across reload',asy
  const before=(await readSnapshot()).workouts[0].restPausedRemainingMs!;
  fireEvent.click(screen.getByRole('button',{name:'Add 30 seconds'}));
  await waitFor(async()=>expect((await readSnapshot()).workouts[0].restPausedRemainingMs).toBe(before+30_000));
+ await waitFor(()=>expect(screen.getByRole('button',{name:'Resume rest'})).toBeEnabled());
  fireEvent.click(screen.getByRole('button',{name:'Resume rest'}));
  await waitFor(async()=>expect((await readSnapshot()).workouts[0].restEndsAt).toBeGreaterThan(Date.now()+100_000));
+ await waitFor(()=>expect(screen.getByRole('button',{name:'Pause rest'})).toBeEnabled());
  fireEvent.click(screen.getByRole('button',{name:'Skip rest'}));
+ await waitFor(async()=>expect((await readSnapshot()).workouts[0].restEndsAt).toBeUndefined());
  await waitFor(()=>expect(screen.queryByRole('button',{name:'Skip rest'})).not.toBeInTheDocument());
 });
 

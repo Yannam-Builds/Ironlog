@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { completeOnboarding, openOnboardingProfile } from "./onboarding";
 
 test("a workout can be logged and completed inside the website phone", async ({
   page,
@@ -12,18 +13,7 @@ test("a workout can be logged and completed inside the website phone", async ({
   const app = page.frameLocator(
     'iframe[title="IronLog interactive app preview"]',
   );
-  await app.getByLabel("Your name").fill("Embedded Workout QA");
-  for (const next of [
-    "What are you training for?",
-    "Your training, your pace.",
-    "A starting point.",
-  ]) {
-    await app.getByRole("button", { name: "Continue", exact: true }).click();
-    await expect(app.getByRole("heading", { name: next })).toBeVisible();
-  }
-  await app
-    .getByRole("button", { name: "Start training", exact: true })
-    .click();
+  await completeOnboarding(app, "Embedded Workout QA");
   await app
     .getByRole("button", { name: "Start freestyle", exact: true })
     .click();
@@ -98,18 +88,16 @@ test("website launches the real app inside a phone without navigating away", asy
   const app = page.frameLocator(
     'iframe[title="IronLog interactive app preview"]',
   );
-  await expect(
-    app.getByRole("heading", { name: "Make it your own." }),
-  ).toBeVisible();
+  await openOnboardingProfile(app);
   await app.getByLabel("Your name").fill("Phone Preview QA");
-  await app.getByRole("button", { name: "Continue", exact: true }).click();
+  await app.getByRole("button", { name: "Continue as Phone Preview QA", exact: true }).click();
   await expect(
-    app.getByRole("heading", { name: "What are you training for?" }),
+    app.getByRole("heading", { name: "Tell us where training begins." }),
   ).toBeVisible();
   await expect
     .poll(() =>
       app
-        .getByRole("heading", { name: "What are you training for?" })
+        .getByRole("heading", { name: "Tell us where training begins." })
         .evaluate((node) => node.getBoundingClientRect().top),
     )
     .toBeGreaterThanOrEqual(0);
@@ -129,14 +117,14 @@ test("website launches the real app inside a phone without navigating away", asy
     .getByRole("link", { name: "Try App in web instead", exact: true })
     .click();
   await expect(
-    app.getByRole("heading", { name: "What are you training for?" }),
+    app.getByRole("heading", { name: "Tell us where training begins." }),
   ).toBeVisible();
   await page
     .getByRole("link", { name: "Open app full-screen", exact: true })
     .click();
   await expect(page).toHaveURL(/\/Ironlog\/app\/$/);
   await expect(
-    page.getByRole("heading", { name: "What are you training for?" }),
+    page.getByRole("heading", { name: "Tell us where training begins." }),
   ).toBeVisible();
 });
 
@@ -161,7 +149,9 @@ test("phone preview fits a narrow mobile page and can open full-screen", async (
     const app = page.frameLocator(
       'iframe[title="IronLog interactive app preview"]',
     );
-    await expect(app.getByLabel("Your name")).toBeVisible();
+    await expect(
+      app.getByRole("heading", { name: "Train with evidence. Progress like a game." }),
+    ).toBeVisible();
     expect(
       await app
         .locator("html")
@@ -172,7 +162,9 @@ test("phone preview fits a narrow mobile page and can open full-screen", async (
   await page
     .getByRole("link", { name: "Open app full-screen", exact: true })
     .click();
-  await expect(page.getByLabel("Your name")).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Train with evidence. Progress like a game." }),
+  ).toBeVisible();
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= innerWidth,

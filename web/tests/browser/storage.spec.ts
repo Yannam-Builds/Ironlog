@@ -25,6 +25,6 @@ test("browser storage starts and persists independently", async ({ page }) => {
   console.log({ probe, errors, body: await page.locator("body").innerText() });
   expect(probe).toBe("available");
   await expect(
-    page.getByRole("heading", { name: "Make it your own." }),
+    page.getByRole("heading", { name: "Train with evidence. Progress like a game." }),
   ).toBeVisible();
 });

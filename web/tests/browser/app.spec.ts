@@ -2,17 +2,53 @@ import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 async function onboard(page: Page) {
   await page.goto("app/");
+  await page
+    .getByRole("button", { name: "Build my training system", exact: true })
+    .click();
+  await page
+    .getByRole("heading", { name: "What should your ledger call you?" })
+    .waitFor();
   await page.getByLabel("Your name").fill("QA Athlete");
-  await page.getByRole("button", { name: "Continue", exact: true }).click();
   await page
-    .getByRole("heading", { name: "What are you training for?" })
-    .waitFor();
-  await page.getByRole("button", { name: "Continue", exact: true }).click();
+    .getByRole("button", { name: "Continue as QA Athlete", exact: true })
+    .click();
   await page
-    .getByRole("heading", { name: "Your training, your pace." })
+    .getByRole("heading", { name: "Tell us where training begins." })
     .waitFor();
-  await page.getByRole("button", { name: "Continue", exact: true }).click();
-  await page.getByRole("heading", { name: "A starting point." }).waitFor();
+  await page
+    .getByRole("button", { name: "Use this baseline", exact: true })
+    .click();
+  await page
+    .getByRole("heading", { name: "How should progression begin?" })
+    .waitFor();
+  await page
+    .getByRole("button", { name: "Use this progression", exact: true })
+    .click();
+  await page
+    .getByRole("heading", { name: "Choose days you can actually protect." })
+    .waitFor();
+  await page
+    .getByRole("button", { name: "Save weekly rhythm", exact: true })
+    .click();
+  await page
+    .getByRole("heading", { name: "What should the plan optimize first?" })
+    .waitFor();
+  await page.getByRole("button", { name: "Use this goal", exact: true }).click();
+  await page.getByRole("heading", { name: "Local by default." }).waitFor();
+  await page
+    .getByRole("button", { name: "Continue with local coaching", exact: true })
+    .click();
+  await page.getByRole("heading", { name: "Browser capabilities" }).waitFor();
+  await page
+    .getByRole("button", { name: "Continue without integrations", exact: true })
+    .click();
+  await page
+    .getByRole("heading", { name: "Your provisional profile is ready." })
+    .waitFor();
+  await page
+    .getByRole("button", { name: "Save my baseline", exact: true })
+    .click();
+  await page.getByRole("heading", { name: /Start with structure/i }).waitFor();
   await page
     .getByRole("button", { name: "Start training", exact: true })
     .click();
@@ -53,17 +89,17 @@ test("landing native themes and first launch", async ({ page }, testInfo) => {
   await expect(
     page
       .frameLocator('iframe[title="IronLog interactive app preview"]')
-      .getByRole("heading", { name: "Make it your own." }),
+      .getByRole("heading", { name: "Train with evidence. Progress like a game." }),
   ).toBeVisible();
   await page
     .getByRole("link", { name: "Open app full-screen", exact: true })
     .click();
   await expect(
-    page.getByRole("heading", { name: "Make it your own." }),
+    page.getByRole("heading", { name: "Train with evidence. Progress like a game." }),
   ).toBeVisible();
   // Lighter editorial typography must not leak into the native-style app.
   await expect(
-    page.getByRole("heading", { name: "Make it your own." }),
+    page.getByRole("heading", { name: "Train with evidence. Progress like a game." }),
   ).toHaveCSS("font-weight", "800");
   await expect(page.locator("html")).toHaveAttribute(
     "data-theme",
@@ -224,18 +260,21 @@ test("plan cards reorder by pointer and the top plan becomes active", async ({ p
   await expect(page.locator("[data-plan-id]").first()).toContainText("Plan Two");
   await expect(page.locator("[data-plan-id]").first()).toContainText("Active program");
   await page.getByRole("link", { name: "Home", exact: true }).click();
-  const shine = await page.locator(".today-card").evaluate((card) => {
-    const style = getComputedStyle(card, "::before");
+  const shine = await page.locator(".today-card .card-shine-layer").evaluate((svg) => {
+    const gradient = svg.querySelector("linearGradient");
+    const animations = gradient?.querySelectorAll("animate") ?? [];
     return {
-      name: style.animationName,
-      duration: style.animationDuration,
-      direction: style.animationDirection,
+      preserveAspectRatio: svg.getAttribute("preserveAspectRatio"),
+      x1: gradient?.getAttribute("x1"),
+      x2: gradient?.getAttribute("x2"),
+      durations: [...animations].map((animation) => animation.getAttribute("dur")),
     };
   });
   expect(shine).toEqual({
-    name: "ironlog-card-shine",
-    duration: "5s",
-    direction: "alternate",
+    preserveAspectRatio: "none",
+    x1: "-600",
+    x2: "300",
+    durations: ["10s", "10s"],
   });
 });
 test("primary tabs swipe one page at a time in both directions", async ({ page }) => {
@@ -304,6 +343,8 @@ test("every route, themes, narrow and large-text layouts", async ({
     ).toBe(true);
   }
   await page.goto("app/#/settings");
+  await page.getByRole("button", { name: /^Appearance/ }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Appearance", exact: true })).toBeVisible();
   for (const theme of [
     "Obsidian Silver",
     "Deep Forest",

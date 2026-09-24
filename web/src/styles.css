@@ -1435,6 +1435,7 @@ body.plan-reordering {
 .onboard-brand {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: calc(12px * var(--ui-spacing, 1));
   margin-bottom: calc(25px * var(--ui-spacing, 1));
   font-weight: var(--type-w800, 800);
@@ -1445,6 +1446,8 @@ body.plan-reordering {
 }
 .onboard-brand small {
   margin-left: auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
   color: var(--subtext);
 }
 .onboarding > .fox {

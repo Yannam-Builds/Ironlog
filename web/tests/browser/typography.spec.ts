@@ -1,6 +1,7 @@
 import { test, expect, type FrameLocator } from "@playwright/test";
 import registry from "../../src/generated/fonts.json" with { type: "json" };
 import { startTestOrigin } from "../helpers/test-origin";
+import { completeOnboarding, openOnboardingProfile } from "./onboarding";
 
 async function loadSelected(app: FrameLocator, family: string) {
   return app.locator("html").evaluate(async (_node, id) => {
@@ -29,6 +30,7 @@ test("all 21 families and presets apply to landing, embedded app and inputs with
   const app = page.frameLocator(
     'iframe[title="IronLog interactive app preview"]',
   );
+  await openOnboardingProfile(app);
   await expect(app.getByLabel("Your name")).toBeVisible();
   for (const font of registry.fonts) {
     await page
@@ -52,7 +54,7 @@ test("all 21 families and presets apply to landing, embedded app and inputs with
         preset === "light" ? 450 : preset === "regular" ? 600 : 750,
       );
       await expect(
-        app.getByRole("heading", { name: "Make it your own." }),
+        app.getByRole("heading", { name: "What should your ledger call you?" }),
       ).toHaveCSS("font-weight", String(expected));
       await expect(page.locator(".hero h1")).toHaveCSS(
         "font-weight",
@@ -112,7 +114,7 @@ test("all 21 families and presets apply to landing, embedded app and inputs with
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("data-font", "lexend");
   await expect(
-    page.getByRole("heading", { name: "Make it your own." }),
+    page.getByRole("heading", { name: "What should your ledger call you?" }),
   ).toHaveCSS("font-weight", "450");
 });
 
@@ -160,13 +162,9 @@ test("Settings changes sync back to the website and survive workout navigation",
   const app = page.frameLocator(
     'iframe[title="IronLog interactive app preview"]',
   );
-  await app.getByLabel("Your name").fill("Typography QA");
-  for (let step = 0; step < 3; step++)
-    await app.getByRole("button", { name: "Continue", exact: true }).click();
-  await app
-    .getByRole("button", { name: "Start training", exact: true })
-    .click();
+  await completeOnboarding(app, "Typography QA");
   await app.getByRole("link", { name: "Settings", exact: true }).click();
+  await app.getByRole("button", { name: /^Appearance/ }).click();
   await app
     .getByRole("combobox", { name: "Font family", exact: true })
     .selectOption("manrope");
@@ -230,13 +228,9 @@ test("spacing slider changes layout, persists, resets and retains touch targets 
 }, info) => {
   await page.setViewportSize({ width: 320, height: 800 });
   await page.goto("app/");
-  await page.getByLabel("Your name").fill("Spacing QA");
-  for (let step = 0; step < 3; step++)
-    await page.getByRole("button", { name: "Continue", exact: true }).click();
-  await page
-    .getByRole("button", { name: "Start training", exact: true })
-    .click();
+  await completeOnboarding(page, "Spacing QA");
   await page.getByRole("link", { name: "Settings", exact: true }).click();
+  await page.getByRole("button", { name: /^Appearance/ }).click();
   const slider = page.getByRole("slider", { name: "UI spacing", exact: true });
   for (const value of [85, 125]) {
     await slider.fill(String(value));
@@ -250,7 +244,7 @@ test("spacing slider changes layout, persists, resets and retains touch targets 
     expect(padding).toBeCloseTo((14 * value) / 100, 1);
     await expect(page.locator("body")).toHaveCSS("font-size", "16px");
     expect(
-      (await page.getByLabel("Name", { exact: true }).boundingBox())!.height,
+      (await page.getByRole("combobox", { name: "Font family", exact: true }).boundingBox())!.height,
     ).toBeGreaterThanOrEqual(48);
     expect(
       (await page
@@ -280,6 +274,7 @@ test("spacing slider changes layout, persists, resets and retains touch targets 
       path: `output/playwright/${info.project.name}-spacing-${value}.png`,
     });
     await page.reload();
+    await page.getByRole("button", { name: /^Appearance/ }).click();
     await expect(slider).toHaveValue(String(value));
   }
   await page
@@ -295,7 +290,9 @@ test("font choice and unused bundled fonts work with the origin stopped", async 
   const origin = await startTestOrigin();
   try {
     await page.goto(origin.appUrl);
-    await expect(page.getByLabel("Your name")).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Train with evidence. Progress like a game." }),
+    ).toBeVisible();
     await page.evaluate(async () => {
       await navigator.serviceWorker.ready;
     });
