@@ -73,6 +73,7 @@ it("saves physical quantities in a gym and restores unlimited semantics when sel
     expect(snapshot.gyms.filter(g => g.id === "old")).toHaveLength(1);
     expect(snapshot.profile.activeGymId).toBe("old");
   });
+  await screen.findByText("Gym setup saved", { exact: true });
 });
 
 
