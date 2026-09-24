@@ -1094,6 +1094,11 @@ body.plan-reordering {
 .settings-destinations strong { font-size: 1.05rem; }
 .settings-destinations p { margin: 4px 0; font-size: 0.82rem; line-height: 1.45; }
 .settings-destinations b { color: var(--link); font-size: 0.82rem; }
+.bottom-nav.liquid-glass {
+  background: color-mix(in srgb, var(--tabBg) 78%, transparent);
+  backdrop-filter: blur(18px) saturate(1.25);
+  -webkit-backdrop-filter: blur(18px) saturate(1.25);
+}
 .today-card {
   position: relative;
   isolation: isolate;

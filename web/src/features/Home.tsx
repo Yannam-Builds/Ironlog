@@ -175,7 +175,7 @@ export function Home() {
       </section>
 
       {(plan || active) && (
-        <section className="card today-card native-card animated-card-shine">
+        <section className={`card today-card native-card${data.profile.cardShineEnabled ? " animated-card-shine" : ""}`}>
           <div className="row">
             <span className="eyebrow">Today’s workout</span>
             <Icon name="log" />

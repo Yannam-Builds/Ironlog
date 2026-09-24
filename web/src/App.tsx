@@ -412,7 +412,7 @@ export function App() {
               </div>
             </main>
           </div>
-          <nav className="bottom-nav" aria-label="Main">
+          <nav className={`bottom-nav${data.profile.liquidGlassEnabled ? " liquid-glass" : ""}`} aria-label="Main">
             <span
               className="bottom-nav-selection"
               aria-hidden="true"

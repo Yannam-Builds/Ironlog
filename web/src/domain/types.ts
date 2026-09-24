@@ -161,6 +161,8 @@ export interface Profile {
   /** Total physical plates, shared between both sides. Missing means unlimited. */
   plateInventory?: { weightKg: number; quantity: number }[];
   keepAwake: boolean;
+  cardShineEnabled: boolean;
+  liquidGlassEnabled: boolean;
   planExerciseNotesVisible: boolean;
   exerciseNextNotes?: Record<string, string>;
   badgeUnlocks: Record<string, number>;
@@ -251,6 +253,8 @@ export const defaultProfile: Profile = {
   barKg: 20,
   platesKg: [20, 15, 10, 5, 2.5, 1.25],
   keepAwake: true,
+  cardShineEnabled: true,
+  liquidGlassEnabled: true,
   planExerciseNotesVisible: true,
   exerciseNextNotes: {},
   badgeUnlocks: {},

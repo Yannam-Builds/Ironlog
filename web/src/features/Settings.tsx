@@ -190,6 +190,24 @@ export function Settings() {
         <h2>Layout spacing</h2>
         <SpacingPicker />
       </section>
+      <section id="visual-effects" hidden={destination !== "appearance"}>
+        <h2>Optional effects</h2>
+        <Switch
+          checked={p.cardShineEnabled}
+          disabled={busy}
+          onChange={(checked) => run(() => saveProfile({ cardShineEnabled: checked }))}
+          label="Animated card shine"
+        />
+        <p className="muted">Controls the decorative light sweep on featured cards.</p>
+        <Switch
+          checked={p.liquidGlassEnabled}
+          disabled={busy}
+          onChange={(checked) => run(() => saveProfile({ liquidGlassEnabled: checked }))}
+          label="Liquid glass navigation"
+        />
+        <p className="muted">Controls the translucent navigation material independently from card shine.</p>
+        <p className="muted">Motion also follows your browser or operating system’s reduced-motion preference.</p>
+      </section>
       <section id="training-tools" hidden={destination !== "training"}>
         <h2>Training tools</h2>
         <button className="list-row" onClick={() => {

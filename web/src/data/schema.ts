@@ -166,6 +166,8 @@ export const profileSchema = z.object({
   activeGymId: z.string().optional(),
   plateInventory: z.array(z.object({ weightKg: z.number().finite().positive(), quantity: z.number().int().nonnegative() })).optional(),
   keepAwake: z.boolean(),
+  cardShineEnabled: z.boolean().default(true),
+  liquidGlassEnabled: z.boolean().default(true),
   planExerciseNotesVisible: z.boolean().default(true),
   exerciseNextNotes: z.record(z.string().regex(/^exercise_next_note:.+$/), z.string().max(4000)).optional(),
   badgeUnlocks: z.record(z.string(), number),
