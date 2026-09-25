@@ -1045,7 +1045,7 @@ body.plan-reordering {
 .frequency-bars i.active { background: var(--accent); }
 .frequency-labels { margin-top: 8px; color: var(--subtext); font-size: 0.62rem; text-align: center; }
 .settings-title { margin-bottom: 12px; }
-.settings-title h1 { font-size: clamp(2.1rem, 10vw, 3.1rem); }
+.settings-title h1 { font-size: clamp(2.1rem, 10vw, 3.1rem); overflow-wrap: anywhere; }
 .settings-title p { margin: 0; font-size: 1rem; }
 .local-record-card {
   display: flex;
