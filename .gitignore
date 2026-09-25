@@ -28,6 +28,8 @@ Thumbs.db
 .agents/
 .impeccable/
 artifacts/
+# Local CI artifact downloads and rendered previews
+output/
 PROJECT.md
 # Local Android diagnostics can contain device and account metadata
 bugreport-*.zip

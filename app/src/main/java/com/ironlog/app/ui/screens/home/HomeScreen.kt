@@ -114,6 +114,8 @@ import com.ironlog.app.data.repository.SettingsRepository
 import com.ironlog.app.data.repository.ProgressionPolicySnapshot
 import com.ironlog.app.data.repository.ProgressionPolicyStore
 import com.ironlog.app.domain.gamification.DailyProofStatus
+import com.ironlog.app.domain.gamification.dailyWorkoutStreakDays
+import com.ironlog.app.domain.gamification.parseHistoryLocalDate
 import com.ironlog.app.domain.gamification.IronGrade
 import com.ironlog.app.domain.badges.BadgeDefinitions
 import com.ironlog.app.domain.intelligence.ManualRecoveryInput
@@ -689,10 +691,8 @@ private fun streakContextSubtitle(streak: Int, lastWorkoutDate: String?): String
     if (streak >= 14) return "🔥 $streak day streak — unstoppable!"
     if (streak >= 7)  return "🔥 $streak day streak — keep it going!"
     if (streak >= 3)  return "💪 $streak days strong — don't stop now!"
-    val iso = lastWorkoutDate?.substringBefore('T') ?: return timeGreeting()
-    val days = runCatching {
-        ChronoUnit.DAYS.between(LocalDate.parse(iso), LocalDate.now()).toInt()
-    }.getOrDefault(-1)
+    val lastDate = lastWorkoutDate?.let { parseHistoryLocalDate(it) } ?: return timeGreeting()
+    val days = ChronoUnit.DAYS.between(lastDate, LocalDate.now()).toInt()
     return when (days) {
         0    -> "You trained today — amazing!"
         1    -> "Pick up where you left off"
@@ -1335,36 +1335,26 @@ private fun homeScreenAgeDays(iso: String): Long = runCatching {
     ChronoUnit.DAYS.between(date, LocalDate.now())
 }.getOrDefault(Long.MAX_VALUE)
 
-fun getStreak(history: List<HistoryEntry>): Int {
-    if (history.isEmpty()) return 0
-    val days = history.map { it.date.substringBefore('T') }.toSet().sortedDescending()
-    val today = LocalDate.now().toString()
-    val yesterday = LocalDate.now().minusDays(1).toString()
-    if (days.first() != today && days.first() != yesterday) return 0
-    var streak = 0
-    var prev = LocalDate.parse(days.first())
-    for (d in days) {
-        val cur = LocalDate.parse(d)
-        val diff = java.time.Duration.between(cur.atStartOfDay(), prev.atStartOfDay()).toDays()
-        if (diff <= 1) { streak++; prev = cur } else break
-    }
-    return streak
-}
+fun getStreak(
+    history: List<HistoryEntry>,
+    nowEpochMs: Long = System.currentTimeMillis(),
+    zoneId: ZoneId = ZoneId.systemDefault(),
+): Int = dailyWorkoutStreakDays(history, nowEpochMs, zoneId)
 
-fun getWeekKey(dateString: String): String {
-    val date = LocalDate.parse(dateString.substringBefore('T'))
+fun getWeekKey(dateString: String, zoneId: ZoneId = ZoneId.systemDefault()): String {
+    val date = parseHistoryLocalDate(dateString, zoneId) ?: return ""
     val fields = WeekFields.ISO
     return "${date.get(fields.weekBasedYear())}-W${date.get(fields.weekOfWeekBasedYear()).toString().padStart(2, '0')}"
 }
 
-fun getGoalStreak(history: List<HistoryEntry>, weeklyGoalDays: Int): Int {
+fun getGoalStreak(history: List<HistoryEntry>, weeklyGoalDays: Int, zoneId: ZoneId = ZoneId.systemDefault()): Int {
     val target = max(1, min(7, weeklyGoalDays))
     if (history.isEmpty()) return 0
     val byWeek = linkedMapOf<String, MutableSet<String>>()
     history.forEach { session ->
-        val weekKey = getWeekKey(session.date)
-        val dayKey = session.date.substringBefore('T')
-        byWeek.getOrPut(weekKey) { linkedSetOf() }.add(dayKey)
+        val day = parseHistoryLocalDate(session.date, zoneId) ?: return@forEach
+        val weekKey = getWeekKey(session.date, zoneId)
+        byWeek.getOrPut(weekKey) { linkedSetOf() }.add(day.toString())
     }
     var streak = 0
     byWeek.keys.sortedDescending().forEach { week ->
@@ -1374,14 +1364,16 @@ fun getGoalStreak(history: List<HistoryEntry>, weeklyGoalDays: Int): Int {
     return streak
 }
 
-fun countSessionsThisWeek(history: List<HistoryEntry>): Int {
-    val now = LocalDate.now()
+fun countSessionsThisWeek(
+    history: List<HistoryEntry>,
+    now: LocalDate = LocalDate.now(),
+    zoneId: ZoneId = ZoneId.systemDefault(),
+): Int {
     val fields = WeekFields.ISO
     val y = now.get(fields.weekBasedYear())
     val w = now.get(fields.weekOfWeekBasedYear())
-    return history.mapNotNull {
-        runCatching { LocalDate.parse(it.date.substringBefore('T')) }.getOrNull()
-    }.count { d -> d.get(fields.weekBasedYear()) == y && d.get(fields.weekOfWeekBasedYear()) == w }
+    return history.mapNotNull { parseHistoryLocalDate(it.date, zoneId) }
+        .count { d -> d.get(fields.weekBasedYear()) == y && d.get(fields.weekOfWeekBasedYear()) == w }
 }
 
 @Composable
