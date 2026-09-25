@@ -164,33 +164,32 @@ fun StatsScreen(
     )
     var chartRange by remember { mutableStateOf("14D") }
     val rangedChartPoints = remember(state.history, chartRange) {
-        val datestamps = state.history.map { it.date.substringBefore('T') }
-        val counts = datestamps.groupingBy { it }.eachCount()
+        val counts = countSessionsByLocalDate(state.history.map { it.date })
         val formatter = java.time.format.DateTimeFormatter.ofPattern("dd/MM")
         when (chartRange) {
             "30D" -> {
                 val labelIndices = setOf(0, 9, 19, 29)
                 (0 until 30).map { i ->
                     val day = java.time.LocalDate.now().minusDays((29 - i).toLong())
-                    com.ironlog.app.ui.model.ChartPoint(value = counts[day.toString()] ?: 0, label = if (i in labelIndices) day.format(formatter) else "")
+                    com.ironlog.app.ui.model.ChartPoint(value = counts[day] ?: 0, label = if (i in labelIndices) day.format(formatter) else "")
                 }
             }
             "90D" -> {
                 val labelIndices = setOf(0, 29, 59, 89)
                 (0 until 90).map { i ->
                     val day = java.time.LocalDate.now().minusDays((89 - i).toLong())
-                    com.ironlog.app.ui.model.ChartPoint(value = counts[day.toString()] ?: 0, label = if (i in labelIndices) day.format(formatter) else "")
+                    com.ironlog.app.ui.model.ChartPoint(value = counts[day] ?: 0, label = if (i in labelIndices) day.format(formatter) else "")
                 }
             }
             "All" -> {
-                if (datestamps.isEmpty()) emptyList()
+                if (counts.isEmpty()) emptyList()
                 else {
-                    val earliest = datestamps.minOrNull()?.let { java.time.LocalDate.parse(it) } ?: java.time.LocalDate.now()
+                    val earliest = counts.keys.minOrNull() ?: java.time.LocalDate.now()
                     val totalDays = java.time.temporal.ChronoUnit.DAYS.between(earliest, java.time.LocalDate.now()).toInt() + 1
                     val step = maxOf(1, totalDays / 30)
                     (0 until totalDays step step).map { i ->
                         val day = earliest.plusDays(i.toLong())
-                        val windowCount = (0 until step).sumOf { offset -> counts[earliest.plusDays((i + offset).toLong()).toString()] ?: 0 }
+                        val windowCount = (0 until step).sumOf { offset -> counts[earliest.plusDays((i + offset).toLong())] ?: 0 }
                         com.ironlog.app.ui.model.ChartPoint(value = windowCount, label = if (i == 0 || i >= totalDays - step) day.format(formatter) else "")
                     }
                 }

@@ -1,49 +1,45 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="520" viewBox="0 0 1200 520" role="img" aria-labelledby="title desc">
-  <title id="title">IronLog — Train. Recover. Prove it.</title>
-  <desc id="desc">An animated training instrument moves a forge-orange signal through a barbell surrounding the IronLog logo, a recovery ring, and a completed ledger mark.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="480" viewBox="0 0 1200 480" role="img" aria-labelledby="hero-title hero-desc">
+  <title id="hero-title">IronLog — Train. Recover. Prove it.</title>
+  <desc id="hero-desc">A workout set becomes recovery context and then an earned ledger entry. A signal moves through the three stages.</desc>
   <style>
-    :root { --bg:#050505; --surface:#0d0d0d; --line:#2a2a2a; --text:#fff; --muted:#969696; --forge:#ff4500; --ready:#00c170; --gold:#ffd700; }
-    @media (prefers-color-scheme: light) { :root { --bg:#f6f7f8; --surface:#fff; --line:#d8dce1; --text:#111; --muted:#5b616a; --forge:#d93600; --ready:#087f4d; --gold:#9a6a00; } }
-    .ring { transform-origin: 930px 260px; animation: turn 18s linear infinite; }
-    .counter { transform-origin: 930px 260px; animation: turn-back 12s linear infinite; }
-    .trace { stroke-dasharray: 12 14; animation: trace 3.2s linear infinite; }
-    .rep { transform-origin: 930px 260px; animation: rep 2.6s ease-in-out infinite; }
-    .ledger { stroke-dasharray: 90; stroke-dashoffset: 90; animation: ledger 2.6s ease-out infinite; }
-    @keyframes turn { to { transform: rotate(360deg); } }
-    @keyframes turn-back { to { transform: rotate(-360deg); } }
-    @keyframes trace { to { stroke-dashoffset: -52; } }
-    @keyframes rep { 0%,18%,100% { transform:translateY(18px); } 46%,68% { transform:translateY(-18px); } }
-    @keyframes ledger { 0%,54% { stroke-dashoffset:90; } 78%,100% { stroke-dashoffset:0; } }
-    @media (prefers-reduced-motion: reduce) { * { animation:none !important; } .ledger { stroke-dashoffset:0; } }
+    :root { --bg:#050505; --panel:#101010; --line:#303030; --text:#fff; --muted:#aaa; --forge:#ff4500; --ready:#00c170; --earned:#ffd700; }
+    @media (prefers-color-scheme: light) { :root { --bg:#f6f7f8; --panel:#fff; --line:#c9cdd2; --text:#111; --muted:#505761; --forge:#d93600; --ready:#087f4d; --earned:#8a6100; } }
+    .signal { animation: travel 8s ease-in-out infinite; }
+    .path { stroke-dasharray:5 9; animation: current 2.8s linear infinite; }
+    .earned { animation: arrive 8s ease-in-out infinite; }
+    @keyframes travel { 0%,10% { transform:translateY(0); } 38%,48% { transform:translateY(104px); } 75%,90% { transform:translateY(208px); } 100% { transform:translateY(0); } }
+    @keyframes current { to { stroke-dashoffset:-28; } }
+    @keyframes arrive { 0%,68% { opacity:.36; } 77%,94% { opacity:1; } 100% { opacity:.36; } }
+    @media (prefers-reduced-motion: reduce) { .signal,.path,.earned { animation:none; } .signal { transform:translateY(208px); } .earned { opacity:1; } }
   </style>
-  <rect width="1200" height="520" rx="28" fill="var(--bg)"/>
-  <path d="M54 52H1146M54 468H1146" stroke="var(--line)"/>
-  <path d="M706 52V468" stroke="var(--line)"/>
-  <text x="72" y="112" fill="var(--forge)" font-family="Arial,sans-serif" font-size="15" font-weight="700" letter-spacing="4">LOCAL-FIRST ANDROID TRAINING</text>
-  <text x="68" y="220" fill="var(--text)" font-family="Arial,sans-serif" font-size="82" font-weight="900" letter-spacing="-4">IRONLOG</text>
-  <text x="72" y="280" fill="var(--text)" font-family="Arial,sans-serif" font-size="31" font-weight="700">Train. Recover. Prove it.</text>
-  <text x="72" y="328" fill="var(--muted)" font-family="Arial,sans-serif" font-size="18">Fast logging, honest recovery, durable records.</text>
-  <g transform="translate(72 376)" font-family="Arial,sans-serif" font-size="13" font-weight="700" letter-spacing="1.5">
-    <rect width="126" height="38" rx="19" fill="var(--surface)" stroke="var(--line)"/><text x="63" y="25" fill="var(--text)" text-anchor="middle">LOG</text>
-    <path d="M142 19H174" stroke="var(--forge)" stroke-width="2" class="trace"/>
-    <rect x="190" width="142" height="38" rx="19" fill="var(--surface)" stroke="var(--line)"/><text x="261" y="25" fill="var(--text)" text-anchor="middle">RECOVER</text>
-    <path d="M348 19H380" stroke="var(--ready)" stroke-width="2" class="trace"/>
-    <rect x="396" width="146" height="38" rx="19" fill="var(--surface)" stroke="var(--line)"/><text x="469" y="25" fill="var(--text)" text-anchor="middle">PROGRESS</text>
-  </g>
-  <g>
-    <circle cx="930" cy="260" r="166" fill="var(--surface)" stroke="var(--line)"/>
-    <circle cx="930" cy="260" r="141" fill="none" stroke="var(--line)" stroke-width="2" stroke-dasharray="3 13" class="ring"/>
-    <circle cx="930" cy="260" r="112" fill="none" stroke="var(--ready)" stroke-width="3" stroke-dasharray="176 528" class="counter"/>
-    <path d="M794 260H1066" stroke="var(--text)" stroke-width="9" stroke-linecap="round" class="rep"/>
-    <g class="rep" fill="var(--forge)">
-      <rect x="816" y="222" width="16" height="76" rx="5"/><rect x="838" y="234" width="12" height="52" rx="4"/>
-      <rect x="1028" y="222" width="16" height="76" rx="5"/><rect x="1010" y="234" width="12" height="52" rx="4"/>
-    </g>
-    <circle cx="930" cy="260" r="68" fill="var(--bg)" stroke="var(--line)"/>
-    <g transform="translate(864 195) scale(.10526)">
-      <path fill="var(--text)" fill-rule="evenodd" d="M568.5 206L581 205.5L593 210.5L598.5 216L603.5 226L603.5 299L595.5 316L576 330.5L388 450.5L381.5 457L376.5 469L376.5 776L379.5 784L387 792.5L440 825.5L447.5 835L451.5 847L450.5 926L442 937.5L435 940.5L427 940.5L286 853.5L274.5 842L268.5 828L267.5 418L274.5 398L284 387.5L388 321.5L560 208.5L568.5 206ZM675.5 206L687 205.5L701 210.5L970 385.5L978.5 394L984.5 405L986.5 413L986.5 824L981 829.5L974 830.5L959 822.5L886 777.5L879.5 768L879.5 469L876.5 460L870 451.5L678 328.5L658.5 313L653.5 304L651.5 295L651.5 232L656.5 218L664 210.5L675.5 206ZM575.5 387L585 386.5L592 389.5L599.5 397L602.5 404L602.5 1012L598.5 1021L591 1028.5L584 1031.5L572 1031.5L567 1029.5L501 985.5L492.5 976L487.5 964L487.5 462L494.5 445L502 436.5L568 389.5L575.5 387ZM670.5 387L680 386.5L687 389.5L753 435.5L762.5 447L766.5 458L766.5 835L768.5 840L776 845.5L784 844.5L855 798.5L861 795.5L870 795.5L953 844.5L957.5 850L957.5 858L953 863.5L697 1028.5L685 1032.5L674 1032.5L663 1027.5L655.5 1019L651.5 1007L651.5 409L656.5 396L663 389.5L670.5 387Z"/>
-    </g>
-    <path d="M1080 387l14 14 29-35" fill="none" stroke="var(--gold)" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" class="ledger"/>
-    <text x="930" y="454" fill="var(--muted)" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="700" letter-spacing="3">THE WORK IS THE RECORD</text>
+  <rect width="1200" height="480" rx="24" fill="var(--bg)"/>
+  <path d="M48 48H1152M48 432H1152" stroke="var(--line)"/>
+  <text x="64" y="99" fill="var(--forge)" font-family="Arial,sans-serif" font-size="15" font-weight="700" letter-spacing="3">THE WORK IS THE RECORD</text>
+  <text x="58" y="213" fill="var(--text)" font-family="Arial,sans-serif" font-size="86" font-weight="900" letter-spacing="-5">IRONLOG</text>
+  <text x="64" y="270" fill="var(--text)" font-family="Arial,sans-serif" font-size="29" font-weight="700">Train. Recover. Prove it.</text>
+  <text x="64" y="323" fill="var(--muted)" font-family="Arial,sans-serif" font-size="18">Log the set. Read the recovery.</text>
+  <text x="64" y="351" fill="var(--muted)" font-family="Arial,sans-serif" font-size="18">Carry the evidence into the next session.</text>
+  <rect x="64" y="381" width="208" height="31" rx="15" fill="var(--panel)" stroke="var(--line)"/>
+  <circle cx="84" cy="396.5" r="5" fill="var(--ready)"/>
+  <text x="99" y="402" fill="var(--text)" font-family="Arial,sans-serif" font-size="13" font-weight="700" letter-spacing="1">LOCAL-FIRST BY DESIGN</text>
+  <rect x="648" y="70" width="504" height="340" rx="18" fill="var(--panel)" stroke="var(--line)"/>
+  <text x="681" y="109" fill="var(--muted)" font-family="Arial,sans-serif" font-size="12" font-weight="700" letter-spacing="2.5">A SINGLE TRAINING LOOP</text>
+  <path d="M699 127H1117" stroke="var(--line)"/>
+  <path d="M710 164V372" stroke="var(--line)" stroke-width="2"/>
+  <path d="M710 164V372" stroke="var(--forge)" stroke-width="2" class="path"/>
+  <circle cx="710" cy="164" r="7" fill="var(--forge)" stroke="var(--panel)" stroke-width="3" class="signal"/>
+  <g font-family="Arial,sans-serif">
+    <circle cx="710" cy="164" r="19" fill="var(--panel)" stroke="var(--forge)" stroke-width="2"/>
+    <path d="M701 164h18m-14-8v16m10-16v16" stroke="var(--forge)" stroke-width="2.5" stroke-linecap="round"/>
+    <text x="754" y="159" fill="var(--text)" font-size="19" font-weight="800">LOG THE SET</text>
+    <text x="754" y="181" fill="var(--muted)" font-size="14">Load · reps · effort</text>
+    <circle cx="710" cy="268" r="19" fill="var(--panel)" stroke="var(--ready)" stroke-width="2"/>
+    <path d="M700 271a11 11 0 1 1 10 8" fill="none" stroke="var(--ready)" stroke-width="2.5" stroke-linecap="round"/>
+    <text x="754" y="263" fill="var(--text)" font-size="19" font-weight="800">READ RECOVERY</text>
+    <text x="754" y="285" fill="var(--muted)" font-size="14">History · check-in · readiness</text>
+    <circle cx="710" cy="372" r="19" fill="var(--panel)" stroke="var(--earned)" stroke-width="2" class="earned"/>
+    <path d="M700 372l7 7 13-15" fill="none" stroke="var(--earned)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="earned"/>
+    <text x="754" y="367" fill="var(--text)" font-size="19" font-weight="800">EARN THE RECORD</text>
+    <text x="754" y="389" fill="var(--muted)" font-size="14">Credited work · durable progress</text>
   </g>
 </svg>
