@@ -256,6 +256,9 @@ test("spacing slider changes layout, persists, resets and retains touch targets 
     await expect(nav.locator("svg")).toHaveCSS("width", "21px");
     await page.setViewportSize({ width: 320, height: 800 });
     await page.addStyleTag({ content: "html { font-size: 200%; }" });
+    await page.locator(".route-stage").evaluate(async (element) => {
+      await Promise.all(element.getAnimations().map((animation) => animation.finished));
+    });
     const overflow = await page.evaluate(() => Array.from(document.querySelectorAll("*"))
       .map((element) => {
         const rect = element.getBoundingClientRect();
