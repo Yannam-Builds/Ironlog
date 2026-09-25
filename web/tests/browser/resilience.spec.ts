@@ -1,5 +1,6 @@
 import { test as base, expect, type Page } from "@playwright/test";
 import { startTestOrigin } from "../helpers/test-origin";
+import { completeOnboarding } from "./onboarding";
 
 const test = base.extend<{
   testOrigin: Awaited<ReturnType<typeof startTestOrigin>>;
@@ -18,21 +19,7 @@ const test = base.extend<{
 // not a claim of physical iPhone or installed Home Screen verification.
 async function onboard(page: Page, appUrl = "app/") {
   await page.goto(appUrl);
-  await page.getByLabel("Your name").fill("Resilience QA Athlete");
-  for (const heading of [
-    "What are you training for?",
-    "Your training, your pace.",
-    "A starting point.",
-  ]) {
-    await page.getByRole("button", { name: "Continue", exact: true }).click();
-    await expect(page.getByRole("heading", { name: heading })).toBeVisible();
-  }
-  await page
-    .getByRole("button", { name: "Start training", exact: true })
-    .click();
-  await expect(
-    page.getByRole("heading", { name: "Resilience QA Athlete" }),
-  ).toBeVisible();
+  await completeOnboarding(page, "Resilience QA Athlete");
 }
 
 async function startBenchSession(page: Page) {

@@ -12,17 +12,32 @@ import {
 import { BodyMap } from "../ui/BodyMap";
 import { newId, saveCheckin, completeRecoveryCircuit } from "../data/store";
 import { isoWeekKey } from "../domain/dates";
-import { badgeDefinition } from "../domain/badges";
+import { badgeDefinitions } from "../domain/badges";
+import { gradeRequirements } from "../domain/engine";
+import { readinessTrend, recoverySourceLabel, recoverySuggestions, regionRecoveryEvidence, RECOVERY_WINDOWS } from "../domain/recovery-evidence";
+
+function RecoveryTrend({ points }: { points: ReturnType<typeof readinessTrend> }) {
+  const x = (index: number) => 8 + index * (284 / 13), y = (score: number) => 112 - score;
+  return <section className="card recovery-trend"><span className="eyebrow">Readiness trend — 14 days</span><svg viewBox="0 0 300 120" role="img" aria-label="Fourteen day readiness trend"><rect x="0" y="52" width="300" height="60" className="trend-low" /><rect x="0" y="27" width="300" height="25" className="trend-mid" /><rect x="0" y="12" width="300" height="15" className="trend-high" />{points.slice(1).map((point, index) => { const previous = points[index]; return previous.score !== undefined && point.score !== undefined ? <line key={point.at} x1={x(index)} y1={y(previous.score)} x2={x(index + 1)} y2={y(point.score)} /> : null; })}{points.map((point, index) => point.score === undefined ? null : <circle key={point.at} cx={x(index)} cy={y(point.score)} r="3" />)}</svg><div className="row"><small>{new Date(points[0].at).toLocaleDateString(undefined, { month: "2-digit", day: "2-digit" })}</small><small>{new Date(points.at(-1)!.at).toLocaleDateString(undefined, { month: "2-digit", day: "2-digit" })}</small></div></section>;
+}
 export function Recovery() {
   const { data, derived: d, run, busy } = useApp();
+  const latest = [...data.checkins].filter((row) => row.at <= Date.now()).sort((a, b) => b.at - a.at)[0];
   const [side, setSide] = useState<"front" | "back">("front");
+  const [range, setRange] = useState<(typeof RECOVERY_WINDOWS)[number][0]>("30D");
   const [selected, setSelected] = useState("");
   const [checkin, setCheckin] = useState(false);
-  const [sleep, setSleep] = useState(3);
-  const [energy, setEnergy] = useState(3);
-  const [soreness, setSoreness] = useState(3);
-  const [pain, setPain] = useState<string[]>([]);
+  const [sleep, setSleep] = useState(latest?.sleep ?? 3);
+  const [energy, setEnergy] = useState(latest?.energy ?? 3);
+  const [soreness, setSoreness] = useState(latest?.soreness ?? 3);
+  const [pain, setPain] = useState<string[]>(latest?.painRegions ?? []);
+  const [notes, setNotes] = useState(latest?.notes ?? "");
   const hasHistory = Object.keys(d.recovery).length > 0;
+  const rangeDays = RECOVERY_WINDOWS.find(([label]) => label === range)?.[1] ?? 30;
+  const evidence = selected ? regionRecoveryEvidence(data.workouts, selected, rangeDays) : [];
+  const suggestions = recoverySuggestions(d.recovery, pain);
+  const source = recoverySourceLabel(data.workouts, data.checkins, rangeDays);
+  const trend = readinessTrend(data);
   return (
     <>
       <h1>Recovery map</h1>
@@ -41,6 +56,7 @@ export function Recovery() {
         shape this estimate. An overall score doesn’t mean every muscle is
         recovered.
       </p>
+      <div className="segmented recovery-ranges">{RECOVERY_WINDOWS.map(([label]) => <button key={label} aria-pressed={range === label} onClick={() => setRange(label)}>{label}</button>)}</div>
       <div className="segmented">
         <button
           aria-pressed={side === "front"}
@@ -68,7 +84,7 @@ export function Recovery() {
           >
             <strong>{region}</strong>
             <span>
-              {d.recovery[region] === undefined ? (
+              {pain.includes(region) ? "Pain flagged" : d.recovery[region] === undefined ? (
                 "No mapped workload"
               ) : (
                 <>
@@ -96,16 +112,15 @@ export function Recovery() {
               : "No working-set history yet"}
           </h3>
           <p>
-            This is a modeled response to logged training, not a measurement of
-            tissue recovery. Missing sets or incorrect exercise metadata can
-            affect it.
+            Source: {source}
           </p>
-          <p>
-            Use your warmup performance and symptoms to guide the session. Don’t
-            train through pain because a score is high.
-          </p>
+          <p className={pain.includes(selected) ? "danger-text" : ""}>{pain.includes(selected) ? "Pain flagged: avoid painful movements; readiness is not medical clearance." : d.recovery[selected] === undefined ? "Not enough recorded workload to estimate this region." : d.recovery[selected] >= 90 ? "Train" : d.recovery[selected] >= 72 ? "Maintain" : "Back off"}</p>
+          <h3>Recent contributing exercises</h3>
+          {evidence.length ? evidence.slice(0, 5).map((row) => <p key={row.exerciseName}>{row.exerciseName} ({row.sessions} sessions · {row.workingSets} working sets)<br /><small>Last trained {new Date(row.latestAt).toLocaleDateString()}</small></p>) : <p>Not enough recent data.</p>}
         </Sheet>
       )}
+      <RecoveryTrend points={trend} />
+      <section className="card"><h2>Suggestions</h2>{suggestions.length ? suggestions.map((tip) => <p key={tip}>• {tip}</p>) : <p className="muted">Not enough recent data to generate suggestions.</p>}<Button variant="ghost" onClick={() => navigate("analytics")}>Open volume analytics</Button></section>
       {checkin && (
         <Sheet title="Recovery check-in" onClose={() => setCheckin(false)}>
           {[
@@ -114,15 +129,7 @@ export function Recovery() {
             ["Soreness", soreness, setSoreness],
           ].map(([label, value, set]) => (
             <Field key={String(label)} label={`${label}: ${value} / 5`}>
-              <input
-                type="range"
-                min="1"
-                max="5"
-                value={value as number}
-                onChange={(e) =>
-                  (set as (n: number) => void)(Number(e.target.value))
-                }
-              />
+              <div className="score-choices" role="radiogroup" aria-label={String(label)}>{[1, 2, 3, 4, 5].map((score) => <button type="button" role="radio" aria-label={`${label}: ${score}`} aria-checked={value === score} key={score} onClick={() => (set as (n: number) => void)(score)}>{score}</button>)}</div>
               <small>
                 {label === "Soreness"
                   ? "1 = none · 5 = very sore"
@@ -149,6 +156,7 @@ export function Recovery() {
               </label>
             ))}
           </fieldset>
+          <Field label="Notes (optional)"><textarea placeholder="How are you feeling?" value={notes} onChange={(event) => setNotes(event.target.value)} /></Field>
           <Button
             disabled={busy}
             onClick={() =>
@@ -161,6 +169,7 @@ export function Recovery() {
                     energy,
                     soreness,
                     painRegions: pain,
+                    notes: notes.trim(),
                   }),
                 "Check-in saved",
               ).then((ok) => {
@@ -178,7 +187,15 @@ export function Recovery() {
 export function Ledger() {
   const { data, derived: d, run, busy } = useApp();
   const [circuit, setCircuit] = useState(false);
-  const [checked, setChecked] = useState(false);
+  const [selectedCircuit, setSelectedCircuit] = useState<string>();
+  const [circuitStarted, setCircuitStarted] = useState(false);
+  const circuits = [
+    { id: "push_basic", name: "Push Circuit", category: "Push", exercises: ["20 Push-ups", "15 Tricep Dips (chair)", "10 Pike Push-ups"], instructions: "3 rounds, 60 sec rest between rounds." },
+    { id: "pull_basic", name: "Pull Circuit", category: "Pull", exercises: ["10 Pull-ups (or 15 Inverted Rows)", "12 Chin-ups", "20 Band Pull-Aparts"], instructions: "3 rounds, 90 sec rest between rounds." },
+    { id: "core_basic", name: "Core Circuit", category: "Core", exercises: ["30 Crunches", "20 Leg Raises", "60 sec Plank", "20 Russian Twists"], instructions: "3 rounds, 45 sec rest between rounds." },
+    { id: "fullbody_basic", name: "Full Body Circuit", category: "Full Body", exercises: ["20 Burpees", "20 Squats", "15 Push-ups", "10 Pull-ups", "30 sec Plank"], instructions: "4 rounds, 90 sec rest between rounds." },
+  ];
+  const activeCircuit = circuits.find((row) => row.id === selectedCircuit);
   const eligible =
     d.weeklyCount === data.profile.weeklyGoal - 1 &&
     !data.profile.recoveryWeeks.includes(isoWeekKey(Date.now()));
@@ -255,50 +272,17 @@ export function Ledger() {
       </details>
       <h2>Grade milestones</h2>
       <div className="grade-grid">
-        {[
-          "Graphite",
-          "Iron",
-          "Steel",
-          "Titanium",
-          "Obsidian",
-          "Iridium",
-          "Aether",
-          "Apex",
-        ].map((g) => (
+        {gradeRequirements.filter(([name]) => name !== "Uncalibrated").map(([g, sessions, weeks, days]) => (
           <div key={g}>
             <Grade grade={g} />
             <span>{g}</span>
+            <small>{d.creditedCount >= sessions && d.qualifyingWeeks >= weeks && d.tenureDays >= days ? "Unlocked" : "Locked"}</small>
+            <small>{sessions} sessions · {weeks} weeks · {days} days</small>
           </div>
         ))}
       </div>
-      <h2>Earned badges</h2>
-      {d.unlockedBadges.length ? (
-        <div className="badge-list">
-          {d.unlockedBadges.map((id) => {
-            const badge = badgeDefinition(id);
-            return (
-              <div className="list-row" key={id}>
-                <AchievementBadge id={id} />
-                <div>
-                  <strong>{badge.title}</strong>
-                  <small>
-                    {data.profile.badgeUnlocks[id]
-                      ? new Date(
-                          data.profile.badgeUnlocks[id],
-                        ).toLocaleDateString()
-                      : "Earned"}
-                  </small>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      ) : (
-        <p>
-          No history badge can be inferred yet. Action badges still require
-          verified use of the matching feature.
-        </p>
-      )}
+      <h2>App badges</h2>
+      <div className="badge-list">{badgeDefinitions.map((badge) => { const unlocked = d.unlockedBadges.includes(badge.id); return <div className={`list-row ${unlocked ? "" : "locked"}`} key={badge.id}><AchievementBadge id={badge.id} /><div><strong>{badge.title}</strong><small>{unlocked ? data.profile.badgeUnlocks[badge.id] ? `Unlocked ${new Date(data.profile.badgeUnlocks[badge.id]).toLocaleDateString()}` : "Unlocked" : "Locked"}</small><p>{badge.description}</p></div></div>; })}</div>
       <section className="card">
         <div className="row">
           <img
@@ -327,36 +311,9 @@ export function Ledger() {
       {circuit && (
         <Sheet title="Recovery Circuit" onClose={() => setCircuit(false)}>
           <p>
-            A low-intensity recovery check-in can preserve your weekly rhythm
-            once per ISO week. It does not create a workout or award working-set
-            volume.
+            Use this only when a full workout is not practical. Pick a circuit you can perform with clean technique; stop if an exercise causes pain.
           </p>
-          <ol>
-            <li>Take a comfortable easy walk.</li>
-            <li>Move gently through comfortable ranges.</li>
-            <li>Check in with your energy and soreness.</li>
-          </ol>
-          <label className="check-label">
-            <input
-              type="checkbox"
-              checked={checked}
-              onChange={(e) => setChecked(e.target.checked)}
-            />
-            I completed my recovery activity.
-          </label>
-          <Button
-            disabled={busy || !checked}
-            onClick={() =>
-              run(
-                () => completeRecoveryCircuit(),
-                "Recovery Circuit recorded",
-              ).then((ok) => {
-                if (ok) setCircuit(false);
-              })
-            }
-          >
-            Record recovery circuit
-          </Button>
+          {!circuitStarted ? <><div className="circuit-grid">{circuits.map((row) => <button key={row.id} aria-pressed={selectedCircuit === row.id} onClick={() => setSelectedCircuit(row.id)}><strong>{row.name}</strong><small>{row.category}</small>{row.exercises.map((exercise) => <span key={exercise}>• {exercise}</span>)}<small>{row.instructions}</small></button>)}</div><Button disabled={!selectedCircuit} onClick={() => setCircuitStarted(true)}>Start Circuit</Button></> : activeCircuit && <><h3>Complete this circuit:</h3>{activeCircuit.exercises.map((exercise) => <p key={exercise}>• {exercise}</p>)}<p className="muted">{activeCircuit.instructions}</p><Button disabled={busy} onClick={() => run(() => completeRecoveryCircuit(), "Recovery Circuit recorded").then((ok) => { if (ok) setCircuit(false); })}>Complete & check proof eligibility</Button><Button variant="ghost" disabled={busy} onClick={() => setCircuitStarted(false)}>Choose a different circuit</Button></>}
         </Sheet>
       )}
     </>

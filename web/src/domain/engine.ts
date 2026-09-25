@@ -83,7 +83,7 @@ function detectFamily(name: string) {
     ].find(([term]) => text.includes(term))?.[1] ?? ""
   );
 }
-function regionContribution(e: SessionExercise): Record<string, number> {
+export function regionContribution(e: SessionExercise): Record<string, number> {
   const anchors = muscles.ANCHOR_OVERRIDES as Record<
       string,
       Record<string, number>
@@ -241,7 +241,7 @@ export function readinessByRegion(
     ]),
   );
 }
-const grades: [string, number, number, number][] = [
+export const gradeRequirements: [string, number, number, number][] = [
   ["Uncalibrated", 0, 0, 0],
   ["Graphite", 4, 2, 14],
   ["Iron", 12, 3, 28],
@@ -252,6 +252,7 @@ const grades: [string, number, number, number][] = [
   ["Aether", 450, 140, 1095],
   ["Apex", 650, 200, 1460],
 ];
+const grades = gradeRequirements;
 export function deriveSnapshot(snapshot: AppSnapshot, now = Date.now()) {
   const storedOnboardingBaseline = snapshot.profile.onboarded
     ? (snapshot.profile.ledgerBaseline ??
@@ -332,6 +333,8 @@ export function deriveSnapshot(snapshot: AppSnapshot, now = Date.now()) {
     for (const e of w.exercises)
       for (const s of e.loggedSets) {
         volumeKg += externalLoadVolume(e, s);
+        if ((s.loggedAt || w.startedAt) <= (snapshot.profile.prResetAt ?? 0))
+          continue;
         const one = estimatedOneRm(e, s);
         if (one === undefined) continue;
         const key = e.exerciseId || e.name.toLowerCase();

@@ -19,6 +19,9 @@ import {
   bootstrap,
   saveGym,
   deleteGym,
+  clearCompletedHistory,
+  resetPersonalRecords,
+  scheduleTutorialRestart,
   newId,
   readSnapshot,
 } from "../data/store";
@@ -31,6 +34,11 @@ import {
 import type { AppSnapshot } from "../domain/types";
 import { ExercisePicker } from "./Plans";
 import { loadCatalog } from "../catalog";
+import {
+  filterSettingsDestinations,
+  settingsDestinations,
+  type SettingsDestinationId,
+} from "../domain/settings-console";
 export function Settings() {
   const { data, run, busy } = useApp();
   const p = data.profile;
@@ -43,12 +51,16 @@ export function Settings() {
   const [library, setLibrary] = useState(false);
   const [gym, setGym] = useState(false);
   const [gymName, setGymName] = useState("");
+  const [editingGymId, setEditingGymId] = useState<string>();
   const [bar, setBar] = useState(String(p.barKg));
   const [plates, setPlates] = useState(p.platesKg.join(", "));
   const [finitePlates, setFinitePlates] = useState(p.plateInventory !== undefined);
   const [quantities, setQuantities] = useState(p.plateInventory?.map(x => x.quantity).join(", ") ?? "");
   const [storage, setStorage] = useState("");
   const [settingsQuery, setSettingsQuery] = useState("");
+  const [destination, setDestination] = useState<Exclude<SettingsDestinationId, "intelligence">>();
+  const [dangerAction, setDangerAction] = useState<"history" | "records" | "tutorial">();
+  const destinationSpec = settingsDestinations.find((item) => item.id === destination);
   const backup = () =>
     run(async () => {
       const snapshot = await readSnapshot();
@@ -62,34 +74,41 @@ export function Settings() {
   return (
     <>
       <header className="native-screen-title settings-title">
+        {destination && (
+          <button className="text-button" onClick={() => setDestination(undefined)}>
+            <Icon name="back" /> Back to settings
+          </button>
+        )}
         <span className="eyebrow">Settings</span>
-        <h1>Training Console</h1>
-        <p>Your training setup, integrations and local data in six focused areas.</p>
+        <h1>{destinationSpec?.title ?? "Training Console"}</h1>
+        <p>{destinationSpec?.description ?? "Your training setup, integrations and local data in six focused areas."}</p>
       </header>
-      <section className="card local-record-card">
+      <section className="card local-record-card" hidden={destination !== undefined}>
         <div><span className="eyebrow">Local training record</span><strong>Ready on this device</strong></div>
         <b>6 areas</b>
       </section>
-      <label className="settings-search">
+      <label className="settings-search" hidden={destination !== undefined}>
         <Icon name="search" />
         <input aria-label="Search settings" placeholder="Search settings" value={settingsQuery} onChange={(event) => setSettingsQuery(event.target.value)} />
       </label>
-      <section className="card settings-destinations">
+      <section className="card settings-destinations" hidden={destination !== undefined}>
         <span className="eyebrow">Destinations</span>
-        {[
-          ["Training", "Profile, workout behavior, equipment and tracking tools", `${p.weeklyGoal} days · ${p.unit.toUpperCase()} · ${p.keepAwake ? "On" : "Off"}`, "profile-training"],
-          ["Intelligence", "Choose and configure the coaching engine", "Built-in intelligence", "intelligence"],
-          ["Appearance", "Theme, typography, spacing and optional effects", theme, "appearance"],
-          ["Notifications", "Workout reminders, milestones and quiet hours", "Browser reminders", "notifications"],
-          ["Data & privacy", "Import, backup, export, privacy and destructive actions", "Stored locally · backup tools", "data"],
-          ["About", "Product details, methodology and installation help", "IronLog Web", "about"],
-        ].filter(([title, detail]) => `${title} ${detail}`.toLowerCase().includes(settingsQuery.toLowerCase())).map(([title, detail, statusText, target]) => (
-          <button key={title} onClick={() => target === "intelligence" ? navigate("intelligence") : document.getElementById(target)?.scrollIntoView({ behavior: "smooth" })}>
-            <div><strong>{title}</strong><p>{detail}</p><b>{statusText}</b></div><Icon name="next" />
+        {filterSettingsDestinations(settingsQuery).map((item) => {
+          const statusText = item.id === "training"
+            ? `${p.weeklyGoal} days · ${p.unit.toUpperCase()} · ${p.keepAwake ? "On" : "Off"}`
+            : item.id === "appearance" ? theme
+              : item.id === "notifications" ? "Browser reminders"
+                : item.id === "data" ? "Stored locally · backup tools"
+                  : item.id === "about" ? "IronLog Web" : "Built-in intelligence";
+          return <button key={item.id} onClick={() => item.id === "intelligence" ? navigate("intelligence") : setDestination(item.id)}>
+            <div><strong>{item.title}</strong><p>{item.description}</p><b>{statusText}</b></div><Icon name="next" />
           </button>
-        ))}
+        })}
+        {settingsQuery.trim() && filterSettingsDestinations(settingsQuery).length === 0 && (
+          <p role="status">No settings match “{settingsQuery.trim()}”.</p>
+        )}
       </section>
-      <section id="profile-training">
+      <section id="profile-training" hidden={destination !== "training"}>
         <h2>Profile & training</h2>
         <div className="workout-inputs">
           <Field label="Name">
@@ -150,7 +169,7 @@ export function Settings() {
           label="Keep workout screen awake when supported"
         />
       </section>
-      <section id="appearance">
+      <section id="appearance" hidden={destination !== "appearance"}>
         <h2>Appearance</h2>
         <p className="muted">
           The same 12 native palettes. Your choice also applies to the website.
@@ -163,15 +182,33 @@ export function Settings() {
           }}
         />
       </section>
-      <section id="typography">
+      <section id="typography" hidden={destination !== "appearance"}>
         <h2>Typography</h2>
         <FontPicker />
       </section>
-      <section id="spacing">
+      <section id="spacing" hidden={destination !== "appearance"}>
         <h2>Layout spacing</h2>
         <SpacingPicker />
       </section>
-      <section id="training-tools">
+      <section id="visual-effects" hidden={destination !== "appearance"}>
+        <h2>Optional effects</h2>
+        <Switch
+          checked={p.cardShineEnabled}
+          disabled={busy}
+          onChange={(checked) => run(() => saveProfile({ cardShineEnabled: checked }))}
+          label="Animated card shine"
+        />
+        <p className="muted">Controls the decorative light sweep on featured cards.</p>
+        <Switch
+          checked={p.liquidGlassEnabled}
+          disabled={busy}
+          onChange={(checked) => run(() => saveProfile({ liquidGlassEnabled: checked }))}
+          label="Liquid glass navigation"
+        />
+        <p className="muted">Controls the translucent navigation material independently from card shine.</p>
+        <p className="muted">Motion also follows your browser or operating system’s reduced-motion preference.</p>
+      </section>
+      <section id="training-tools" hidden={destination !== "training"}>
         <h2>Training tools</h2>
         <button className="list-row" onClick={() => {
           setBar(String(p.barKg));
@@ -179,6 +216,7 @@ export function Settings() {
           setFinitePlates(p.plateInventory !== undefined);
           setQuantities(p.plateInventory?.map(x => x.quantity).join(", ") ?? "");
           setGymName("");
+          setEditingGymId(undefined);
           setGym(true);
         }}>
           <strong>Gym & plate setup</strong>
@@ -193,7 +231,7 @@ export function Settings() {
           <Icon name="next" />
         </button>
       </section>
-      <section id="notifications">
+      <section id="notifications" hidden={destination !== "notifications"}>
         <h2>Notifications</h2>
         <p className="muted">
           Workout reminders depend on browser notification and background-task
@@ -201,7 +239,7 @@ export function Settings() {
           unavailable.
         </p>
       </section>
-      <section id="data">
+      <section id="data" hidden={destination !== "data"}>
         <h2>Your data</h2>
         <p>
           {p.lastBackupAt
@@ -277,8 +315,20 @@ export function Settings() {
           Check storage protection
         </Button>
         {storage && <p role="status">{storage}</p>}
+        <div className="card danger-zone">
+          <span className="eyebrow">Danger area</span>
+          <p className="muted">These changes permanently alter your training record. Back up first if you may need to restore it.</p>
+          <button className="list-row" disabled={busy} onClick={() => setDangerAction("history")}>
+            <span><strong>Clear completed history</strong><small>Deletes completed workouts; the active workout is preserved.</small></span>
+            <Icon name="trash" />
+          </button>
+          <button className="list-row" disabled={busy} onClick={() => setDangerAction("records")}>
+            <span><strong>Reset all personal records</strong><small>Starts new PR baselines without deleting workout history.</small></span>
+            <Icon name="next" />
+          </button>
+        </div>
       </section>
-      <section id="about">
+      <section id="about" hidden={destination !== "about"}>
         <h2>About IronLog Web</h2>
         <p>
           A local-first browser edition. No account, analytics tracker,
@@ -299,10 +349,49 @@ export function Settings() {
         <a className="list-row" href={`${import.meta.env.BASE_URL}#privacy`}>
           Privacy & acknowledgments <Icon name="next" />
         </a>
+        <button className="list-row" onClick={() => setDangerAction("tutorial")}>
+          <strong>Restart app tutorial</strong>
+          <Icon name="next" />
+        </button>
       </section>
-      <Button variant="danger" onClick={() => setReset(true)}>
-        Reset this browser’s IronLog data
-      </Button>
+      <div hidden={destination !== "data"}>
+        <Button variant="danger" onClick={() => setReset(true)}>
+          Reset this browser’s IronLog data
+        </Button>
+      </div>
+      {dangerAction === "history" && (
+        <Sheet title="Clear completed history?" onClose={() => setDangerAction(undefined)}>
+          <p>Every completed workout will be deleted. Your active workout, plans, profile, measurements, photos, and gym setups will be preserved.</p>
+          <Button variant="danger" disabled={busy} onClick={() =>
+            run(async () => {
+              await clearCompletedHistory();
+              setDangerAction(undefined);
+            }, "Completed workout history cleared")
+          }>Clear history</Button>
+        </Sheet>
+      )}
+      {dangerAction === "records" && (
+        <Sheet title="Reset all personal records?" onClose={() => setDangerAction(undefined)}>
+          <p>Your workout history stays intact. Future completed sets will establish new personal-record baselines.</p>
+          <Button variant="danger" disabled={busy} onClick={() =>
+            run(async () => {
+              await resetPersonalRecords();
+              setDangerAction(undefined);
+            }, "Personal-record baselines reset")
+          }>Reset PRs</Button>
+        </Sheet>
+      )}
+      {dangerAction === "tutorial" && (
+        <Sheet title="Restart tutorial?" onClose={() => setDangerAction(undefined)}>
+          <p>The onboarding tutorial will restart the next time IronLog Web is fully opened. Your training data will stay intact.</p>
+          <Button disabled={busy} onClick={() =>
+            run(async () => {
+              await scheduleTutorialRestart();
+              setDangerAction(undefined);
+            }, "Tutorial scheduled for the next app open")
+          }>Restart next time</Button>
+        </Sheet>
+      )}
       {restore && (
         <Sheet
           title="Replace this browser’s data?"
@@ -424,10 +513,11 @@ export function Settings() {
                     counts.some(x => !Number.isSafeInteger(x) || x < 0)))
                   throw Error("Enter one nonnegative whole quantity for each plate size");
                 const plateInventory = finitePlates ? values.map((weightKg, i) => ({ weightKg, quantity: counts[i] })) : undefined;
-                await saveProfile({ barKg, platesKg: values, plateInventory });
-                if (gymName.trim())
+                const gymId = editingGymId ?? (gymName.trim() ? newId() : undefined);
+                await saveProfile({ barKg, platesKg: values, plateInventory, activeGymId: gymId ?? p.activeGymId });
+                if (gymId && gymName.trim())
                   await saveGym({
-                    id: newId(),
+                    id: gymId,
                     name: gymName.trim(),
                     barKg,
                     platesKg: values,
@@ -446,7 +536,7 @@ export function Settings() {
                 onClick={() =>
                   run(
                     async () => {
-                      await saveProfile({ barKg: g.barKg, platesKg: g.platesKg, plateInventory: g.plateInventory });
+                      await saveProfile({ barKg: g.barKg, platesKg: g.platesKg, plateInventory: g.plateInventory, activeGymId: g.id });
                       setBar(String(g.barKg));
                       setPlates((g.plateInventory?.map(x => x.weightKg) ?? g.platesKg).join(", "));
                       setFinitePlates(g.plateInventory !== undefined);
@@ -457,8 +547,20 @@ export function Settings() {
                   )
                 }
               >
-                {g.name} · {g.barKg} kg bar · {g.plateInventory === undefined ? "Unlimited pairs" : "Saved physical quantities"}
+                {g.name}{p.activeGymId === g.id ? " · Active" : ""} · {g.barKg} kg bar · {g.plateInventory === undefined ? "Unlimited pairs" : "Saved physical quantities"}
               </button>
+              <IconButton
+                name="edit"
+                label={`Edit ${g.name}`}
+                onClick={() => {
+                  setEditingGymId(g.id);
+                  setGymName(g.name);
+                  setBar(String(g.barKg));
+                  setPlates((g.plateInventory?.map(x => x.weightKg) ?? g.platesKg).join(", "));
+                  setFinitePlates(g.plateInventory !== undefined);
+                  setQuantities(g.plateInventory?.map(x => x.quantity).join(", ") ?? "");
+                }}
+              />
               <IconButton
                 name="trash"
                 label={`Delete ${g.name}`}

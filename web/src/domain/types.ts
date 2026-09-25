@@ -6,6 +6,8 @@ export interface ExerciseMetadata {
   category?: string;
   isBodyweight?: boolean;
   requiresExternalLoad?: boolean;
+  movementPattern?: string;
+  difficulty?: string;
 }
 export type SetKind = "normal" | "warmup" | "failure" | "drop" | "amrap";
 export interface Exercise extends ExerciseMetadata {
@@ -43,6 +45,17 @@ export interface Plan {
   days: PlanDay[];
   order: number;
   templateId?: string;
+  progressionRules?: ProgramRules;
+  exerciseProgressionOverrides?: Record<string, string>;
+}
+export interface ProgramRules {
+  progressionModel: string;
+  blockLengthWeeks: number;
+  currentWeek: number;
+  deloadEveryWeeks: number;
+  percent1RM: number;
+  rpeTarget: number;
+  rirTarget: number;
 }
 export interface LoggedSet {
   id: string;
@@ -83,6 +96,7 @@ export interface Workout {
   notes: string;
   rating?: number;
   restEndsAt?: number;
+  restPausedRemainingMs?: number;
   restUsed: boolean;
   revision: number;
   imported?: boolean;
@@ -111,12 +125,26 @@ export interface OnboardingLedgerBaseline {
 export interface Profile {
   name: string;
   age: number;
+  yearOfBirth: number;
   heightCm: number;
   weightKg: number;
+  goalWeightKg?: number;
+  measurementGoals?: Record<string, number>;
+  onboardingBodyweightKg?: number;
   experience: string;
   goal: string;
+  progressionStyle: string;
+  goalMode: string;
+  selectedTrainingDays: number[];
   trainingAgeMonths: number;
   historicalTrainingDaysPerWeek: number;
+  hasPastTraining: boolean;
+  hasGymAccess: boolean;
+  baselinePushups: number;
+  baselinePullups: number;
+  baselineBenchKg: number;
+  baselineLatPulldownKg: number;
+  baselineMileRunSeconds: number;
   weeklyGoal: number;
   sessionMinutes: number;
   coaching: string;
@@ -129,13 +157,21 @@ export interface Profile {
   restSeconds: number;
   barKg: number;
   platesKg: number[];
+  activeGymId?: string;
   /** Total physical plates, shared between both sides. Missing means unlimited. */
   plateInventory?: { weightKg: number; quantity: number }[];
   keepAwake: boolean;
+  cardShineEnabled: boolean;
+  liquidGlassEnabled: boolean;
+  planExerciseNotesVisible: boolean;
   exerciseNextNotes?: Record<string, string>;
   badgeUnlocks: Record<string, number>;
   ledgerBaseline?: OnboardingLedgerBaseline;
   recoveryWeeks: string[];
+  /** Workouts and sets at or before this instant do not define current PR baselines. */
+  prResetAt?: number;
+  /** Consumed during the next full app startup so settings does not vanish immediately. */
+  tutorialRestartPending?: boolean;
   lastBackupAt?: number;
 }
 export interface Measurement {
@@ -148,6 +184,7 @@ export interface Measurement {
 export interface Photo {
   id: string;
   date: string;
+  capturedAt?: number;
   notes: string;
   blob: Blob;
 }
@@ -158,6 +195,7 @@ export interface RecoveryCheckin {
   sleep: number;
   energy: number;
   painRegions: string[];
+  notes?: string;
 }
 export interface Gym {
   id: string;
@@ -185,12 +223,24 @@ export interface ImportResult {
 export const defaultProfile: Profile = {
   name: "",
   age: 25,
+  yearOfBirth: 2000,
   heightCm: 170,
   weightKg: 70,
+  measurementGoals: {},
   experience: "beginner",
   goal: "General Fitness",
+  progressionStyle: "LINEAR",
+  goalMode: "STRENGTH",
+  selectedTrainingDays: [0, 2, 4],
   trainingAgeMonths: 0,
   historicalTrainingDaysPerWeek: 3,
+  hasPastTraining: false,
+  hasGymAccess: true,
+  baselinePushups: 0,
+  baselinePullups: 0,
+  baselineBenchKg: 0,
+  baselineLatPulldownKg: 0,
+  baselineMileRunSeconds: 0,
   weeklyGoal: 3,
   sessionMinutes: 60,
   coaching: "balanced",
@@ -203,6 +253,9 @@ export const defaultProfile: Profile = {
   barKg: 20,
   platesKg: [20, 15, 10, 5, 2.5, 1.25],
   keepAwake: true,
+  cardShineEnabled: true,
+  liquidGlassEnabled: true,
+  planExerciseNotesVisible: true,
   exerciseNextNotes: {},
   badgeUnlocks: {},
   recoveryWeeks: [],

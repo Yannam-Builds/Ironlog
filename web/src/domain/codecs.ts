@@ -13,6 +13,7 @@ import { localDateKey, parseHistoryDate } from "./dates";
 import { snapshotSchema } from "../data/schema";
 import { z } from "zod";
 import { isTimed, trackingMode } from "./tracking";
+import { resolveExerciseCandidate, type ExerciseResolution } from "./exercise-resolution";
 type Row = Record<string, unknown>;
 const obj = (v: unknown): Row =>
   v !== null && typeof v === "object" && !Array.isArray(v) ? (v as Row) : {};
@@ -44,11 +45,16 @@ const parse = (raw: string) => {
   return JSON.parse(raw) as unknown;
 };
 export function resolveExercise(id: string, name: string, library: Exercise[]) {
-  return (
-    library.find((e) => id && e.id === id) ??
-    library.find((e) => key(e.name) === key(name)) ??
-    library.find((e) => e.aliases?.some((alias) => key(alias) === key(name)))
-  );
+  const byId = library.find((e) => id && e.id === id);
+  if (byId) return byId;
+  const resolution = resolveExerciseCandidate(name, library);
+  return resolution.status === "matched" ? resolution.matched : undefined;
+}
+
+function resolveImportedExercise(id: string, name: string, library: Exercise[]): ExerciseResolution {
+  const byId = library.find((exercise) => id && exercise.id === id);
+  if (byId) return { status: "matched", matched: byId, confidence: 100, reason: "Exact exercise ID", topCandidates: [] };
+  return resolveExerciseCandidate(name, library);
 }
 export function decodePlans(
   raw: string,
@@ -97,11 +103,16 @@ export function decodePlans(
           result.skipped++;
           continue;
         }
-        const resolved = resolveExercise(id, name, library);
+        const resolution = resolveImportedExercise(id, name, library);
+        const resolved = resolution.status === "matched" ? resolution.matched : undefined;
         if (!resolved) {
           result.unresolved++;
+          const candidates = resolution.topCandidates
+            .filter((candidate) => candidate.score >= 52)
+            .slice(0, 3)
+            .map((candidate) => candidate.exercise.name);
           result.warnings.push(
-            `Unresolved exercise: ${name || id}. Review before training.`,
+            `Unresolved exercise: ${name || id}. Review before training.${candidates.length ? ` Review candidates: ${candidates.join(", ")}.` : ""}`,
           );
         }
         exercises.push({
@@ -784,6 +795,7 @@ export async function encodeWebBackup(
     photos.push({
       id: p.id,
       date: p.date,
+      capturedAt: p.capturedAt,
       notes: p.notes,
       path,
       mime: p.blob.type,
@@ -833,6 +845,7 @@ export async function decodeWebBackup(
       z.object({
         id: z.string().min(1),
         date: z.string(),
+        capturedAt: z.number().optional(),
         notes: z.string(),
         path: z.string().regex(/^photos\/[^/]+\.bin$/),
         mime: z.string(),
@@ -857,6 +870,7 @@ export async function decodeWebBackup(
     return {
       id: p.id,
       date: p.date,
+      capturedAt: p.capturedAt,
       notes: p.notes,
       blob: new Blob([files[p.path].slice().buffer as ArrayBuffer], {
         type: p.mime,

@@ -51,6 +51,7 @@ const library: Exercise[] = [
     muscle: "chest",
     equipment: "barbell",
     tracking: "weight_reps",
+    movementPattern: "push",
   },
 ];
 const raw = {
@@ -99,6 +100,37 @@ describe("portable formats", () => {
     expect(imported.id).not.toBe(plan.id);
     expect(imported.days[0].exercises[0].notes).toBe("slow");
   });
+  it("auto-links only strong fuzzy exercise matches", () => {
+    const strongLibrary: Exercise[] = [{
+      ...library[0],
+      name: "Barbell Bench Press",
+    }];
+    const decoded = decodePlans(JSON.stringify({
+      name: "Fuzzy",
+      days: [{ exercises: [{ name: "barbell benhc press" }] }],
+    }), strongLibrary);
+    expect(decoded.plans[0].days[0].exercises[0]).toMatchObject({
+      exerciseId: "bench",
+      name: "Barbell Bench Press",
+    });
+    expect(decoded.result.unresolved).toBe(0);
+  });
+  it("keeps review-level exercise matches unlinked and reports candidates", () => {
+    const reviewLibrary: Exercise[] = [
+      ...library,
+      { id: "incline", name: "Incline Dumbbell Press", muscle: "chest", equipment: "dumbbell", tracking: "weight_reps" },
+    ];
+    const decoded = decodePlans(JSON.stringify({
+      name: "Review",
+      days: [{ exercises: [{ name: "incline press" }] }],
+    }), reviewLibrary);
+    expect(decoded.plans[0].days[0].exercises[0]).toMatchObject({
+      exerciseId: "",
+      name: "incline press",
+    });
+    expect(decoded.result.unresolved).toBe(1);
+    expect(decoded.result.warnings[0]).toMatch(/Review candidates: Incline Dumbbell Press/);
+  });
   it("roundtrips Android relationships and honest unsupported photo warning", () => {
     const plans = decodePlans(JSON.stringify(raw), library).plans;
     const snap: AppSnapshot = {
@@ -134,12 +166,12 @@ describe("portable formats", () => {
   it("web archive preserves photo bytes, notes, all records and schema", async () => {
     const blob = new Blob(["private-test-only"], { type: "image/png" });
     const snapshot: AppSnapshot = {
-      profile: defaultProfile,
+      profile: { ...defaultProfile, badgeUnlocks: { first_workout: 1_700_000_000_000 }, recoveryWeeks: ["2026-W37"] },
       plans: [],
       workouts: [],
       exercises: library,
       measurements: [],
-      photos: [{ id: "p", date: "2026-08-31", notes: "test", blob }],
+      photos: [{ id: "p", date: "2026-08-31", capturedAt: 42, notes: "test", blob }],
       checkins: [],
       gyms: [],
     };
@@ -147,7 +179,8 @@ describe("portable formats", () => {
     const decoded = await decodeWebBackup(zipped);
     expect(await decoded.photos[0].blob.text()).toBe("private-test-only");
     expect(decoded.photos[0].notes).toBe("test");
-    expect(decoded.profile).toEqual(defaultProfile);
+    expect(decoded.photos[0].capturedAt).toBe(42);
+    expect(decoded.profile).toEqual({ ...defaultProfile, badgeUnlocks: { first_workout: 1_700_000_000_000 }, recoveryWeeks: ["2026-W37"] });
   });
   it("rejects unknown versions and malformed JSON before mutation", () => {
     expect(() => decodePlans("{", library)).toThrow();

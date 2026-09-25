@@ -1,21 +1,10 @@
 import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { readFile } from "node:fs/promises";
+import { completeOnboarding } from "./onboarding";
 async function onboard(page: Page) {
   await page.goto("app/");
-  await page.getByLabel("Your name").fill("Backup QA");
-  for (const heading of [
-    "What are you training for?",
-    "Your training, your pace.",
-    "A starting point.",
-  ]) {
-    await page.getByRole("button", { name: "Continue", exact: true }).click();
-    await expect(page.getByRole("heading", { name: heading })).toBeVisible();
-  }
-  await page
-    .getByRole("button", { name: "Start training", exact: true })
-    .click();
-  await expect(page.getByRole("heading", { name: "Backup QA" })).toBeVisible();
+  await completeOnboarding(page, "Backup QA");
 }
 test("browser backup restores photo bytes and profile after preview", async ({
   page,
@@ -26,16 +15,18 @@ test("browser backup restores photo bytes and profile after preview", async ({
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jD1sAAAAASUVORK5CYII=",
     "base64",
   );
-  await expect(page.getByLabel("Add a photo")).toBeEnabled();
+  await expect(page.getByLabel("From device")).toBeEnabled();
   await page
-    .getByLabel("Add a photo")
+    .getByLabel("From device")
     .setInputFiles({
       name: "synthetic.png",
       mimeType: "image/png",
       buffer: photo,
     });
   await expect(page.locator(".photo-entry img")).toHaveCount(1);
+  await page.goto("app/#/home");
   await page.goto("app/#/settings");
+  await page.getByRole("button", { name: /^Data & Privacy/ }).click();
   const downloaded = page.waitForEvent("download");
   await page
     .getByRole("button", {
@@ -48,9 +39,15 @@ test("browser backup restores photo bytes and profile after preview", async ({
   await expect(
     page.getByText("Backup download started. Keep the file somewhere safe."),
   ).toBeVisible();
+  await page.goto("app/#/home");
+  await page.goto("app/#/settings");
+  await page.getByRole("button", { name: /^Training/ }).click();
   await page.getByLabel("Name", { exact: true }).fill("Changed after backup");
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page.getByText("Profile saved", { exact: true })).toBeVisible();
+  await page.goto("app/#/home");
+  await page.goto("app/#/settings");
+  await page.getByRole("button", { name: /^Data & Privacy/ }).click();
   await page
     .getByLabel("Restore a browser ZIP or Android JSON")
     .setInputFiles({
@@ -67,6 +64,7 @@ test("browser backup restores photo bytes and profile after preview", async ({
     .click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await page.reload();
+  await page.getByRole("button", { name: /^Training/ }).click();
   await expect(page.getByLabel("Name", { exact: true })).toHaveValue(
     "Backup QA",
   );
@@ -82,6 +80,7 @@ test("browser backup restores photo bytes and profile after preview", async ({
     )
     .toBe(true);
   await page.goto("app/#/settings");
+  await page.getByRole("button", { name: /^Data & Privacy/ }).click();
   await page
     .getByLabel("Restore a browser ZIP or Android JSON")
     .setInputFiles({
@@ -92,6 +91,7 @@ test("browser backup restores photo bytes and profile after preview", async ({
   await expect(page.getByRole("alert")).toBeVisible();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await page.reload();
+  await page.getByRole("button", { name: /^Training/ }).click();
   await expect(page.getByLabel("Name", { exact: true })).toHaveValue(
     "Backup QA",
   );

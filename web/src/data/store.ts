@@ -36,6 +36,7 @@ async function photoToStorage(photo: Photo): Promise<PhotoBytes> {
   return {
     id: photo.id,
     date: photo.date,
+    capturedAt: photo.capturedAt,
     notes: photo.notes,
     mimeType: photo.blob.type,
     bytes: new Uint8Array(await photo.blob.arrayBuffer()),
@@ -46,6 +47,7 @@ function photoFromStorage(photo: StoredPhoto): Photo {
   return {
     id: photo.id,
     date: photo.date,
+    capturedAt: photo.capturedAt,
     notes: photo.notes,
     blob: new Blob([new Uint8Array(photo.bytes)], { type: photo.mimeType }),
   };
@@ -213,6 +215,30 @@ export async function saveProfile(partial: Partial<Profile>) {
       ...row,
       ...partial,
     });
+    await db.profiles.put({
+      ...recomputeOnboardingBaseline(profile),
+      id: "local",
+    });
+  });
+}
+
+/** Completes first-run setup and optional starter-plan creation as one commit. */
+export async function completeOnboarding(
+  partial: Partial<Profile>,
+  starterPlan?: Plan,
+) {
+  await db.transaction("rw", db.profiles, db.plans, async () => {
+    const row = await db.profiles.get("local");
+    const validPlan = starterPlan ? planSchema.parse(starterPlan) : undefined;
+    const profile = profileSchema.parse({
+      ...defaultProfile,
+      ...row,
+      ...partial,
+      onboarded: true,
+      onboardingStep: 10,
+      activePlanId: validPlan?.id ?? row?.activePlanId,
+    });
+    if (validPlan) await db.plans.put(validPlan);
     await db.profiles.put({
       ...recomputeOnboardingBaseline(profile),
       id: "local",
@@ -391,6 +417,48 @@ export function mutateWorkout(
     }),
   );
 }
+export function clearActiveWorkoutExerciseNotes(
+  id: string,
+  expectedRevision: number,
+): Promise<Workout> {
+  return mutateWorkout(id, expectedRevision, (workout) => {
+    workout.exercises.forEach((exercise) => {
+      exercise.notes = "";
+    });
+  });
+}
+export type WorkoutRestControl = "add30" | "pause" | "resume" | "skip";
+export function controlWorkoutRest(
+  id: string,
+  expectedRevision: number,
+  control: WorkoutRestControl,
+  now = Date.now(),
+): Promise<Workout> {
+  return mutateWorkout(id, expectedRevision, (workout) => {
+    const paused = workout.restPausedRemainingMs;
+    const running = workout.restEndsAt !== undefined && workout.restEndsAt > now;
+    if (control === "skip") {
+      workout.restEndsAt = undefined;
+      workout.restPausedRemainingMs = undefined;
+      return;
+    }
+    if (control === "add30") {
+      if (paused !== undefined) workout.restPausedRemainingMs = paused + 30_000;
+      else if (running) workout.restEndsAt = workout.restEndsAt! + 30_000;
+      else throw Error("Rest timer is not active");
+      return;
+    }
+    if (control === "pause") {
+      if (!running) throw Error("Rest timer is not running");
+      workout.restPausedRemainingMs = Math.max(0, workout.restEndsAt! - now);
+      workout.restEndsAt = undefined;
+      return;
+    }
+    if (paused === undefined || paused <= 0) throw Error("Rest timer is not paused");
+    workout.restEndsAt = now + paused;
+    workout.restPausedRemainingMs = undefined;
+  });
+}
 export function finishWorkout(id: string): Promise<Workout> {
   return serialize(id, () =>
     db.transaction("rw", db.workouts, async () => {
@@ -406,6 +474,7 @@ export function finishWorkout(id: string): Promise<Workout> {
         Math.round((w.completedAt - w.startedAt) / 1000),
       );
       w.restEndsAt = undefined;
+      w.restPausedRemainingMs = undefined;
       w.revision++;
       await db.workouts.put(w);
       return w;
@@ -420,6 +489,7 @@ export function discardWorkout(id: string) {
         ...w,
         status: "discarded",
         restEndsAt: undefined,
+        restPausedRemainingMs: undefined,
         revision: w.revision + 1,
       });
     }),
@@ -504,6 +574,10 @@ export async function saveExercise(e: Exercise) {
 export async function saveMeasurement(m: Measurement) {
   await db.measurements.put(snapshotSchema.shape.measurements.element.parse(m));
 }
+export async function saveMeasurements(rows: Measurement[]) {
+  const valid = rows.map((row) => snapshotSchema.shape.measurements.element.parse(row));
+  await db.transaction("rw", db.measurements, async () => { await db.measurements.bulkPut(valid); });
+}
 export async function deleteMeasurement(id: string) {
   await db.measurements.delete(id);
 }
@@ -515,6 +589,9 @@ export async function savePhoto(p: Photo) {
 export async function deletePhoto(id: string) {
   await db.photos.delete(id);
 }
+export async function deleteAllPhotos() {
+  await db.transaction("rw", db.photos, async () => { await db.photos.clear(); });
+}
 export async function saveCheckin(c: RecoveryCheckin) {
   await db.checkins.put(snapshotSchema.shape.checkins.element.parse(c));
 }
@@ -522,10 +599,40 @@ export async function saveGym(g: Gym) {
   await db.gyms.put(snapshotSchema.shape.gyms.element.parse(g));
 }
 export async function deleteGym(id: string) {
-  await db.gyms.delete(id);
+  await db.transaction("rw", db.gyms, db.profiles, async () => {
+    await db.gyms.delete(id);
+    const profile = await db.profiles.get("local");
+    if (profile?.activeGymId === id)
+      await db.profiles.put({ ...profile, activeGymId: undefined });
+  });
 }
 export async function deleteWorkout(id: string) {
   return serialize(id, () => db.workouts.delete(id));
+}
+/** Mirrors Android's history clear: completed sessions go; active and discarded rows remain. */
+export async function clearCompletedHistory() {
+  await Promise.allSettled([...queue.values()]);
+  await db.transaction("rw", db.workouts, async () => {
+    await db.workouts.where("status").equals("completed").delete();
+  });
+}
+/** Starts a new PR era without deleting the workouts that produced the old records. */
+export async function resetPersonalRecords(now = Date.now()) {
+  if (!Number.isFinite(now) || now <= 0) throw Error("PR reset timestamp must be positive");
+  await saveProfile({ prResetAt: now });
+}
+export async function scheduleTutorialRestart() {
+  await saveProfile({ tutorialRestartPending: true });
+}
+export async function saveHistoricalWorkout(workout: Workout) {
+  const valid = workoutSchema.parse(workout);
+  if (valid.status !== "completed" || valid.completedAt === undefined || valid.completedAt < valid.startedAt)
+    throw Error("Historical workouts must be completed with valid chronology.");
+  await db.transaction("rw", db.workouts, async () => {
+    if (await db.workouts.get(valid.id)) throw Error("Workout already exists.");
+    await db.workouts.add(valid);
+  });
+  return valid;
 }
 export async function restoreSnapshot(snapshot: AppSnapshot) {
   const valid = snapshotSchema.parse(snapshot);

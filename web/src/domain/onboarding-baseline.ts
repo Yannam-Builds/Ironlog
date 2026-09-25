@@ -21,6 +21,14 @@ export function calculateOnboardingBaseline(
     | "historicalTrainingDaysPerWeek"
     | "weeklyGoal"
     | "weightKg"
+    | "onboardingBodyweightKg"
+    | "hasPastTraining"
+    | "hasGymAccess"
+    | "baselinePushups"
+    | "baselinePullups"
+    | "baselineBenchKg"
+    | "baselineLatPulldownKg"
+    | "baselineMileRunSeconds"
   >,
   seededAt = Date.now(),
 ): OnboardingLedgerBaseline {
@@ -31,8 +39,19 @@ export function calculateOnboardingBaseline(
     7,
   );
   const weeklyGoal = clamp(Math.round(profile.weeklyGoal), 1, 7);
-  const bodyweight = profile.weightKg > 0 ? profile.weightKg : 0;
-  const hasPastTraining = trainingAgeMonths > 0;
+  const bodyweight = profile.onboardingBodyweightKg ??
+    (profile.weightKg > 0 ? profile.weightKg : 0);
+  // Older web profiles did not store this answer. A non-zero training age was
+  // their only equivalent signal, so retain that migration behavior.
+  const hasPastTraining = profile.hasPastTraining || trainingAgeMonths > 0;
+  const pushups = Math.max(0, profile.baselinePushups);
+  const pullups = Math.max(0, profile.baselinePullups);
+  const benchKg = Math.max(0, profile.baselineBenchKg);
+  const latPulldownKg = Math.max(0, profile.baselineLatPulldownKg);
+  const mileSeconds = Math.max(0, profile.baselineMileRunSeconds);
+  const paceFactor = mileSeconds > 0
+    ? clamp(900 / mileSeconds, 0, 2)
+    : 0;
   const estimatedLifetimeSessions = Math.max(
     0,
     Math.round(trainingAgeMonths * 4.345 * historicalTrainingDaysPerWeek),
@@ -41,15 +60,22 @@ export function calculateOnboardingBaseline(
   // The browser currently has no lift, calisthenics, run-test, or gym-access
   // questions. Those inputs intentionally stay at the native model's neutral
   // values instead of being guessed from an experience label.
-  const strengthRaw = bodyweight * 0.45 + exposure * 0.3;
-  const powerRaw = exposure * 0.12;
-  const hypertrophyRaw = exposure * 0.22;
-  const enduranceRaw = exposure * 0.08 + weeklyGoal * 2.5;
-  const agilityRaw = exposure * 0.05;
+  const strengthRaw = benchKg * 2.4 + latPulldownKg * 1.5 + pullups * 6 +
+    pushups * 1.2 + bodyweight * 0.45 + exposure * 0.3;
+  const powerRaw = benchKg * 1.6 + pullups * 3.5 + pushups * 0.8 +
+    exposure * 0.12;
+  const hypertrophyRaw = benchKg * 1.4 + latPulldownKg * 1.1 +
+    pushups * 1.6 + pullups * 2.2 + exposure * 0.22;
+  const enduranceRaw = pushups * 0.9 + exposure * 0.08 +
+    paceFactor * 30 + weeklyGoal * 2.5;
+  const agilityRaw = pullups + paceFactor * 55 + exposure * 0.05;
   const disciplineRaw =
     exposure * 0.16 + weeklyGoal * 8 + (hasPastTraining ? 18 : 0);
-  const recoveryRaw = exposure * 0.1 + weeklyGoal * 6 + 4;
-  const meaningful = trainingAgeMonths > 0 || bodyweight > 0;
+  const recoveryRaw = exposure * 0.1 + weeklyGoal * 6 +
+    (profile.hasGymAccess ? 8 : 4);
+  const meaningful = trainingAgeMonths > 0 || bodyweight > 0 ||
+    hasPastTraining || pushups > 0 || pullups > 0 || benchKg > 0 ||
+    latPulldownKg > 0 || mileSeconds > 0;
   const stats: TrainingSignals = meaningful
     ? {
         strength: toStat(strengthRaw, 45),

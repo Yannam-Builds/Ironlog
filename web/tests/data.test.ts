@@ -3,9 +3,12 @@ import {
   bootstrap,
   db,
   readSnapshot,
+  saveProfile,
   savePlan,
   startWorkout,
   mutateWorkout,
+  clearActiveWorkoutExerciseNotes,
+  controlWorkoutRest,
   finishWorkout,
   addWarmups,
   logSet,
@@ -218,6 +221,47 @@ describe("transactional workout repository", () => {
       "row",
     );
   });
+  it("clears only exercise-level notes from the active workout", async () => {
+    await saveProfile({ exerciseNextNotes: { "exercise_next_note:bench": "Pause at the chest" } });
+    let active = await startWorkout("plan", "day");
+    active = await mutateWorkout(active.id, active.revision, (workout) => {
+      workout.notes = "Session reflection";
+      workout.exercises[0].loggedSets.push({ ...set, notes: "Set-specific cue" });
+    });
+    const completed = {
+      ...active,
+      id: "completed-with-notes",
+      status: "completed" as const,
+      completedAt: Date.now(),
+      revision: 0,
+    };
+    await db.workouts.put(completed);
+
+    const cleared = await clearActiveWorkoutExerciseNotes(active.id, active.revision);
+    expect(cleared.exercises[0].notes).toBe("");
+    expect(cleared.exercises[0].loggedSets[0].notes).toBe("Set-specific cue");
+    expect(cleared.notes).toBe("Session reflection");
+    expect((await db.plans.get("plan"))?.days[0].exercises[0].notes).toBe("tempo");
+    expect((await db.workouts.get(completed.id))?.exercises[0].notes).toBe("tempo");
+    expect((await readSnapshot()).profile.exerciseNextNotes?.["exercise_next_note:bench"]).toBe("Pause at the chest");
+  });
+  it("persists add, pause, resume and skip rest controls in mutation order", async () => {
+    const now = 1_800_000_000_000;
+    let active = await startWorkout("plan", "day");
+    active = await mutateWorkout(active.id, active.revision, (workout) => {
+      workout.restEndsAt = now + 90_000;
+      workout.restUsed = true;
+    });
+    active = await controlWorkoutRest(active.id, active.revision, "pause", now);
+    expect(active).toMatchObject({ restEndsAt: undefined, restPausedRemainingMs: 90_000 });
+    active = await controlWorkoutRest(active.id, active.revision, "add30", now + 10_000);
+    expect(active.restPausedRemainingMs).toBe(120_000);
+    active = await controlWorkoutRest(active.id, active.revision, "resume", now + 20_000);
+    expect(active).toMatchObject({ restEndsAt: now + 140_000, restPausedRemainingMs: undefined });
+    active = await controlWorkoutRest(active.id, active.revision, "skip", now + 30_000);
+    expect(active.restEndsAt).toBeUndefined();
+    expect(active.restPausedRemainingMs).toBeUndefined();
+  });
   it("rejects malformed restore without removing any current data", async () => {
     const before = await readSnapshot();
     await expect(
@@ -267,8 +311,9 @@ describe("transactional workout repository", () => {
       });
       await finishWorkout(w.id);
     }
-    await completeRecoveryCircuit();
-    await expect(completeRecoveryCircuit()).rejects.toThrow("already");
+    const concurrent = await Promise.allSettled([completeRecoveryCircuit(), completeRecoveryCircuit()]);
+    expect(concurrent.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(concurrent.filter((result) => result.status === "rejected")).toHaveLength(1);
     const s = await readSnapshot();
     expect(s.profile.recoveryWeeks).toHaveLength(1);
     expect(s.workouts).toHaveLength(2);

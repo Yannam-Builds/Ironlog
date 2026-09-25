@@ -37,7 +37,7 @@ export function History() {
   const workouts = data.workouts.filter(
     (w) =>
       w.status === "completed" &&
-      (!date || localDateKey(w.completedAt!) === date) &&
+      (!date || localDateKey(w.startedAt) === date) &&
       (!query || `${w.name} ${w.exercises.map((exercise) => exercise.name).join(" ")}`.toLowerCase().includes(query.toLowerCase())),
   );
   return (
@@ -46,7 +46,7 @@ export function History() {
         <span className="eyebrow">Workout log</span>
         <h1>History</h1>
         <p>{workouts.length} session{workouts.length === 1 ? "" : "s"}</p>
-        <button className="text-button log-past" onClick={() => navigate("home")}>Log past workout</button>
+        <button className="text-button log-past" onClick={() => navigate("history/new")}>Log past workout</button>
       </header>
       <div className="history-search">
         <label>
@@ -81,8 +81,8 @@ export function History() {
           onClick={() => navigate(`history/${w.id}`)}
         >
           <time>
-            <strong>{new Date(w.completedAt!).getDate()}</strong>
-            {new Date(w.completedAt!).toLocaleString(undefined, {
+            <strong>{new Date(w.startedAt).getDate()}</strong>
+            {new Date(w.startedAt).toLocaleString(undefined, {
               month: "short",
             })}
           </time>
@@ -286,7 +286,7 @@ export function Stats() {
         <p>{completed.length} sessions · {d.streak}-day streak</p>
       </header>
       <div className="stats-destinations">
-        <button onClick={() => navigate("log")}><Icon name="calendar" /><strong>Calendar</strong></button>
+        <button onClick={() => navigate("calendar")}><Icon name="calendar" /><strong>Calendar</strong></button>
         <button onClick={() => navigate("analytics")}><Icon name="stats" /><strong>Volume</strong></button>
         <button onClick={() => navigate("body")}><Icon name="body" /><strong>Body</strong></button>
       </div>
@@ -319,7 +319,7 @@ export function Stats() {
         Estimated one-rep max from retained working sets. Warmups excluded.
       </p>
       {d.prs.map((pr) => (
-        <div className="list-row" key={pr.exerciseId}>
+        <button className="list-row" key={pr.exerciseId} onClick={() => navigate(`exercise/${encodeURIComponent(pr.exerciseId)}`)}>
           <div>
             <strong>{pr.name}</strong>
             <small>
@@ -330,7 +330,7 @@ export function Stats() {
           <strong>
             {displayWeight(pr.oneRmKg, data.profile.unit)} {data.profile.unit}
           </strong>
-        </div>
+        </button>
       ))}
       {!d.prs.length && (
         <p>Log weighted working sets to build your record book.</p>
@@ -355,7 +355,7 @@ export function Analytics() {
         .filter((e) => !selected || e.name === selected)
         .map((e) => ({
           id: `${w.id}-${e.id}`,
-          date: w.completedAt!,
+          date: w.startedAt,
           name: e.name,
           volume: e.loggedSets
             .filter((s) => s.kind !== "warmup")

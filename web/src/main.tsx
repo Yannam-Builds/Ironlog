@@ -1,6 +1,6 @@
 import { Component, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
-import { bootstrap, reconcileBadges, saveProfile } from "./data/store";
+import { bootstrap, readSnapshot, reconcileBadges, saveProfile } from "./data/store";
 import { App } from "./App";
 import type { Exercise } from "./domain/types";
 import { loadCatalog } from "./catalog";
@@ -68,6 +68,13 @@ async function start() {
     </main>,
   );
   await bootstrap(catalog);
+  const openingProfile = (await readSnapshot()).profile;
+  if (openingProfile.tutorialRestartPending)
+    await saveProfile({
+      onboarded: false,
+      onboardingStep: 0,
+      tutorialRestartPending: false,
+    });
   await saveProfile({ theme: currentTheme() });
   if (!showSplash) root.render(
     <main className="app-shell">

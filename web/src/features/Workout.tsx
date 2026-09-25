@@ -36,6 +36,9 @@ import {
   logSet,
   swapExercise,
   newId,
+  saveProfile,
+  clearActiveWorkoutExerciseNotes,
+  controlWorkoutRest,
 } from "../data/store";
 import { plateCalculation, warmupTargets } from "../domain/engine";
 import { progressionSuggestion } from "../domain/engine";
@@ -75,6 +78,8 @@ const volumeComparison = (kg: number) =>
 const vibrate = (pattern: number | number[]) => {
   if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") navigator.vibrate(pattern);
 };
+export const exerciseTutorialUrl = (exerciseName: string) =>
+  `https://www.youtube.com/results?search_query=${encodeURIComponent(exerciseName)}+exercise+tutorial`;
 export function PlateView({
   loadKg,
   barKg,
@@ -325,6 +330,7 @@ function ExerciseCard({
   const [swapping, setSwapping] = useState(false);
   const [replacement, setReplacement] = useState<Exercise>();
   const [targets, setTargets] = useState(false);
+  const [superset, setSuperset] = useState(false);
   const [targetDraft, setTargetDraft] = useState({
     sets: e.sets,
     reps: e.reps,
@@ -382,6 +388,7 @@ function ExerciseCard({
       } else ex.loggedSets.push(set);
       if (ex.restSeconds > 0) {
         workout.restEndsAt = Date.now() + ex.restSeconds * 1000;
+        workout.restPausedRemainingMs = undefined;
         workout.restUsed = true;
       }
     }, "Set logged").then((ok) => {
@@ -424,7 +431,7 @@ function ExerciseCard({
           options before logging.
         </p>
       )}
-      {e.notes && <p className="exercise-note">{e.notes}</p>}
+      {p.planExerciseNotesVisible && e.notes && <p className="exercise-note">{e.notes}</p>}
       <ExerciseNextNote key={e.exerciseId} exerciseId={e.exerciseId} />
       <RecentPerformanceControl exercise={e} dayId={w.dayId} />
       <div className="sets">
@@ -705,6 +712,16 @@ function ExerciseCard({
           >
             Targets, tracking & notes
           </Button>
+          <Button variant="secondary" onClick={() => { setMenu(false); setSuperset(true); }}>Superset group</Button>
+          <a
+            className="button secondary"
+            href={exerciseTutorialUrl(e.name)}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => setMenu(false)}
+          >
+            Watch on YouTube
+          </a>
           <Button
             variant="secondary"
             disabled={mode !== "weight_reps" || kg <= 0}
@@ -823,6 +840,7 @@ function ExerciseCard({
           </Button>
         </Sheet>
       )}
+      {superset && <Sheet title="Superset" onClose={() => setSuperset(false)}>{[["", "No superset"], ["A", "Group A"], ["B", "Group B"], ["C", "Group C"]].map(([value, label]) => <Button key={label} variant={(e.supersetGroup ?? "") === value ? "primary" : "secondary"} onClick={() => mutate((exercise) => { exercise.supersetGroup = value; }, "Superset updated").then((ok) => { if (ok) setSuperset(false); })}>{label}</Button>)}</Sheet>}
       {targets && (
         <Sheet
           title="Targets & exercise notes"
@@ -913,6 +931,9 @@ export function Workout() {
   const [adding, setAdding] = useState(false);
   const [confirm, setConfirm] = useState<"finish" | "discard">();
   const [acknowledged, setAcknowledged] = useState(false);
+  const [workoutMenu, setWorkoutMenu] = useState(false);
+  const [notesSettings, setNotesSettings] = useState(false);
+  const [confirmDeleteNotes, setConfirmDeleteNotes] = useState(false);
   const [now, setNow] = useState(Date.now());
   const [orderedExerciseIds, setOrderedExerciseIds] = useState<string[]>([]);
   const [draggingExerciseId, setDraggingExerciseId] = useState<string>();
@@ -993,7 +1014,10 @@ export function Workout() {
         <Button onClick={() => navigate("home")}>Go Home</Button>
       </Empty>
     );
-  const remaining = Math.max(0, Math.ceil(((w.restEndsAt ?? 0) - now) / 1000));
+  const restPaused = w.restPausedRemainingMs !== undefined;
+  const remaining = restPaused
+    ? Math.max(0, Math.ceil(w.restPausedRemainingMs! / 1000))
+    : Math.max(0, Math.ceil(((w.restEndsAt ?? 0) - now) / 1000));
   const lastPerformed = latestPerformedSet(w, now);
   const orderedExercises = orderedExerciseIds
     .map((id) => w.exercises.find((exercise) => exercise.id === id))
@@ -1053,11 +1077,14 @@ export function Workout() {
           <span className="elapsed-pill"><RollingTimerText value={`${String(Math.floor(elapsedSeconds / 60)).padStart(2, "0")}:${String(elapsedSeconds % 60).padStart(2, "0")}`} /></span>
           <small>elapsed</small>
         </div>
-        <button
-          className="text-button workout-minimize"
-          aria-label="Minimize workout"
-          onClick={() => navigate("home")}
-        >MINIMIZE</button>
+        <div className="workout-header-controls">
+          <button
+            className="text-button workout-minimize"
+            aria-label="Minimize workout"
+            onClick={() => navigate("home")}
+          >MINIMIZE</button>
+          <IconButton name="more" label="Workout options" onClick={() => setWorkoutMenu(true)} />
+        </div>
         {totalVolumeKg > 0 && (
           <p className={`live-volume${previousVolumeKg > totalVolumeKg ? " behind" : ""}`}>
             You’ve lifted {previousVolumeKg > totalVolumeKg ? "↓" : "↑"} {formatNumber(displayWeight(totalVolumeKg, data.profile.unit))} {data.profile.unit}
@@ -1065,30 +1092,25 @@ export function Workout() {
           </p>
         )}
       </div>
-      {w.restEndsAt && (
-        <aside className={`rest-banner${remaining === 0 ? " complete" : ""}`} role="status">
+      {(w.restEndsAt || restPaused) && (
+        <aside className={`rest-banner${remaining === 0 ? " complete" : ""}${restPaused ? " paused" : ""}`} role="status">
           <span className="rest-progress-ring" style={{ background: `conic-gradient(var(--accent) ${restProgress * 360}deg, var(--faint) 0deg)` }} aria-hidden="true">
             <Icon name={remaining === 0 ? "check" : "timer"} size={19} />
           </span>
-          <strong>
-            <RollingTimerText value={remaining
-              ? `${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, "0")}`
-              : "Rest complete"} />
-          </strong>
-          <span>Rest timer
+          <div className="rest-copy">
+            <small>{restPaused ? "REST PAUSED" : "REST"}</small>
+            <strong>
+              <RollingTimerText value={remaining
+                ? `${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, "0")}`
+                : "Rest complete"} />
+            </strong>
             {lastPerformed && <small className="rest-context">{lastPerformed.exercise.name}<br />{recentSetLabel(lastPerformed.exercise, lastPerformed.set, data.profile.unit, displayWeight)}</small>}
-          </span>
-          <button
-            onClick={() =>
-              run(() =>
-                mutateWorkout(w.id, w.revision, (x) => {
-                  x.restEndsAt = undefined;
-                }),
-              )
-            }
-          >
-            Dismiss
-          </button>
+          </div>
+          <div className="rest-controls" aria-label="Rest controls">
+            <button disabled={busy || remaining === 0} aria-label="Add 30 seconds" onClick={() => run(() => controlWorkoutRest(w.id, w.revision, "add30"))}>+30s</button>
+            <button disabled={busy || remaining === 0} aria-label={restPaused ? "Resume rest" : "Pause rest"} onClick={() => run(() => controlWorkoutRest(w.id, w.revision, restPaused ? "resume" : "pause"))}>{restPaused ? "RESUME" : "PAUSE"}</button>
+            <button disabled={busy} aria-label="Skip rest" onClick={() => run(() => controlWorkoutRest(w.id, w.revision, "skip"))}>SKIP</button>
+          </div>
         </aside>
       )}
       <div ref={exerciseListRef} className="workout-exercise-list" aria-label="Workout exercises">
@@ -1194,6 +1216,65 @@ export function Workout() {
             })
           }
         />
+      )}
+      {workoutMenu && (
+        <Sheet title="Workout options" onClose={() => setWorkoutMenu(false)}>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setWorkoutMenu(false);
+              setNotesSettings(true);
+            }}
+          >
+            Exercise notes
+          </Button>
+        </Sheet>
+      )}
+      {notesSettings && (
+        <Sheet title="Workout exercise notes" onClose={() => setNotesSettings(false)}>
+          <Switch
+            label="Show exercise notes"
+            checked={data.profile.planExerciseNotesVisible}
+            onChange={(visible) => {
+              void run(
+                () => saveProfile({ planExerciseNotesVisible: visible }),
+                visible ? "Exercise notes shown" : "Exercise notes hidden",
+              );
+            }}
+          />
+          <Button
+            variant="danger"
+            disabled={busy || !w.exercises.some((exercise) => exercise.notes.trim())}
+            onClick={() => {
+              setNotesSettings(false);
+              setConfirmDeleteNotes(true);
+            }}
+          >
+            Delete notes from this session
+          </Button>
+        </Sheet>
+      )}
+      {confirmDeleteNotes && (
+        <Sheet title="Delete workout exercise notes?" onClose={() => setConfirmDeleteNotes(false)}>
+          <p>This removes every exercise-level note from the active workout. The source plan is unchanged.</p>
+          <Button
+            variant="danger"
+            disabled={busy}
+            onClick={() =>
+              run(
+                () => clearActiveWorkoutExerciseNotes(w.id, w.revision),
+                "Workout exercise notes deleted",
+              ).then((ok) => {
+                if (ok) setConfirmDeleteNotes(false);
+              })
+            }
+          >
+            Confirm delete notes
+          </Button>
+          <Button variant="ghost" disabled={busy} onClick={() => setConfirmDeleteNotes(false)}>
+            Cancel
+          </Button>
+        </Sheet>
       )}
       {confirm && (
         <Sheet

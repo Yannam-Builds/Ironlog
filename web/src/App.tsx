@@ -13,14 +13,17 @@ import {
   History,
   HistoryDetail,
   Stats,
-  Analytics,
-  Body,
-  Photos,
 } from "./features/Progress";
 import { Recovery, Ledger } from "./features/Recovery";
 import { Settings } from "./features/Settings";
 import { Intelligence } from "./features/Intelligence";
+import { HistoricalWorkoutEditor, WorkoutCalendar } from "./features/history/HistoryTools";
+import { ExerciseProgress } from "./features/stats/ExerciseProgress";
+import { VolumeAnalytics } from "./features/stats/VolumeAnalytics";
+import { BodyMeasurements, BodyWeight } from "./features/body/BodyComposition";
+import { ProgressPhotos } from "./features/body/ProgressPhotos";
 import { Research } from "./research";
+import { backFrom } from "./ui/navigation";
 const tabs = ["Home", "Plans", "Log", "Stats", "Settings"];
 const tabRoutes = tabs.map((tab) => tab.toLowerCase());
 const detailTitles: Record<string, string> = {
@@ -28,6 +31,7 @@ const detailTitles: Record<string, string> = {
   recovery: "MUSCLE RECOVERY",
   ledger: "IRON LEDGER",
   body: "BODY TRACKER",
+  measurements: "BODY MEASUREMENTS",
   photos: "PROGRESS PHOTOS",
   analytics: "VOLUME ANALYTICS",
   intelligence: "ATHLETE PROFILE",
@@ -226,9 +230,9 @@ export function App() {
   const detail = !["home", "plans", "log", "stats", "settings"].includes(route);
   const selectedTabRoute = route.startsWith("plan/")
     ? "plans"
-    : route.startsWith("history/")
+    : route.startsWith("history/") || route === "calendar"
       ? "log"
-      : ["analytics", "body", "photos"].includes(route)
+      : route.startsWith("exercise/") || ["analytics", "body", "measurements", "photos"].includes(route)
         ? "stats"
         : ["workout", "recovery", "ledger", "intelligence", "research"].includes(route)
           ? "home"
@@ -245,8 +249,12 @@ export function App() {
       <Workout />
     ) : route === "log" ? (
       <History />
+    ) : route === "history/new" || route.startsWith("history/new/") ? (
+      <HistoricalWorkoutEditor initialDate={route.startsWith("history/new/") ? route.slice(12) : undefined} />
     ) : route.startsWith("history/") ? (
       <HistoryDetail key={route} id={route.slice(8)} />
+    ) : route === "calendar" ? (
+      <WorkoutCalendar />
     ) : route === "stats" ? (
       <Stats />
     ) : route === "settings" ? (
@@ -256,11 +264,15 @@ export function App() {
     ) : route === "ledger" ? (
       <Ledger />
     ) : route === "body" ? (
-      <Body />
+      <BodyWeight />
+    ) : route === "measurements" ? (
+      <BodyMeasurements />
     ) : route === "photos" ? (
-      <Photos />
+      <ProgressPhotos />
     ) : route === "analytics" ? (
-      <Analytics />
+      <VolumeAnalytics />
+    ) : route.startsWith("exercise/") ? (
+      <ExerciseProgress key={route} identity={decodeURIComponent(route.slice(9))} />
     ) : route === "intelligence" ? (
       <Intelligence />
     ) : route === "research" ? (
@@ -310,15 +322,7 @@ export function App() {
                 <IconButton
                   name="back"
                   label="Back"
-                  onClick={() =>
-                    navigate(
-                      route.startsWith("plan/")
-                        ? "plans"
-                        : route.startsWith("history/")
-                          ? "log"
-                          : "home",
-                    )
-                  }
+                  onClick={() => backFrom(route)}
                 />
                 <strong>
                   {route.startsWith("plan/")
@@ -408,7 +412,7 @@ export function App() {
               </div>
             </main>
           </div>
-          <nav className="bottom-nav" aria-label="Main">
+          <nav className={`bottom-nav${data.profile.liquidGlassEnabled ? " liquid-glass" : ""}`} aria-label="Main">
             <span
               className="bottom-nav-selection"
               aria-hidden="true"

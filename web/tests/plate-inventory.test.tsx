@@ -45,6 +45,7 @@ it("saves physical quantities in a gym and restores unlimited semantics when sel
   await db.gyms.put({ id: "old", name: "Old gym", barKg: 20, platesKg: [20] });
   window.location.hash = "#/settings";
   render(<App />);
+  fireEvent.click(await screen.findByRole("button", { name: /^Training/ }));
   fireEvent.click(await screen.findByRole("button", { name: /Gym & plate setup/ }));
   fireEvent.change(screen.getByLabelText("Profile name"), { target: { value: "Home" } });
   fireEvent.click(screen.getByLabelText("Limit to my physical plates"));
@@ -52,12 +53,27 @@ it("saves physical quantities in a gym and restores unlimited semantics when sel
   fireEvent.change(screen.getByLabelText("Total quantities (comma separated)"), { target: { value: "2, 2" } });
   fireEvent.click(screen.getByRole("button", { name: "Save & use setup" }));
   await waitFor(async () => expect((await readSnapshot()).profile.plateInventory).toEqual(inventory));
-  expect((await readSnapshot()).gyms.find(g => g.name === "Home")?.plateInventory).toEqual(inventory);
+  const home = (await readSnapshot()).gyms.find(g => g.name === "Home")!;
+  expect(home.plateInventory).toEqual(inventory);
+  expect((await readSnapshot()).profile.activeGymId).toBe(home.id);
   await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   fireEvent.click(screen.getByRole("button", { name: /Gym & plate setup/ }));
   await waitFor(() => expect(screen.getByRole("button", { name: "Save & use setup" })).toBeEnabled());
   fireEvent.click(screen.getByRole("button", { name: /^Old gym/ }));
-  await waitFor(async () => expect((await readSnapshot()).profile.plateInventory).toBeUndefined());
+  await waitFor(async () => expect((await readSnapshot()).profile.activeGymId).toBe("old"));
+  expect((await readSnapshot()).profile.plateInventory).toBeUndefined();
+  fireEvent.click(screen.getByRole("button", { name: "Edit Old gym" }));
+  fireEvent.change(screen.getByLabelText("Profile name"), { target: { value: "Renamed gym" } });
+  fireEvent.change(screen.getByLabelText("Bar weight (kg)"), { target: { value: "15" } });
+  await waitFor(() => expect(screen.getByRole("button", { name: "Save & use setup" })).toBeEnabled());
+  fireEvent.click(screen.getByRole("button", { name: "Save & use setup" }));
+  await waitFor(async () => {
+    const snapshot = await readSnapshot();
+    expect(snapshot.gyms.find(g => g.id === "old")).toMatchObject({ name: "Renamed gym", barKg: 15 });
+    expect(snapshot.gyms.filter(g => g.id === "old")).toHaveLength(1);
+    expect(snapshot.profile.activeGymId).toBe("old");
+  });
+  await screen.findByText("Gym setup saved", { exact: true });
 });
 
 

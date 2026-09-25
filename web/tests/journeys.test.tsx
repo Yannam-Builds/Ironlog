@@ -214,7 +214,9 @@ it("creates and selects a custom exercise during an active workout", async () =>
 });
 it("starts with onboarding and no invented rewards", async () => {
   render(<App />);
-  expect(await screen.findByText("Make it your own.")).toBeInTheDocument();
+  expect(
+    await screen.findByText("Train with evidence. Progress like a game."),
+  ).toBeInTheDocument();
   expect(screen.queryByText(/earned/i)).not.toBeInTheDocument();
 });
 it("shows five native tabs and navigates to settings", async () => {
