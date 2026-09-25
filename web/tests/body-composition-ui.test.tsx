@@ -11,9 +11,11 @@ it("logs canonical bodyweight and persists a weight goal", async () => {
   expect(await screen.findByRole("heading", { name: "Body weight" })).toBeVisible();
   fireEvent.change(screen.getByLabelText("kg"), { target: { value: "81.5" } });
   await act(async () => fireEvent.click(screen.getByRole("button", { name: "Log weight" })));
+  expect(await screen.findByText("Body weight saved")).toBeVisible();
   await waitFor(() => expect(screen.getByRole("button", { name: "Save goals" })).toBeEnabled());
   fireEvent.change(screen.getByLabelText("Goal (kg)"), { target: { value: "78" } });
   await act(async () => fireEvent.click(screen.getByRole("button", { name: "Save goals" })));
+  expect(await screen.findByText("Body goals saved")).toBeVisible();
   await waitFor(async () => {
     const data = await readSnapshot();
     expect(data.measurements.find((row) => row.type === "bodyweight")?.value).toBe(81.5);
@@ -28,9 +30,11 @@ it("saves a multi-field measurement entry and its goal", async () => {
   fireEvent.change(screen.getByLabelText("Waist (cm)"), { target: { value: "82" } });
   await act(async () => fireEvent.click(screen.getByRole("button", { name: "Save" })));
   await waitFor(() => expect(screen.queryByRole("heading", { name: "Add measurement" })).not.toBeInTheDocument());
+  expect(await screen.findByText("Measurements saved")).toBeVisible();
   expect((await readSnapshot()).measurements).toHaveLength(2);
   fireEvent.click(screen.getByRole("button", { name: /Chest 102 cm/ }));
   fireEvent.change(screen.getByLabelText("Goal (cm)"), { target: { value: "105" } });
   await act(async () => fireEvent.click(screen.getByRole("button", { name: "Save goal" })));
+  expect(await screen.findByText("Measurement goal saved")).toBeVisible();
   await waitFor(async () => expect((await readSnapshot()).profile.measurementGoals?.chest).toBe(105));
 });
