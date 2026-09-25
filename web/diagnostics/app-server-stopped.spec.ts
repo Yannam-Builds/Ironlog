@@ -4,6 +4,7 @@ import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import { extname, resolve, sep } from "node:path";
 import { test, expect } from "@playwright/test";
+import { completeOnboarding } from "../tests/browser/onboarding";
 
 test("cached app resumes and finishes with its HTTP origin stopped", async ({
   page,
@@ -55,18 +56,7 @@ test("cached app resumes and finishes with its HTTP origin stopped", async ({
   page.on("pageerror", (error) => errors.push(String(error)));
   try {
     await page.goto(appUrl);
-    await page.getByLabel("Your name").fill("Origin Offline QA");
-    for (const heading of [
-      "What are you training for?",
-      "Your training, your pace.",
-      "A starting point.",
-    ]) {
-      await page.getByRole("button", { name: "Continue", exact: true }).click();
-      await expect(page.getByRole("heading", { name: heading })).toBeVisible();
-    }
-    await page
-      .getByRole("button", { name: "Start training", exact: true })
-      .click();
+    await completeOnboarding(page, "Origin Offline QA");
     await page
       .getByRole("button", { name: "Start freestyle", exact: true })
       .click();
