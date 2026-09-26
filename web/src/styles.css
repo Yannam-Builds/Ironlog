@@ -1115,7 +1115,7 @@ body.plan-reordering {
   height: 100%;
   pointer-events: none;
 }
-.today-card > * {
+.today-card > :not(.card-shine-layer) {
   position: relative;
   z-index: 1;
 }

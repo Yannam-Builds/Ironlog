@@ -276,6 +276,20 @@ test("plan cards reorder by pointer and the top plan becomes active", async ({ p
     x2: "300",
     durations: ["10s", "10s"],
   });
+  const cardLayout = await page.locator(".today-card").evaluate((card) => {
+    const shineLayer = card.querySelector<SVGSVGElement>(".card-shine-layer")!;
+    const eyebrow = card.querySelector<HTMLElement>(".eyebrow")!;
+    const cardBounds = card.getBoundingClientRect();
+    const shineBounds = shineLayer.getBoundingClientRect();
+    return {
+      layerPosition: getComputedStyle(shineLayer).position,
+      layerTop: Math.round(shineBounds.top - cardBounds.top),
+      headerTop: Math.round(eyebrow.getBoundingClientRect().top - cardBounds.top),
+    };
+  });
+  expect(cardLayout.layerPosition).toBe("absolute");
+  expect(cardLayout.layerTop).toBeLessThanOrEqual(2); // card's one-pixel border
+  expect(cardLayout.headerTop).toBeLessThan(60);
 });
 test("primary tabs swipe one page at a time in both directions", async ({ page }) => {
   await onboard(page);
