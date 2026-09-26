@@ -10,12 +10,12 @@
 
 **A strength-training companion that keeps the workout, recovery context, and earned progress in one local record.**
 
-[Open the web app](https://yannam-builds.github.io/Ironlog/app/) · [Explore the website](https://yannam-builds.github.io/Ironlog/) · [See the native screens](#inside-the-android-app) · [Build locally](#build-and-verify)
+[Open the web app](https://yannam-builds.github.io/Ironlog/app/) · [Download Android preview](https://github.com/Yannam-Builds/Ironlog/releases/tag/v0.1.0-pre-alpha.8) · [See the native screens](#inside-the-android-app) · [Build locally](#build-and-verify)
 
 </div>
 
 > [!NOTE]
-> IronLog is in active pre-alpha development. The Android source defaults to `0.1.0-pre-alpha.8` (`versionCode 9`). There is no public APK release or Play Store listing yet.
+> IronLog is in active pre-alpha development. The signed [`0.1.0-pre-alpha.8` Android preview APK](https://github.com/Yannam-Builds/Ironlog/releases/tag/v0.1.0-pre-alpha.8) is available; there is no Play Store listing yet.
 
 ## The training loop
 
