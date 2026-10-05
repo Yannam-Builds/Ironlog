@@ -2340,7 +2340,9 @@ body.workout-reordering { cursor: grabbing; user-select: none; }
 .gym-stock-row { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto 44px; align-items: center; gap: 4px; padding: 8px 0; border-bottom: 1px solid var(--cardBorder); }
 .gym-color { width: 36px; height: 36px; border-radius: 50%; border: 2px solid var(--cardBorder); justify-self: center; }
 .gym-pairs { display: flex; align-items: center; gap: 4px; }
-.gym-pairs button { min-width: 44px; min-height: 44px; padding: 4px; border: 0; border-radius: 50%; background: var(--surface); color: var(--text); font-size: 1.25rem; cursor: pointer; }
+.gym-pairs button { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; padding: 4px; border: 0; border-radius: 50%; background: transparent; color: var(--muted); cursor: pointer; }
+.gym-pairs button:hover { background: var(--surface); }
+.gym-stock-row > .icon-button { color: var(--danger); }
 .gym-pairs button:disabled { opacity: .4; cursor: default; }
 .gym-pairs output { min-width: 20px; text-align: center; }
 .gym-palette { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; }

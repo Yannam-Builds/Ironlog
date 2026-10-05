@@ -20,7 +20,10 @@ The photo-calendar UI fixtures now pin their September test clock. Their former 
 - Android: 761 JVM tests pass; debug lint reports zero errors. Signed release assembly passes. Existing ObjectBox transaction-owner warnings remain an investigation item from the September audit.
 - Browser: the new editor was exercised at 320 px, including color selection, equipment exclusion and saving. Document width remains 320 px. Local screenshot: ignored `web/output/playwright/gym-320.png`.
 - Browser acceptance: all 46 Chromium/WebKit scenarios pass, including swipe navigation, plan dragging, offline resume, multi-tab persistence, backups, themes and large text.
-- Versioned APK installation is recorded below when complete.
+- APK `0.1.0-pre-alpha.9` / code 10 verifies with Signature Scheme v2 and one signer. It installs, completes sensible-default onboarding and reaches Home as Athlete on the fresh API 36.1 emulator. A second `adb install -r` succeeds, retains firstInstallTime `2026-10-05 23:45:09` and resumes Home. No AndroidRuntime fatal entries were recorded.
+- APK SHA-256: `b5e7d1adcf4d3e541da0bf50da932e60d58e623b961b9024a2437650193082fe`.
+- The existing emulator refused installation due to storage pressure; its data was preserved. A separate `IronLog_Gym_QA_20261005` AVD was created under ignored `output/android/avd/` on Z:. Local evidence is in `output/android/`.
+- The copied calculator tests also pass in UnifiedPort. Its other in-progress native changes were not included in the GitHub release.
 
 ## Workspace and next slice
 

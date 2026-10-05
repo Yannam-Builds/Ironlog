@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useApp, canonicalWeight } from "../ui/context";
-import { Button, Field, IconButton, Sheet, Switch } from "../ui/components";
+import { Button, Field, Icon, IconButton, Sheet, Switch } from "../ui/components";
 import { saveGym, selectGym, deleteGym, newId } from "../data/store";
 import type { Gym, PlateStock } from "../domain/types";
 
@@ -145,7 +145,7 @@ export function GymProfiles({ onClose }: { onClose: () => void }) {
                     disabled={busy || row.quantity < 2}
                     onClick={() => change(i, { quantity: row.quantity - 2 })}
                   >
-                    −
+                    <Icon name="remove-filled" />
                   </button>
                   <output
                     aria-label={`${displayWeight(row.weightKg, unit)} ${unit} pairs`}
@@ -157,12 +157,12 @@ export function GymProfiles({ onClose }: { onClose: () => void }) {
                     disabled={busy}
                     onClick={() => change(i, { quantity: row.quantity + 2 })}
                   >
-                    +
+                    <Icon name="add-filled" />
                   </button>
                 </div>
               )}
               <IconButton
-                name="trash"
+                name="close-filled"
                 label={`Remove ${displayWeight(row.weightKg, unit)} ${unit} plate size`}
                 onClick={() =>
                   setStock((rows) => rows.filter((_, index) => index !== i))
