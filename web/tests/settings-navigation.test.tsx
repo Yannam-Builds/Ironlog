@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { App } from "../src/App";
-import { bootstrap, db, readSnapshot, saveProfile } from "../src/data/store";
+import { bootstrap, db, readSnapshot, saveProfile, saveGym, deleteGym } from "../src/data/store";
 
 afterEach(cleanup);
 beforeEach(async () => {
@@ -10,6 +10,18 @@ beforeEach(async () => {
   await bootstrap([]);
   await saveProfile({ onboarded: true, onboardingStep: 10 });
   window.location.hash = "#/settings";
+});
+it("edits the default bar without changing an active gym and restores it after deletion", async () => {
+  await saveGym({ id: "g", name: "Gym", barKg: 15, platesKg: [5] }, true);
+  render(<App />);
+  fireEvent.click(await screen.findByRole("button", { name: /^Training/ }));
+  fireEvent.click(screen.getByRole("button", { name: /Default bar weight/ }));
+  fireEvent.change(screen.getByLabelText("Default bar weight (kg)"), { target: { value: "17.5" } });
+  fireEvent.click(screen.getByRole("button", { name: "Save bar weight" }));
+  await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  expect((await readSnapshot()).profile.barKg).toBe(15);
+  await deleteGym("g");
+  expect((await readSnapshot()).profile.barKg).toBe(17.5);
 });
 
 it("opens focused settings destinations and returns to the searchable console", async () => {

@@ -30,6 +30,43 @@ it("rejects corrupt native finite quantities", () => {
   payload.data.app_settings = [{ key: "gym_profiles_json", value: JSON.stringify([{ id: "bad", name: "Bad", barWeightKg: 20, plates: [{ weightKg: 20, quantity: -1 }] }]) }];
   expect(() => decodeAndroidBackup(JSON.stringify(payload))).toThrow();
 });
+it("preserves the base setup and honors native default-bar edits and final gym deletion", () => {
+  const base = { barKg: 12, platesKg: [3], plateInventory: [{ weightKg: 3, quantity: 3 }] };
+  const active = { ...snapshot, profile: { ...snapshot.profile, activeGymId: "home", basePlateSetup: base } };
+  const payload = JSON.parse(encodeAndroidBackup(active));
+  const barSetting = payload.data.app_settings.find((s: { key: string }) => s.key === "ironlog_settings");
+  expect(JSON.parse(barSetting?.value ?? "{}").barWeightKg).toBe(12);
+  const first = decodeAndroidBackup(JSON.stringify(payload)).snapshot;
+  expect(first.profile.basePlateSetup).toEqual(base);
+  barSetting.value = JSON.stringify({ barWeightKg: 17.5, hapticFeedback: false, defaultRestHeavySeconds: 210 });
+  expect(decodeAndroidBackup(JSON.stringify(payload)).snapshot.profile.basePlateSetup?.barKg).toBe(17.5);
+  payload.data.app_settings = payload.data.app_settings.filter((s: { key: string }) => s.key !== "active_gym_profile_id");
+  payload.data.app_settings.find((s: { key: string }) => s.key === "gym_profiles_json").value = "[]";
+  const decoded = decodeAndroidBackup(JSON.stringify(payload)).snapshot;
+  expect(decoded.profile).toMatchObject({ barKg: 17.5, platesKg: [3], plateInventory: base.plateInventory });
+  expect(decoded.profile.activeGymId).toBeUndefined();
+  delete payload.webExtension;
+  const native = decodeAndroidBackup(JSON.stringify(payload)).snapshot;
+  expect(native.profile.barKg).toBe(17.5);
+  const reexported = JSON.parse(encodeAndroidBackup(native));
+  expect(JSON.parse(reexported.data.app_settings.find((s: { key: string }) => s.key === "ironlog_settings").value))
+    .toMatchObject({ barWeightKg: 17.5, hapticFeedback: false, defaultRestHeavySeconds: 210 });
+});
+it("rejects malformed native default-bar values instead of fabricating a zero", () => {
+  const payload = JSON.parse(encodeAndroidBackup(snapshot));
+  const setting = payload.data.app_settings.find((s: { key: string }) => s.key === "ironlog_settings");
+  for (const value of [false, "", "   ", "NaN", "Infinity", -1, "0x10"]) {
+    setting.value = JSON.stringify({ barWeightKg: value });
+    expect(() => decodeAndroidBackup(JSON.stringify(payload))).toThrow("default bar");
+  }
+});
+it("keeps an explicitly selected web-only unlimited gym on an unchanged Android round trip", () => {
+  const original = { ...snapshot, profile: { ...snapshot.profile, activeGymId: "legacy", barKg: 15, plateInventory: undefined,
+    basePlateSetup: { barKg: 12, platesKg: [3] } }, gyms: [{ ...snapshot.gyms[1], barKg: 15 }] };
+  const decoded = decodeAndroidBackup(encodeAndroidBackup(original)).snapshot;
+  expect(decoded.profile).toMatchObject({ activeGymId: "legacy", barKg: 15, basePlateSetup: { barKg: 12 } });
+  expect(decoded.profile.plateInventory).toBeUndefined();
+});
 it("preserves plate colors, exclusions and explicit selection among equal setups", () => {
   const first = { ...snapshot.gyms[0], platesKg: [20], plateInventory: [{ weightKg: 20, quantity: 3, color: "#1565C0" }], unavailableEquipment: ["Cable"] };
   const second = { ...first, id: "second", name: "Second" };

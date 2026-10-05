@@ -170,6 +170,12 @@ export const profileSchema = z.object({
   platesKg: z.array(z.number().positive()),
   activeGymId: z.string().optional(),
   plateInventory: z.array(plateStock).optional(),
+  basePlateSetup: z.object({
+    barKg: number,
+    platesKg: z.array(z.number().finite().positive()),
+    plateInventory: z.array(plateStock).optional(),
+  }).optional(),
+  nativeSettings: z.record(z.string(), z.unknown()).optional(),
   keepAwake: z.boolean(),
   cardShineEnabled: z.boolean().default(true),
   liquidGlassEnabled: z.boolean().default(true),

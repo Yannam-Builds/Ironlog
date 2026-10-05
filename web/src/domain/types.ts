@@ -160,6 +160,10 @@ export interface Profile {
   activeGymId?: string;
   /** Total physical plates, shared between both sides. Missing means unlimited. */
   plateInventory?: PlateStock[];
+  /** Setup used without a named gym; active gym values above are materialized separately. */
+  basePlateSetup?: PlateSetup;
+  /** Imported native preferences retained for a lossless Android settings round trip. */
+  nativeSettings?: Record<string, unknown>;
   keepAwake: boolean;
   cardShineEnabled: boolean;
   liquidGlassEnabled: boolean;
@@ -202,6 +206,11 @@ export interface PlateStock {
   /** Total physical plates. A complete pair contributes one plate per side. */
   quantity: number;
   color?: string;
+}
+export interface PlateSetup {
+  barKg: number;
+  platesKg: number[];
+  plateInventory?: PlateStock[];
 }
 export interface Gym {
   id: string;

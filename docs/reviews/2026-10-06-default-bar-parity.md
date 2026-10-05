@@ -1,0 +1,13 @@
+# Default bar and gym fallback parity — 6 October 2026
+
+Deleting the final gym formerly cleared only its identity and left its bar and plate inventory materialized in the browser profile. This slice preserves the base setup when first activating a gym, retains it across gym switches and edits, and restores it transactionally when no gym remains. Manual finite inventory, odd spare quantities, empty inventory and legacy unlimited stock remain distinct.
+
+Settings → Training now includes a default bar editor in kilograms with the native 0–100 kg range. Changing it while a gym is active updates the base only; the active gym retains its own bar. Kotlin reference: SettingsScreen.saveBarWeight, GymProfilesScreen deletion and DEFAULT_PLATES, ActiveWorkoutScreen calculator consumers, and AppDataViewModel settings serialization.
+
+Older web active profiles cannot recover a base that previous versions overwrote. If no saved base exists, the fallback explicitly uses Kotlin's 20 kg bar and two pairs of each 20/15/10/5/2.5/1.25 kg plate size. Existing inactive/manual setups are captured as-is when activating a gym. A native backup's canonical global bar comes from the ironlog_settings JSON blob, not a standalone barWeightKg row. The imported blob is retained for re-export so updating the bar does not discard unrelated native preferences. Canonical native changes take precedence over a stale web extension. Unlimited gyms unsupported by Android carry an explicit web-only selection marker; native selection takes precedence whenever present.
+
+Regression tests first reproduced final-gym stale stock, unlimited-base clearing after restore, missing canonical settings transfer and lost unlimited-gym selection. Coverage includes switching/editing, independent bar edits, rejected invalid values, native defaults, failed-write rollback, browser ZIP retention and native JSON round trips with canonical edits/deletion and unrelated preferences retained.
+
+Verification: 47 Vitest files / 239 tests pass; TypeScript and production build pass; all 185 output files verified. Manual Chrome QA at 320 px confirms the editor fits, 101 kg disables save, and 17.5 kg saves visibly. Screenshot: ignored web/output/playwright/default-bar-320.png. CI/deployment evidence is recorded in the closing handoff. No Android source or APK was changed: native already implements this behavior.
+
+Remaining P03/P14 work is the actual full exercise library workflow. P15 still needs remaining portable-setting mappings and consumers; retaining native settings does not make Android-only integrations available in a browser. Other parity gaps remain in the September audit.
