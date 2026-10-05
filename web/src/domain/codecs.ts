@@ -10,7 +10,8 @@ import {
   type Tracking,
 } from "./types";
 import { localDateKey, parseHistoryDate } from "./dates";
-import { snapshotSchema } from "../data/schema";
+import { snapshotSchema, profileSchema } from "../data/schema";
+import { basePlateSetup, nativeDefaultPlateSetup } from "./gym-setup";
 import { z } from "zod";
 import { isTimed, trackingMode } from "./tracking";
 import { resolveExerciseCandidate, type ExerciseResolution } from "./exercise-resolution";
@@ -355,6 +356,8 @@ export function encodeAndroidBackup(snapshot: AppSnapshot): string {
   data.app_settings = Object.entries(snapshot.profile.exerciseNextNotes ?? {}).map(([key, value]) => ({
     id: key, key, value, value_type: "string", ...stamp,
   }));
+  data.app_settings.push({ id: "ironlog_settings", key: "ironlog_settings",
+    value: JSON.stringify({ ...snapshot.profile.nativeSettings, barWeightKg: basePlateSetup(snapshot.profile).barKg }), value_type: "json", ...stamp });
   const finiteGyms = snapshot.gyms.filter(g => g.plateInventory !== undefined);
   let activeGym = snapshot.profile.activeGymId
     ? finiteGyms.find(g => g.id === snapshot.profile.activeGymId)
@@ -400,6 +403,7 @@ export function encodeAndroidBackup(snapshot: AppSnapshot): string {
       webExtension: {
         profile: snapshot.profile,
         currentSetupId,
+        unsupportedActiveGymId: snapshot.gyms.find(g => g.id === snapshot.profile.activeGymId && g.plateInventory === undefined)?.id,
         checkins: snapshot.checkins,
         gyms: snapshot.gyms,
         workouts: snapshot.workouts,
@@ -758,13 +762,31 @@ export function decodeAndroidBackup(raw: string): {
     }),
     ...extendedGyms.filter(g => g.plateInventory === undefined && !gyms.some(native => native.id === g.id)),
   ] : extendedGyms;
-  const selectedGym = mergedGyms.find(g => g.id === activeGymId) ?? activeGym;
+  const selectedGym = mergedGyms.find(g => g.id === activeGymId) ?? activeGym ??
+    (!activeGymId ? mergedGyms.find(g => g.id === ext.unsupportedActiveGymId && g.plateInventory === undefined) : undefined);
+  const sourceProfile = profileSchema.parse({ ...profile, ...obj(ext.profile) });
+  const nativeSetting = table("app_settings").find(s => s.key === "ironlog_settings");
+  let nativeSettings = sourceProfile.nativeSettings;
+  const base = ext.profile == null ? nativeDefaultPlateSetup() : basePlateSetup(sourceProfile);
+  if (nativeSetting) {
+    let parsed = parse(str(nativeSetting.value));
+    // Older SettingsRepository JSON rows can contain a quoted JSON object.
+    if (typeof parsed === "string") parsed = parse(parsed);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw Error("Invalid native settings");
+    nativeSettings = obj(parsed);
+    const rawBar = nativeSettings.barWeightKg ?? 20;
+    const bar = Number(rawBar);
+    if ((typeof rawBar !== "string" && typeof rawBar !== "number") ||
+      !/^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/.test(str(rawBar).trim()) || !Number.isFinite(bar) || bar < 0)
+      throw Error("Invalid native default bar weight");
+    base.barKg = bar;
+  }
   const gymProfile = gymSetting ? selectedGym
     ? { activeGymId: selectedGym.id === ext.currentSetupId ? undefined : selectedGym.id,
         barKg: selectedGym.barKg, platesKg: selectedGym.platesKg, plateInventory: selectedGym.plateInventory }
-    : { activeGymId: undefined } : {};
+    : { ...base, activeGymId: undefined } : !sourceProfile.activeGymId ? base : {};
   const snapshot = snapshotSchema.parse({
-    profile: { ...(ext.profile != null ? obj(ext.profile) : profile), ...gymProfile, exerciseNextNotes: { ...obj(obj(ext.profile).exerciseNextNotes), ...exerciseNextNotes } },
+    profile: { ...sourceProfile, nativeSettings, basePlateSetup: base, ...gymProfile, exerciseNextNotes: { ...sourceProfile.exerciseNextNotes, ...exerciseNextNotes } },
     plans,
     workouts: extendedWorkouts ?? workouts,
     exercises,

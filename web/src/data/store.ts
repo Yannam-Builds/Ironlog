@@ -1,4 +1,5 @@
 import Dexie, { liveQuery, type Table } from "dexie";
+import { basePlateSetup } from "../domain/gym-setup";
 import {
   defaultProfile,
   type AppSnapshot,
@@ -604,7 +605,8 @@ export async function saveGym(g: Gym, activate = false) {
     await db.gyms.put(valid);
     const profile = await db.profiles.get("local");
     if (activate || profile?.activeGymId === valid.id)
-      await db.profiles.put({ ...profileSchema.parse({ ...defaultProfile, ...profile, ...gymSetup(valid) }), id: "local" });
+      await db.profiles.put({ ...profileSchema.parse({ ...defaultProfile, ...profile,
+        basePlateSetup: basePlateSetup({ ...defaultProfile, ...profile }), ...gymSetup(valid) }), id: "local" });
   });
 }
 export async function selectGym(id: string) {
@@ -612,7 +614,8 @@ export async function selectGym(id: string) {
     const gym = await db.gyms.get(id);
     if (!gym) throw Error("This gym no longer exists");
     const profile = await db.profiles.get("local");
-    await db.profiles.put({ ...profileSchema.parse({ ...defaultProfile, ...profile, ...gymSetup(gym) }), id: "local" });
+    await db.profiles.put({ ...profileSchema.parse({ ...defaultProfile, ...profile,
+      basePlateSetup: basePlateSetup({ ...defaultProfile, ...profile }), ...gymSetup(gym) }), id: "local" });
   });
 }
 export async function deleteGym(id: string) {
@@ -621,8 +624,21 @@ export async function deleteGym(id: string) {
     const profile = await db.profiles.get("local");
     if (profile?.activeGymId === id) {
       const next = await db.gyms.toCollection().first();
-      await db.profiles.put({ ...profile, ...(next ? gymSetup(next) : { activeGymId: undefined }) });
+      const base = basePlateSetup(profile);
+      await db.profiles.put({ ...profile, basePlateSetup: base,
+        ...(next ? gymSetup(next) : { ...base, activeGymId: undefined }) });
     }
+  });
+}
+export async function saveDefaultBarWeight(barKg: number) {
+  if (!Number.isFinite(barKg) || barKg < 0 || barKg > 100)
+    throw Error("Enter a bar weight between 0 and 100 kg.");
+  await db.transaction("rw", db.profiles, async () => {
+    const row = await db.profiles.get("local");
+    const profile = profileSchema.parse({ ...defaultProfile, ...row });
+    const base = { ...basePlateSetup(profile), barKg };
+    await db.profiles.put({ ...profile, basePlateSetup: base,
+      ...(!profile.activeGymId ? { barKg } : {}), id: "local" });
   });
 }
 export async function deleteWorkout(id: string) {

@@ -14,6 +14,7 @@ import { FontPicker } from "../ui/FontPicker";
 import { SpacingPicker } from "../ui/SpacingPicker";
 import {
   saveProfile,
+  saveDefaultBarWeight,
   restoreSnapshot,
   resetData,
   bootstrap,
@@ -31,6 +32,7 @@ import {
 import type { AppSnapshot } from "../domain/types";
 import { ExercisePicker } from "./Plans";
 import { GymProfiles } from "./GymProfiles";
+import { basePlateSetup } from "../domain/gym-setup";
 import { loadCatalog } from "../catalog";
 import {
   filterSettingsDestinations,
@@ -48,6 +50,9 @@ export function Settings() {
   const [warnings, setWarnings] = useState<string[]>([]);
   const [library, setLibrary] = useState(false);
   const [gym, setGym] = useState(false);
+  const [barEditor, setBarEditor] = useState(false);
+  const [barDraft, setBarDraft] = useState("");
+  const validBar = barDraft.trim() !== "" && Number.isFinite(Number(barDraft)) && Number(barDraft) >= 0 && Number(barDraft) <= 100;
   const [storage, setStorage] = useState("");
   const [settingsQuery, setSettingsQuery] = useState("");
   const [destination, setDestination] = useState<Exclude<SettingsDestinationId, "intelligence">>();
@@ -202,6 +207,12 @@ export function Settings() {
       </section>
       <section id="training-tools" hidden={destination !== "training"}>
         <h2>Training tools</h2>
+        <button className="list-row" disabled={busy} onClick={() => {
+          setBarDraft(String(basePlateSetup(p).barKg)); setBarEditor(true);
+        }}>
+          <span><strong>Default bar weight</strong><small>{basePlateSetup(p).barKg} kg · used without a gym profile</small></span>
+          <Icon name="next" />
+        </button>
         <button className="list-row" onClick={() => setGym(true)}>
           <strong>Gym & plate setup</strong>
           <Icon name="next" />
@@ -456,6 +467,16 @@ export function Settings() {
         />
       )}
       {gym && <GymProfiles onClose={() => setGym(false)} />}
+      {barEditor && <Sheet title="Default bar weight" onClose={() => setBarEditor(false)}>
+        <Field label="Default bar weight (kg)">
+          <input type="number" inputMode="decimal" min="0" max="100" step="any" value={barDraft}
+            disabled={busy} onChange={(event) => setBarDraft(event.target.value)} />
+        </Field>
+        <p className="muted">Enter 0–100 kg. Gym profiles keep their own bar weights.</p>
+        <Button disabled={busy || !validBar} onClick={() => run(async () => {
+          await saveDefaultBarWeight(Number(barDraft)); setBarEditor(false);
+        }, "Default bar weight saved")}>Save bar weight</Button>
+      </Sheet>}
     </>
   );
 }
