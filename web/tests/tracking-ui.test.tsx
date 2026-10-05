@@ -2,7 +2,25 @@ import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/re
 import { beforeEach, afterEach, expect, it } from 'vitest';
 import { App } from '../src/App';
 import { bootstrap, db, saveProfile, startWorkout, mutateWorkout, readSnapshot } from '../src/data/store';
+import { savePlan } from '../src/data/store';
+import { instantiatePlan } from '../src/domain/plans';
+import templates from '../src/generated/templates.json';
+import type { Plan } from '../src/domain/types';
+import { trackingDimensions } from '../src/domain/tracking';
 beforeEach(async()=>{await db.delete();await db.open();await bootstrap([]);await saveProfile({onboarded:true});});afterEach(cleanup);
+it('shows load and reps and logs an unmatched starter movement instead of a tracking warning', async()=>{
+ const plan=instantiatePlan(templates[0] as Plan);await savePlan(plan);
+ const w=await startWorkout(plan.id,plan.days[0].id);window.location.hash='#/workout';render(<App/>);
+ const loads=await screen.findAllByLabelText(/^(KG|Added load \(KG\)|Assistance \(KG\))$/);const reps=screen.getAllByLabelText('Reps');
+ expect(loads).toHaveLength(w.exercises.filter(e=>trackingDimensions(e).load).length);
+ expect(reps).toHaveLength(w.exercises.filter(e=>trackingDimensions(e).reps).length);
+ expect(screen.queryByText(/Choose a supported tracking type/)).not.toBeInTheDocument();
+ fireEvent.change(loads[0],{target:{value:'40'}});fireEvent.change(reps[0],{target:{value:'10'}});
+ fireEvent.click(screen.getAllByRole('button',{name:/^Log$/})[0]);
+ await waitFor(()=>expect(screen.getByText('40 kg × 10')).toBeVisible());
+ expect((await readSnapshot()).workouts[0].exercises[0].loggedSets[0]).toMatchObject({weightKg:40,reps:10});
+ await waitFor(()=>expect(screen.queryByText('Saving…')).not.toBeInTheDocument());
+});
 it('logs and reloads weighted-duration with load and seconds in separate dimensions',async()=>{
  const w=await startWorkout();await mutateWorkout(w.id,w.revision,x=>x.exercises.push({id:'hold',exerciseId:'hold',name:'Cable hold',sets:3,reps:'60',restSeconds:0,notes:'',supersetGroup:'',isWarmup:false,tracking:'duration_weight',muscle:'chest',equipment:'cable',pendingWarmups:[],loggedSets:[]}));
  window.location.hash='#/workout';render(<App/>);
