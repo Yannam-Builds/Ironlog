@@ -595,15 +595,34 @@ export async function deleteAllPhotos() {
 export async function saveCheckin(c: RecoveryCheckin) {
   await db.checkins.put(snapshotSchema.shape.checkins.element.parse(c));
 }
-export async function saveGym(g: Gym) {
-  await db.gyms.put(snapshotSchema.shape.gyms.element.parse(g));
+function gymSetup(g: Gym): Partial<Profile> {
+  return { activeGymId: g.id, barKg: g.barKg, platesKg: g.platesKg, plateInventory: g.plateInventory };
+}
+export async function saveGym(g: Gym, activate = false) {
+  const valid = snapshotSchema.shape.gyms.element.parse(g);
+  await db.transaction("rw", db.gyms, db.profiles, async () => {
+    await db.gyms.put(valid);
+    const profile = await db.profiles.get("local");
+    if (activate || profile?.activeGymId === valid.id)
+      await db.profiles.put({ ...profileSchema.parse({ ...defaultProfile, ...profile, ...gymSetup(valid) }), id: "local" });
+  });
+}
+export async function selectGym(id: string) {
+  await db.transaction("rw", db.gyms, db.profiles, async () => {
+    const gym = await db.gyms.get(id);
+    if (!gym) throw Error("This gym no longer exists");
+    const profile = await db.profiles.get("local");
+    await db.profiles.put({ ...profileSchema.parse({ ...defaultProfile, ...profile, ...gymSetup(gym) }), id: "local" });
+  });
 }
 export async function deleteGym(id: string) {
   await db.transaction("rw", db.gyms, db.profiles, async () => {
     await db.gyms.delete(id);
     const profile = await db.profiles.get("local");
-    if (profile?.activeGymId === id)
-      await db.profiles.put({ ...profile, activeGymId: undefined });
+    if (profile?.activeGymId === id) {
+      const next = await db.gyms.toCollection().first();
+      await db.profiles.put({ ...profile, ...(next ? gymSetup(next) : { activeGymId: undefined }) });
+    }
   });
 }
 export async function deleteWorkout(id: string) {

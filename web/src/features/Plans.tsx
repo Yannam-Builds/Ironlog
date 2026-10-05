@@ -61,7 +61,9 @@ export function ExercisePicker({
     duration_distance: "Duration & distance",
     cardio: "Cardio duration",
   };
+  const unavailableEquipment = data.gyms.find(g => g.id === data.profile.activeGymId)?.unavailableEquipment ?? [];
   const list = data.exercises
+    .filter(e => !unavailableEquipment.some(value => value.toLowerCase() === e.equipment?.toLowerCase()))
     .filter((e) => e.name.toLowerCase().includes(query.toLowerCase()))
     .slice(0, 50);
   return (

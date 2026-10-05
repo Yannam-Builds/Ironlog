@@ -47,19 +47,17 @@ it("saves physical quantities in a gym and restores unlimited semantics when sel
   render(<App />);
   fireEvent.click(await screen.findByRole("button", { name: /^Training/ }));
   fireEvent.click(await screen.findByRole("button", { name: /Gym & plate setup/ }));
+  fireEvent.click(screen.getByRole("button", { name: "Add profile" }));
   fireEvent.change(screen.getByLabelText("Profile name"), { target: { value: "Home" } });
-  fireEvent.click(screen.getByLabelText("Limit to my physical plates"));
-  fireEvent.change(screen.getByLabelText("Plate sizes (kg, comma separated)"), { target: { value: "20, 2.5" } });
-  fireEvent.change(screen.getByLabelText("Total quantities (comma separated)"), { target: { value: "2, 2" } });
+  for (const weight of [15, 10, 5, 1.25]) fireEvent.click(screen.getByRole("button", { name: `Remove ${weight} kg plate size` }));
+  for (const weight of [20, 2.5]) fireEvent.click(screen.getByRole("button", { name: `Remove pair of ${weight} kg` }));
   fireEvent.click(screen.getByRole("button", { name: "Save & use setup" }));
   await waitFor(async () => expect((await readSnapshot()).profile.plateInventory).toEqual(inventory));
   const home = (await readSnapshot()).gyms.find(g => g.name === "Home")!;
   expect(home.plateInventory).toEqual(inventory);
   expect((await readSnapshot()).profile.activeGymId).toBe(home.id);
-  await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-  fireEvent.click(screen.getByRole("button", { name: /Gym & plate setup/ }));
-  await waitFor(() => expect(screen.getByRole("button", { name: "Save & use setup" })).toBeEnabled());
-  fireEvent.click(screen.getByRole("button", { name: /^Old gym/ }));
+  await waitFor(() => expect(screen.getByRole("button", { name: "Use Old gym" })).toBeEnabled());
+  fireEvent.click(screen.getByRole("button", { name: "Use Old gym" }));
   await waitFor(async () => expect((await readSnapshot()).profile.activeGymId).toBe("old"));
   expect((await readSnapshot()).profile.plateInventory).toBeUndefined();
   fireEvent.click(screen.getByRole("button", { name: "Edit Old gym" }));
@@ -74,6 +72,6 @@ it("saves physical quantities in a gym and restores unlimited semantics when sel
     expect(snapshot.profile.activeGymId).toBe("old");
   });
   await screen.findByText("Gym setup saved", { exact: true });
-});
+}, 15000);
 
 

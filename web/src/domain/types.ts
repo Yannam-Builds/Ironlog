@@ -159,7 +159,7 @@ export interface Profile {
   platesKg: number[];
   activeGymId?: string;
   /** Total physical plates, shared between both sides. Missing means unlimited. */
-  plateInventory?: { weightKg: number; quantity: number }[];
+  plateInventory?: PlateStock[];
   keepAwake: boolean;
   cardShineEnabled: boolean;
   liquidGlassEnabled: boolean;
@@ -197,12 +197,19 @@ export interface RecoveryCheckin {
   painRegions: string[];
   notes?: string;
 }
+export interface PlateStock {
+  weightKg: number;
+  /** Total physical plates. A complete pair contributes one plate per side. */
+  quantity: number;
+  color?: string;
+}
 export interface Gym {
   id: string;
   name: string;
   barKg: number;
   platesKg: number[];
-  plateInventory?: { weightKg: number; quantity: number }[];
+  plateInventory?: PlateStock[];
+  unavailableEquipment?: string[];
 }
 export interface AppSnapshot {
   profile: Profile;

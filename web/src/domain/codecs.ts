@@ -356,19 +356,24 @@ export function encodeAndroidBackup(snapshot: AppSnapshot): string {
     id: key, key, value, value_type: "string", ...stamp,
   }));
   const finiteGyms = snapshot.gyms.filter(g => g.plateInventory !== undefined);
-  let activeGym = finiteGyms.find(g => g.barKg === snapshot.profile.barKg &&
-    JSON.stringify(g.plateInventory) === JSON.stringify(snapshot.profile.plateInventory));
+  let activeGym = snapshot.profile.activeGymId
+    ? finiteGyms.find(g => g.id === snapshot.profile.activeGymId)
+    : finiteGyms.find(g => g.barKg === snapshot.profile.barKg &&
+      JSON.stringify(g.plateInventory) === JSON.stringify(snapshot.profile.plateInventory));
+  let currentSetupId: string | undefined;
   if (!activeGym && snapshot.profile.plateInventory !== undefined) {
     let id = 'web-current-setup';
     while (snapshot.gyms.some(g => g.id === id)) id += '-current';
     activeGym = { id, name: 'Current setup', barKg: snapshot.profile.barKg,
       platesKg: snapshot.profile.platesKg, plateInventory: snapshot.profile.plateInventory };
+    currentSetupId = id;
     finiteGyms.push(activeGym);
   }
   const nativeGyms = finiteGyms.map(g => ({
     id: g.id, name: g.name, barWeightKg: g.barKg,
     // Native quantities are per side; web quantities count physical plates.
-    plates: g.plateInventory!.map(p => ({ weightKg: p.weightKg, quantity: Math.floor(p.quantity / 2) })),
+    plates: g.plateInventory!.map(p => ({ weightKg: p.weightKg, quantity: Math.floor(p.quantity / 2), ...(p.color !== undefined ? { color: p.color } : {}) })),
+    ...(g.unavailableEquipment !== undefined ? { unavailableEquipment: g.unavailableEquipment } : {}),
   }));
   data.app_settings.push({ id: "gym_profiles_json", key: "gym_profiles_json", value: JSON.stringify(nativeGyms), value_type: "json", ...stamp });
   if (activeGym) data.app_settings.push({ id: "active_gym_profile_id", key: "active_gym_profile_id", value: activeGym.id, value_type: "string", ...stamp });
@@ -394,6 +399,7 @@ export function encodeAndroidBackup(snapshot: AppSnapshot): string {
       data,
       webExtension: {
         profile: snapshot.profile,
+        currentSetupId,
         checkins: snapshot.checkins,
         gyms: snapshot.gyms,
         workouts: snapshot.workouts,
@@ -659,10 +665,11 @@ export function decodeAndroidBackup(raw: string): {
       const p = obj(value);
       if (typeof p.quantity !== "number" || !Number.isSafeInteger(p.quantity) || p.quantity < 0)
         throw Error("Invalid native plate quantity");
-      return { weightKg: p.weightKg, quantity: p.quantity * 2 };
+      return { weightKg: p.weightKg, quantity: p.quantity * 2, ...(p.color !== undefined ? { color: p.color } : {}) };
     });
     return { id: gym.id, name: gym.name, barKg: gym.barWeightKg,
-      platesKg: plateInventory.map(p => p.weightKg), plateInventory };
+      platesKg: plateInventory.map(p => p.weightKg), plateInventory,
+      ...(gym.unavailableEquipment !== undefined ? { unavailableEquipment: gym.unavailableEquipment } : {}) };
   }));
   const activeGymId = str(table("app_settings").find(s => s.key === "active_gym_profile_id")?.value);
   const activeGym = gyms.find(g => g.id === activeGymId);
@@ -675,7 +682,7 @@ export function decodeAndroidBackup(raw: string): {
   }
   const profile = {
     ...defaultProfile,
-    ...(activeGym ? { barKg: activeGym.barKg, platesKg: activeGym.platesKg, plateInventory: activeGym.plateInventory } : {}),
+    ...(activeGym ? { activeGymId: activeGym.id, barKg: activeGym.barKg, platesKg: activeGym.platesKg, plateInventory: activeGym.plateInventory } : {}),
     exerciseNextNotes,
     weightKg: num(calibration.bodyweight_kg, defaultProfile.weightKg),
     unit: calibration.weight_unit === "lb" ? ("lb" as const) : ("kg" as const),
@@ -738,15 +745,33 @@ export function decodeAndroidBackup(raw: string): {
     return {...w, ...canonicalWorkout, revision:w.revision, restUsed:w.restUsed,
       restEndsAt:w.restEndsAt, exercises};
   });
+  const extendedGyms = ext.gyms == null ? [] : snapshotSchema.shape.gyms.parse(ext.gyms);
+  const mergedGyms = gymSetting ? [
+    ...gyms.filter(g => g.id !== ext.currentSetupId).map(g => {
+      const old = extendedGyms.find(row => row.id === g.id);
+      return { ...g, plateInventory: g.plateInventory?.map(plate => {
+        const spare = old?.plateInventory?.find(row => row.weightKg === plate.weightKg);
+        // Retain an odd web-only spare only if native pair stock has not changed.
+        return spare && Math.floor(spare.quantity / 2) * 2 === plate.quantity
+          ? { ...plate, quantity: spare.quantity } : plate;
+      }) };
+    }),
+    ...extendedGyms.filter(g => g.plateInventory === undefined && !gyms.some(native => native.id === g.id)),
+  ] : extendedGyms;
+  const selectedGym = mergedGyms.find(g => g.id === activeGymId) ?? activeGym;
+  const gymProfile = gymSetting ? selectedGym
+    ? { activeGymId: selectedGym.id === ext.currentSetupId ? undefined : selectedGym.id,
+        barKg: selectedGym.barKg, platesKg: selectedGym.platesKg, plateInventory: selectedGym.plateInventory }
+    : { activeGymId: undefined } : {};
   const snapshot = snapshotSchema.parse({
-    profile: { ...(ext.profile != null ? obj(ext.profile) : profile), exerciseNextNotes: { ...obj(obj(ext.profile).exerciseNextNotes), ...exerciseNextNotes } },
+    profile: { ...(ext.profile != null ? obj(ext.profile) : profile), ...gymProfile, exerciseNextNotes: { ...obj(obj(ext.profile).exerciseNextNotes), ...exerciseNextNotes } },
     plans,
     workouts: extendedWorkouts ?? workouts,
     exercises,
     measurements: ext.measurements ?? measurements,
     photos: [],
     checkins: ext.checkins ?? [],
-    gyms: ext.gyms ?? gyms,
+    gyms: gymSetting ? mergedGyms : ext.gyms ?? gyms,
   });
   result.imported = workouts.length + plans.length + measurements.length;
   result.skipped = counts.progress_photos;
