@@ -3778,7 +3778,7 @@ fun isBodyweightExercise(exercise: LegacyExerciseShape): Boolean = exercise.isBo
 fun supportsPlateBreakdown(exercise: NormalizedSessionExercise): Boolean = exercise.equipment.equals("Barbell", ignoreCase = true) || exercise.name.contains("barbell", ignoreCase = true)
 fun getFunComparison(totalKg: Double): FunComparison = FUN_COMPARISONS.lastOrNull { totalKg >= it.threshold } ?: FUN_COMPARISONS.first()
 fun getPlateText(targetKg: Double, barWeight: Double, profile: GymProfileDto?, weightUnit: String = "kg"): String {
-    val inventory = profile?.plates?.takeIf { it.isNotEmpty() } ?: DEFAULT_PLATES
+    val inventory = profile?.plates ?: DEFAULT_PLATES
     val result = calculatePlates(targetKg, barWeight, inventory)
     if (result.platesPerSide.isEmpty()) return "Bar only"
     return result.platesPerSide.flatMap { p -> List(p.quantity) { p.weightKg } }
@@ -3839,7 +3839,7 @@ fun PlateModal(
 ) {
     val c = useTheme()
     val barWeight = activeProfile?.barWeightKg ?: settingsBarWeightKg
-    val inventory = activeProfile?.plates?.takeIf { it.isNotEmpty() } ?: DEFAULT_PLATES
+    val inventory = activeProfile?.plates ?: DEFAULT_PLATES
     val result = remember(targetKg, barWeight, inventory) { calculatePlates(targetKg, barWeight, inventory) }
 
     ModalBottomSheet(

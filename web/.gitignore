@@ -4,6 +4,7 @@ test-results/
 playwright-report/
 *.tsbuildinfo
 output/
+.playwright-cli/
 
 .vercel
 .env*

@@ -132,7 +132,7 @@ fun GymProfileEditorScreen(
 
     fun addPlate() {
         val typedWeight = newPlate.toDoubleOrNull()
-        if (typedWeight == null || typedWeight <= 0) {
+        if (typedWeight == null || !typedWeight.isFinite() || typedWeight <= 0) {
             status = "Enter a positive plate weight ($unitLabel)."
             return
         }
@@ -309,7 +309,7 @@ fun GymProfileEditorScreen(
                 onClick = {
                     scope.launch {
                         val bwParsed = barWeight.toDoubleOrNull()
-                        if (name.isBlank() || bwParsed == null || bwParsed <= 0) {
+                        if (name.isBlank() || bwParsed == null || !bwParsed.isFinite() || bwParsed <= 0) {
                             status = "Enter valid name and bar weight."
                             return@launch
                         }

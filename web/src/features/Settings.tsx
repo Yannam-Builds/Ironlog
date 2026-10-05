@@ -17,12 +17,9 @@ import {
   restoreSnapshot,
   resetData,
   bootstrap,
-  saveGym,
-  deleteGym,
   clearCompletedHistory,
   resetPersonalRecords,
   scheduleTutorialRestart,
-  newId,
   readSnapshot,
 } from "../data/store";
 import {
@@ -33,6 +30,7 @@ import {
 } from "../domain/codecs";
 import type { AppSnapshot } from "../domain/types";
 import { ExercisePicker } from "./Plans";
+import { GymProfiles } from "./GymProfiles";
 import { loadCatalog } from "../catalog";
 import {
   filterSettingsDestinations,
@@ -50,12 +48,6 @@ export function Settings() {
   const [warnings, setWarnings] = useState<string[]>([]);
   const [library, setLibrary] = useState(false);
   const [gym, setGym] = useState(false);
-  const [gymName, setGymName] = useState("");
-  const [editingGymId, setEditingGymId] = useState<string>();
-  const [bar, setBar] = useState(String(p.barKg));
-  const [plates, setPlates] = useState(p.platesKg.join(", "));
-  const [finitePlates, setFinitePlates] = useState(p.plateInventory !== undefined);
-  const [quantities, setQuantities] = useState(p.plateInventory?.map(x => x.quantity).join(", ") ?? "");
   const [storage, setStorage] = useState("");
   const [settingsQuery, setSettingsQuery] = useState("");
   const [destination, setDestination] = useState<Exclude<SettingsDestinationId, "intelligence">>();
@@ -210,15 +202,7 @@ export function Settings() {
       </section>
       <section id="training-tools" hidden={destination !== "training"}>
         <h2>Training tools</h2>
-        <button className="list-row" onClick={() => {
-          setBar(String(p.barKg));
-          setPlates((p.plateInventory?.map(x => x.weightKg) ?? p.platesKg).join(", "));
-          setFinitePlates(p.plateInventory !== undefined);
-          setQuantities(p.plateInventory?.map(x => x.quantity).join(", ") ?? "");
-          setGymName("");
-          setEditingGymId(undefined);
-          setGym(true);
-        }}>
+        <button className="list-row" onClick={() => setGym(true)}>
           <strong>Gym & plate setup</strong>
           <Icon name="next" />
         </button>
@@ -471,105 +455,7 @@ export function Settings() {
           onPick={() => setLibrary(false)}
         />
       )}
-      {gym && (
-        <Sheet title="Gym profiles" onClose={() => setGym(false)}>
-          <Field label="Profile name">
-            <input
-              value={gymName}
-              onChange={(e) => setGymName(e.target.value)}
-            />
-          </Field>
-          <Field label="Bar weight (kg)">
-            <input
-              type="number"
-              min="0"
-              value={bar}
-              onChange={(e) => setBar(e.target.value)}
-            />
-          </Field>
-          <Field label="Plate sizes (kg, comma separated)">
-            <input value={plates} onChange={(e) => setPlates(e.target.value)} />
-          </Field>
-          <Switch label="Limit to my physical plates" checked={finitePlates} onChange={setFinitePlates} />
-          {finitePlates ? <>
-            <Field label="Total quantities (comma separated)">
-              <input value={quantities} onChange={e => setQuantities(e.target.value)} placeholder="2, 2, 4" />
-            </Field>
-            <p className="muted">Enter total physical plates for each size, in the same order. Two plates make one pair; an odd spare is excluded. Use 0 for a size you do not have.</p>
-          </> : <p className="muted">Unlimited pairs assumed for every plate size.</p>}
-          <Button
-            disabled={busy}
-            onClick={() =>
-              run(async () => {
-                const values = plates.split(",").map((x) => Number(x.trim()));
-                if (values.some((x) => !Number.isFinite(x) || x <= 0))
-                  throw Error("Enter positive plate sizes separated by commas");
-                const barKg = Number(bar);
-                if (!bar.trim() || !Number.isFinite(barKg) || barKg < 0)
-                  throw Error("Enter a nonnegative bar weight");
-                const counts = quantities.split(",").map(x => Number(x.trim()));
-                if (finitePlates && (counts.length !== values.length ||
-                    quantities.split(",").some(x => !x.trim()) ||
-                    counts.some(x => !Number.isSafeInteger(x) || x < 0)))
-                  throw Error("Enter one nonnegative whole quantity for each plate size");
-                const plateInventory = finitePlates ? values.map((weightKg, i) => ({ weightKg, quantity: counts[i] })) : undefined;
-                const gymId = editingGymId ?? (gymName.trim() ? newId() : undefined);
-                await saveProfile({ barKg, platesKg: values, plateInventory, activeGymId: gymId ?? p.activeGymId });
-                if (gymId && gymName.trim())
-                  await saveGym({
-                    id: gymId,
-                    name: gymName.trim(),
-                    barKg,
-                    platesKg: values,
-                    plateInventory,
-                  });
-                setGym(false);
-              }, "Gym setup saved")
-            }
-          >
-            Save & use setup
-          </Button>
-          {data.gyms.map((g) => (
-            <div className="list-row" key={g.id}>
-              <button
-                className="text-button"
-                onClick={() =>
-                  run(
-                    async () => {
-                      await saveProfile({ barKg: g.barKg, platesKg: g.platesKg, plateInventory: g.plateInventory, activeGymId: g.id });
-                      setBar(String(g.barKg));
-                      setPlates((g.plateInventory?.map(x => x.weightKg) ?? g.platesKg).join(", "));
-                      setFinitePlates(g.plateInventory !== undefined);
-                      setQuantities(g.plateInventory?.map(x => x.quantity).join(", ") ?? "");
-                      setGymName("");
-                    },
-                    "Gym selected",
-                  )
-                }
-              >
-                {g.name}{p.activeGymId === g.id ? " · Active" : ""} · {g.barKg} kg bar · {g.plateInventory === undefined ? "Unlimited pairs" : "Saved physical quantities"}
-              </button>
-              <IconButton
-                name="edit"
-                label={`Edit ${g.name}`}
-                onClick={() => {
-                  setEditingGymId(g.id);
-                  setGymName(g.name);
-                  setBar(String(g.barKg));
-                  setPlates((g.plateInventory?.map(x => x.weightKg) ?? g.platesKg).join(", "));
-                  setFinitePlates(g.plateInventory !== undefined);
-                  setQuantities(g.plateInventory?.map(x => x.quantity).join(", ") ?? "");
-                }}
-              />
-              <IconButton
-                name="trash"
-                label={`Delete ${g.name}`}
-                onClick={() => run(() => deleteGym(g.id))}
-              />
-            </div>
-          ))}
-        </Sheet>
-      )}
+      {gym && <GymProfiles onClose={() => setGym(false)} />}
     </>
   );
 }

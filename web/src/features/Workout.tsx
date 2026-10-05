@@ -90,7 +90,7 @@ export function PlateView({
   loadKg: number;
   barKg: number;
   platesKg: number[];
-  plateInventory?: { weightKg: number; quantity: number }[];
+  plateInventory?: { weightKg: number; quantity: number; color?: string }[];
   unit: string;
 }) {
   const result = plateCalculation(loadKg, barKg, platesKg, plateInventory);
@@ -126,7 +126,7 @@ export function PlateView({
                   width={width}
                   height={height}
                   rx="2"
-                  fill={colorFor(kg)}
+                  fill={plateInventory?.find(p => Math.abs(p.weightKg - kg) < 0.001)?.color || colorFor(kg)}
                   stroke="#141414"
                   strokeWidth="1.5"
                 />
@@ -144,7 +144,7 @@ export function PlateView({
           <span>
             <i
               className="plate-dot"
-              style={{ background: colorFor(p.weightKg) }}
+              style={{ background: plateInventory?.find(row => Math.abs(row.weightKg - p.weightKg) < 0.001)?.color || colorFor(p.weightKg) }}
             />
             {weight(p.weightKg)}
           </span>

@@ -1,6 +1,11 @@
 import { z } from "zod";
 const id = z.string().min(1).max(200);
 const number = z.number().finite().nonnegative();
+const plateStock = z.object({
+  weightKg: z.number().finite().positive(),
+  quantity: z.number().int().nonnegative(),
+  color: z.string().regex(/^$|^#[0-9a-fA-F]{6}$/).optional(),
+});
 const tracking = z.string();
 const metadata = {
   primaryMuscles: z.array(z.string()).optional(),
@@ -164,7 +169,7 @@ export const profileSchema = z.object({
   barKg: number,
   platesKg: z.array(z.number().positive()),
   activeGymId: z.string().optional(),
-  plateInventory: z.array(z.object({ weightKg: z.number().finite().positive(), quantity: z.number().int().nonnegative() })).optional(),
+  plateInventory: z.array(plateStock).optional(),
   keepAwake: z.boolean(),
   cardShineEnabled: z.boolean().default(true),
   liquidGlassEnabled: z.boolean().default(true),
@@ -217,7 +222,8 @@ export const snapshotSchema = z.object({
       name: z.string(),
       barKg: number,
       platesKg: z.array(z.number().positive()),
-      plateInventory: z.array(z.object({ weightKg: z.number().finite().positive(), quantity: z.number().int().nonnegative() })).optional(),
+      plateInventory: z.array(plateStock).optional(),
+      unavailableEquipment: z.array(z.string()).optional(),
     }),
   ),
 });

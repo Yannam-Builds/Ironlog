@@ -13,10 +13,12 @@ import { useOptionalApp } from "./context";
 export const asset = (name: string) =>
   `${import.meta.env.BASE_URL}assets/${/^(forgefox_|iron_grade_|recovery_circuit_|ic_forge_).*\.png$/.test(name) ? `optimized/${name.replace(/\.png$/, ".webp")}` : name}`;
 export function Icon({ name, size = 22 }: { name: string; size?: number }) {
-  // These are the exact 24dp paths used by the Kotlin app's Compose
-  // Icons.Outlined bottom navigation. Keep them filled: rendering these as
-  // generic stroked outlines materially changes their silhouettes.
-  const composeNavigationPaths: Record<string, string> = {
+  // The Kotlin app uses Compose Outlined navigation and Filled gym controls.
+  // Preserve their 24dp filled paths rather than approximating with strokes.
+  const composePaths: Record<string, string> = {
+    "add-filled": "M19,13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z",
+    "remove-filled": "M19,13H5v-2h14v2z",
+    "close-filled": "M19,6.41 17.59,5 12,10.59 6.41,5 5,6.41 10.59,12 5,17.59 6.41,19 12,13.41 17.59,19 19,17.59 13.41,12z",
     home: "M12,5.69l5,4.5V18h-2v-6H9v6H7v-7.81l5,-4.5M12,3L2,12h3v8h6v-6h2v6h6v-8h3L12,3z",
     plans: "M20.57,14.86L22,13.43 20.57,12 17,15.57 8.43,7 12,3.43 10.57,2 9.14,3.43 7.71,2 5.57,4.14 4.14,2.71 2.71,4.14l1.43,1.43L2,7.71l1.43,1.43L2,10.57 3.43,12 7,8.43 15.57,17 12,20.57 13.43,22l1.43,-1.43L16.29,22l2.14,-2.14 1.43,1.43 1.43,-1.43 -1.43,-1.43L22,16.29l-1.43,-1.43z",
     log: "M7,15h7v2L7,17zM7,11h10v2L7,13zM7,7h10v2L7,9zM19,3h-4.18C14.4,1.84 13.3,1 12,1c-1.3,0 -2.4,0.84 -2.82,2L5,3c-0.14,0 -0.27,0.01 -0.4,0.04 -0.39,0.08 -0.74,0.28 -1.01,0.55 -0.18,0.18 -0.33,0.4 -0.43,0.64 -0.1,0.23 -0.16,0.49 -0.16,0.77v14c0,0.27 0.06,0.54 0.16,0.78s0.25,0.45 0.43,0.64c0.27,0.27 0.62,0.47 1.01,0.55 0.13,0.02 0.26,0.03 0.4,0.03h14c1.1,0 2,-0.9 2,-2L21,5c0,-1.1 -0.9,-2 -2,-2zM12,2.75c0.41,0 0.75,0.34 0.75,0.75s-0.34,0.75 -0.75,0.75 -0.75,-0.34 -0.75,-0.75 0.34,-0.75 0.75,-0.75zM19,19L5,19L5,5h14v14z",
@@ -73,7 +75,7 @@ export function Icon({ name, size = 22 }: { name: string; size?: number }) {
       </>
     ),
   };
-  const composePath = composeNavigationPaths[name];
+  const composePath = composePaths[name];
   return (
     <svg
       className={`ironlog-icon ironlog-icon-${name}${name === "log" || name === "stats" ? " auto-mirror" : ""}`}

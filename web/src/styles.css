@@ -2335,3 +2335,23 @@ body.workout-reordering { cursor: grabbing; user-select: none; }
 .circuit-grid > button { display: grid; gap: 5px; padding: 14px; border: 1px solid var(--cardBorder); border-radius: 14px; background: var(--surface); color: var(--text); text-align: left; }
 .circuit-grid > button[aria-pressed="true"] { border: 2px solid var(--accent); background: var(--accentSoft); }
 .circuit-grid > button small { color: var(--muted); }
+
+.gym-stock { display: grid; gap: 8px; }
+.gym-stock-row { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto 44px; align-items: center; gap: 4px; padding: 8px 0; border-bottom: 1px solid var(--cardBorder); }
+.gym-color { width: 36px; height: 36px; border-radius: 50%; border: 2px solid var(--cardBorder); justify-self: center; }
+.gym-pairs { display: flex; align-items: center; gap: 4px; }
+.gym-pairs button { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; padding: 4px; border: 0; border-radius: 50%; background: transparent; color: var(--muted); cursor: pointer; }
+.gym-pairs button:hover { background: var(--surface); }
+.gym-stock-row > .icon-button { color: var(--danger); }
+.gym-pairs button:disabled { opacity: .4; cursor: default; }
+.gym-pairs output { min-width: 20px; text-align: center; }
+.gym-palette { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; }
+.gym-palette button { width: 44px; height: 44px; border-radius: 50%; border: 2px solid var(--cardBorder); }
+.gym-palette button[aria-pressed=true] { outline: 2px solid var(--text); outline-offset: 2px; }
+.gym-actions { flex-wrap: wrap; }
+
+@media (max-width: 380px) {
+  .gym-stock-row { grid-template-columns: 44px minmax(0, 1fr) 44px; }
+  .gym-stock-row > .gym-pairs { grid-column: 2; grid-row: 2; }
+  .gym-stock-row > .icon-button { grid-column: 3; grid-row: 1; }
+}

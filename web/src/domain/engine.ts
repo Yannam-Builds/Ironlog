@@ -599,75 +599,61 @@ export function plateCalculation(
   const platesPerSide: { weightKg: number; quantity: number }[] = [];
   if (!Number.isFinite(loadKg) || !Number.isFinite(barKg) || barKg < 0)
     throw Error("Invalid load");
-  let remaining = Math.round(((loadKg - barKg) / 2) * 100) / 100;
-  if (remaining < 0)
-    return {
-      isValid: false,
-      platesPerSide,
-      achievedWeightKg: barKg,
-      remainderKg: loadKg - barKg,
-      achievable: barKg,
-      remainder: loadKg - barKg,
-    };
-  if (plateInventory !== undefined) {
-    const totals = new Map<number, number>();
-    for (const plate of plateInventory) {
-      if (!Number.isFinite(plate.weightKg) || plate.weightKg <= 0 ||
-          !Number.isSafeInteger(plate.quantity) || plate.quantity < 0)
-        throw Error("Invalid plate inventory");
-      const cents = Math.round(plate.weightKg * 100);
-      if (cents > 0) totals.set(cents, (totals.get(cents) ?? 0) + plate.quantity);
-    }
-    const target = Math.round(remaining * 100);
-    type Choice = { count: number; weight: number; quantity: number; previous?: Choice };
-    const reachable = new Map<number, Choice>([[0, { count: 0, weight: 0, quantity: 0 }]]);
-    // Binary bundles bound every denomination by its physical pair count.
-    for (const [weight, physicalCount] of [...totals].sort((a, b) => b[0] - a[0])) {
-      let pairs = Math.min(Math.floor(physicalCount / 2), Math.floor(target / weight));
-      for (let batch = 1; pairs > 0; batch *= 2) {
-        const quantity = Math.min(batch, pairs);
-        pairs -= quantity;
-        for (const [sum, previous] of [...reachable]) {
-          const next = sum + weight * quantity;
-          const count = previous.count + quantity;
-          if (next <= target && (!reachable.has(next) || reachable.get(next)!.count > count))
-            reachable.set(next, { count, weight, quantity, previous });
-        }
+  const perSide = (loadKg - barKg) / 2;
+  const result = (achievedWeightKg: number) => ({
+    isValid: perSide >= 0 && Math.abs(loadKg - achievedWeightKg) <= 0.001,
+    platesPerSide, achievedWeightKg,
+    remainderKg: Math.round((loadKg - achievedWeightKg) * 100) / 100,
+    achievable: achievedWeightKg,
+    remainder: Math.round((loadKg - achievedWeightKg) * 100) / 100,
+  });
+  if (perSide <= 0) return result(barKg);
+  // Micro-kg keys avoid rounding converted pound plates independently to cents.
+  // Actual canonical weights also bound every candidate. The tolerance matches native.
+  const scale = 1_000_000;
+  const ceiling = perSide + 0.0005;
+  const target = Math.round(ceiling * scale);
+  if (!Number.isSafeInteger(target)) throw Error("Load exceeds calculator range");
+  const stock = plateInventory ?? [...new Set(platesKg)]
+    .filter(weightKg => Number.isFinite(weightKg) && weightKg > 0)
+    .map(weightKg => ({ weightKg, quantity: Math.floor(ceiling / weightKg) * 2 }));
+  const totals = new Map<number, { weightKg: number; quantity: number }>();
+  for (const plate of stock) {
+    if (!Number.isFinite(plate.weightKg) || plate.weightKg <= 0 ||
+        !Number.isSafeInteger(plate.quantity) || plate.quantity < 0)
+      throw Error("Invalid plate inventory");
+    const weight = Math.round(plate.weightKg * scale);
+    if (weight <= 0 || weight > target) continue;
+    const old = totals.get(weight);
+    const quantity = (old?.quantity ?? 0) + plate.quantity;
+    if (!Number.isSafeInteger(quantity)) throw Error("Invalid plate quantity");
+    totals.set(weight, { weightKg: old?.weightKg ?? plate.weightKg, quantity });
+  }
+  type Choice = { count: number; weight: number; weightKg: number; actual: number; quantity: number; previous?: Choice };
+  const reachable = new Map<number, Choice>([[0, { count: 0, weight: 0, weightKg: 0, actual: 0, quantity: 0 }]]);
+  for (const [weight, plate] of [...totals].sort((a, b) => b[0] - a[0])) {
+    let pairs = Math.min(Math.floor(plate.quantity / 2), Math.floor(target / weight));
+    for (let batch = 1; pairs > 0; batch *= 2) {
+      const quantity = Math.min(batch, pairs);
+      pairs -= quantity;
+      const cost = weight * quantity;
+      for (const [sum, previous] of [...reachable]) {
+        if (sum > target - cost) continue;
+        const next = sum + cost;
+        const actual = previous.actual + plate.weightKg * quantity;
+        const count = previous.count + quantity;
+        if (actual <= ceiling && (!reachable.has(next) || reachable.get(next)!.count > count))
+          reachable.set(next, { count, weight, weightKg: plate.weightKg, actual, quantity, previous });
       }
     }
-    let best = 0;
-    for (const sum of reachable.keys()) if (sum > best) best = sum;
-    const used = new Map<number, number>();
-    for (let choice = reachable.get(best); choice?.previous; choice = choice.previous)
-      used.set(choice.weight, (used.get(choice.weight) ?? 0) + choice.quantity);
-    for (const [weight, quantity] of [...used].sort((a, b) => b[0] - a[0]))
-      platesPerSide.push({ weightKg: weight / 100, quantity });
-    const achievedWeightKg = Math.round((barKg + best / 50) * 100) / 100;
-    const remainderKg = Math.round((loadKg - achievedWeightKg) * 100) / 100;
-    return { isValid: Math.abs(remainderKg) <= 0.001, platesPerSide,
-      achievedWeightKg, remainderKg, achievable: achievedWeightKg, remainder: remainderKg };
   }
-  // Legacy profiles have denominations only and retain unlimited pairs.
-  for (const weightKg of [...new Set(platesKg)]
-    .filter((p) => Number.isFinite(p) && p > 0)
-    .sort((a, b) => b - a)) {
-    let quantity = 0;
-    while (remaining >= weightKg - 0.001 && quantity < 1000) {
-      quantity++;
-      remaining = Math.round((remaining - weightKg) * 100) / 100;
-    }
-    if (quantity) platesPerSide.push({ weightKg, quantity });
-  }
-  const achievedWeightKg = Math.round((loadKg - remaining * 2) * 100) / 100,
-    remainderKg = Math.round((loadKg - achievedWeightKg) * 100) / 100;
-  return {
-    isValid: remaining <= 0.001,
-    platesPerSide,
-    achievedWeightKg,
-    remainderKg,
-    achievable: achievedWeightKg,
-    remainder: remainderKg,
-  };
+  let best = 0;
+  for (const sum of reachable.keys()) if (sum > best) best = sum;
+  const used = new Map<number, { weightKg: number; quantity: number }>();
+  for (let choice = reachable.get(best); choice?.previous; choice = choice.previous)
+    used.set(choice.weight, { weightKg: choice.weightKg, quantity: (used.get(choice.weight)?.quantity ?? 0) + choice.quantity });
+  for (const [, plate] of [...used].sort((a, b) => b[0] - a[0])) platesPerSide.push(plate);
+  return result(barKg + platesPerSide.reduce((sum, plate) => sum + plate.weightKg * plate.quantity * 2, 0));
 }
 export function warmupTargets(targetKg: number, barKg = 20): WarmupTarget[] {
   if (!Number.isFinite(targetKg) || targetKg <= 0 || targetKg <= barKg)

@@ -8,11 +8,13 @@ const photo = (id: string, date: string, capturedAt: number, notes = "") => ({
 });
 
 beforeEach(async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date(2026, 8, 16, 12));
   await db.delete(); await db.open(); await bootstrap([]); await saveProfile({ onboarded: true });
   vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:test");
   vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
 });
-afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.useRealTimers(); });
 
 it("compares the latest capture from each selected calendar date", async () => {
   await savePhoto(photo("before-old", "2026-09-01", 1));
