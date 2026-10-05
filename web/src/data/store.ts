@@ -22,6 +22,7 @@ import {
   workoutSchema,
 } from "./schema";
 import { resolveExercise } from "../domain/codecs";
+import { trackingMode } from "../domain/tracking";
 import { creditedProof, deriveSnapshot } from "../domain/engine";
 import { isoWeekKey } from "../domain/dates";
 import { recomputeOnboardingBaseline } from "../domain/onboarding-baseline";
@@ -132,6 +133,8 @@ export async function bootstrap(exercises: Exercise[], database = db) {
     "rw",
     database.profiles,
     database.catalog,
+    database.exercises,
+    database.workouts,
     async () => {
       const existing = await database.profiles.get("local");
       if (!existing)
@@ -148,8 +151,57 @@ export async function bootstrap(exercises: Exercise[], database = db) {
       }
       // One structured-clone write replaces thousands of individual indexed writes on WebKit.
       await database.catalog.put({ id: "bundled", exercises: catalog });
+      const library = await readExerciseLibrary(database);
+      // Only empty, unlogged local interpretations are recoverable. Recorded
+      // and imported snapshots must never change when the catalog is updated.
+      for (const workout of await database.workouts.where("status").equals("active").toArray()) {
+        if (workout.imported) continue;
+        let changed = false;
+        for (const exercise of workout.exercises) {
+          if (exercise.tracking.trim() || exercise.loggedSets.length || exercise.pendingWarmups.length) continue;
+          const resolved = await resolveLocalPlanExercise(exercise, library, database);
+          if (!resolved?.tracking.trim()) continue;
+          Object.assign(exercise, sessionLibraryMetadata(resolved));
+          changed = true;
+        }
+        if (changed) {
+          workout.revision++;
+          await database.workouts.put(workoutSchema.parse(workout));
+        }
+      }
     },
   );
+}
+async function resolveLocalPlanExercise(
+  slot: { exerciseId: string; name: string }, library: Exercise[], database = db,
+): Promise<Exercise | undefined> {
+  const resolved = resolveExercise(slot.exerciseId, slot.name, library);
+  if (resolved || !slot.name.trim()) return resolved;
+  // Kotlin PlanRepository recreates unmatched named movements as custom
+  // strength exercises using its tracking normalizer, rather than blocking logging.
+  const custom: Exercise = {
+    id: newId(), name: slot.name.trim(), muscle: "other", equipment: "other",
+    category: "strength", custom: true,
+    tracking: trackingMode({ tracking: "weight_reps", name: slot.name, category: "strength" }),
+  };
+  // Native custom-plan defaults use other equipment and rep tracking; bodyweight
+  // load interpretation belongs to the session controls, not the stored raw type.
+  if (["bodyweight_reps", "bodyweight_plus_weight_reps", "assisted_bodyweight"].includes(custom.tracking))
+    custom.tracking = "weight_reps";
+  custom.requiresExternalLoad = ["weight_reps", "duration_weight"].includes(custom.tracking);
+  await database.exercises.add(custom);
+  library.push(custom);
+  return custom;
+}
+function sessionLibraryMetadata(library: Exercise) {
+  return {
+    exerciseId: library.id, tracking: library.tracking,
+    muscle: library.muscle, equipment: library.equipment,
+    secondaryMuscles: library.secondaryMuscles,
+    primaryMuscles: library.primaryMuscles, muscleContributions: library.muscleContributions,
+    category: library.category, isBodyweight: library.isBodyweight,
+    requiresExternalLoad: library.requiresExternalLoad,
+  };
 }
 export async function readExerciseLibrary(database = db): Promise<Exercise[]> {
   return database.transaction(
@@ -357,6 +409,15 @@ export async function startWorkout(
         : plan?.days[0];
       if (dayId && !day) throw Error("Plan day not found");
       const exercises = await readExerciseLibrary();
+      const sessionExercises = [];
+      for (const slot of day?.exercises ?? []) {
+        const library = await resolveLocalPlanExercise(slot, exercises);
+        sessionExercises.push({
+          ...slot,
+          ...(library ? sessionLibraryMetadata(library) : { tracking: "", muscle: "", equipment: "" }),
+          loggedSets: [], pendingWarmups: [],
+        });
+      }
       const w: Workout = {
         id: newId(),
         planId: plan?.id,
@@ -367,21 +428,7 @@ export async function startWorkout(
         notes: "",
         restUsed: false,
         revision: 0,
-        exercises: (day?.exercises ?? []).map((e) => {
-          const lib = resolveExercise(e.exerciseId, e.name, exercises);
-          return {
-            ...e,
-            exerciseId: lib?.id ?? e.exerciseId,
-            tracking: lib?.tracking ?? "",
-            muscle: lib?.muscle ?? "",
-            equipment: lib?.equipment ?? "",
-            secondaryMuscles: lib?.secondaryMuscles,
-            primaryMuscles: lib?.primaryMuscles, muscleContributions: lib?.muscleContributions,
-            category: lib?.category, isBodyweight: lib?.isBodyweight, requiresExternalLoad: lib?.requiresExternalLoad,
-            loggedSets: [],
-            pendingWarmups: [],
-          };
-        }),
+        exercises: sessionExercises,
       };
       await db.workouts.add(w);
       return w;
