@@ -8,6 +8,16 @@ import { App } from "../src/App";
 import { db, bootstrap, saveProfile, readSnapshot } from "../src/data/store";
 afterEach(cleanup);
 const inventory = [{ weightKg: 20, quantity: 2 }, { weightKg: 2.5, quantity: 2 }];
+it("loads converted pound stock exactly without rounding each plate", () => {
+  const fivePounds = 5 * 0.45359237;
+  const target = 20 + fivePounds * 8;
+  for (const stock of [undefined, [{ weightKg: fivePounds, quantity: 8 }]]) {
+    const result = plateCalculation(target, 20, [fivePounds], stock);
+    expect(result.isValid).toBe(true);
+    expect(result.platesPerSide).toEqual([{ weightKg: fivePounds, quantity: 4 }]);
+    expect(result.achievedWeightKg).toBeCloseTo(target, 8);
+  }
+});
 it("loads 65 kg using one 20 and one 2.5 kg plate on each side", () => {
   expect(plateCalculation(65, 20, [20, 2.5], inventory)).toMatchObject({
     isValid: true, achievedWeightKg: 65,

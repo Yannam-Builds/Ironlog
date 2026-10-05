@@ -8,6 +8,18 @@ import org.junit.Test
 class PlateCalcAccuracyTest {
 
     @Test
+    fun `converted pound plates retain precision for repeated pairs`() {
+        val fivePounds = 5 * 0.45359237
+        val target = 20 + fivePounds * 8
+        val result = calculatePlates(target, 20.0, listOf(
+            com.ironlog.app.ui.screens.settings.PlateDto(fivePounds, 4)))
+        assertTrue(result.isValid)
+        assertEquals(4, result.platesPerSide.single().quantity)
+        assertEquals(fivePounds, result.platesPerSide.single().weightKg, 0.00000001)
+        assertEquals(target, result.achievedWeightKg, 0.00000001)
+    }
+
+    @Test
     fun `65 kg uses visible 20 and 2 point 5 plates per side`() {
         val result = calculatePlates(65.0, 20.0, DEFAULT_PLATES)
 
