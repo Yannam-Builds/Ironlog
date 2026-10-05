@@ -56,4 +56,9 @@ it("saves notes and confirms destructive bulk deletion", async () => {
   await waitFor(() => expect(screen.getByRole("button", { name: "Clear all photos" })).toBeEnabled());
   await act(async () => fireEvent.click(screen.getByRole("button", { name: "Clear all photos" })));
   await waitFor(async () => expect((await readSnapshot()).photos).toHaveLength(0));
+  // A database commit precedes badge reconciliation and the final UI refresh.
+  // Keep the app mounted until the complete action settles before teardown.
+  expect(await screen.findByText("All progress photos deleted")).toBeVisible();
+  await waitFor(() => expect(screen.queryByRole("heading", { name: "Clear all progress photos?" })).not.toBeInTheDocument());
+  expect(screen.queryByText("Saving…")).not.toBeInTheDocument();
 });
