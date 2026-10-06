@@ -16,6 +16,7 @@ import {
 } from "./features/Progress";
 import { Recovery, Ledger } from "./features/Recovery";
 import { Settings } from "./features/Settings";
+import { ExerciseLibrary } from "./features/ExerciseLibrary";
 import { Intelligence } from "./features/Intelligence";
 import { HistoricalWorkoutEditor, WorkoutCalendar } from "./features/history/HistoryTools";
 import { ExerciseProgress } from "./features/stats/ExerciseProgress";
@@ -27,6 +28,7 @@ import { backFrom } from "./ui/navigation";
 const tabs = ["Home", "Plans", "Log", "Stats", "Settings"];
 const tabRoutes = tabs.map((tab) => tab.toLowerCase());
 const detailTitles: Record<string, string> = {
+  library: "EXERCISE LIBRARY",
   workout: "ACTIVE WORKOUT",
   recovery: "MUSCLE RECOVERY",
   ledger: "IRON LEDGER",
@@ -228,7 +230,7 @@ export function App() {
     );
   const active = data.workouts.find((w) => w.status === "active");
   const detail = !["home", "plans", "log", "stats", "settings"].includes(route);
-  const selectedTabRoute = route.startsWith("plan/")
+  const selectedTabRoute = route === "library" ? "settings" : route.startsWith("plan/")
     ? "plans"
     : route.startsWith("history/") || route === "calendar"
       ? "log"
@@ -259,6 +261,8 @@ export function App() {
       <Stats />
     ) : route === "settings" ? (
       <Settings />
+    ) : route === "library" ? (
+      <ExerciseLibrary />
     ) : route === "recovery" ? (
       <Recovery />
     ) : route === "ledger" ? (
@@ -324,13 +328,13 @@ export function App() {
                   label="Back"
                   onClick={() => backFrom(route)}
                 />
-                <strong>
+                {route === "library" ? <h1 className="detail-screen-title">Exercise library</h1> : <strong>
                   {route.startsWith("plan/")
                     ? "EDIT PLAN"
                     : route.startsWith("history/")
                       ? "WORKOUT"
                       : detailTitles[route] ?? "IRONLOG"}
-                </strong>
+                </strong>}
                 <span aria-hidden="true" />
               </header>
             )}

@@ -2350,6 +2350,41 @@ body.workout-reordering { cursor: grabbing; user-select: none; }
 .gym-palette button[aria-pressed=true] { outline: 2px solid var(--text); outline-offset: 2px; }
 .gym-actions { flex-wrap: wrap; }
 
+/* ExerciseLibraryScreen: native rows, scope chips, search and sheet controls. */
+.exercise-library { min-width: 0; }
+.detail-screen-title { font: inherit; font-weight: 800; text-transform: uppercase; margin: 0; }
+.library-toolbar { display: flex; align-items: center; gap: 8px; margin: 8px 0; }
+.library-active-filters { display: flex; flex: 1; min-width: 0; gap: 6px; align-items: center; overflow-x: auto; scrollbar-width: thin; }
+.library-chip { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 5px 10px; border: 1px solid var(--faint); border-radius: 20px; background: transparent; color: var(--muted); flex-shrink: 0; }
+.library-chip.active { color: var(--accent); background: var(--accentSoft); border-color: var(--accentBorder); font-weight: 700; }
+.library-gym-filter { color: var(--warning); font-weight: 700; white-space: nowrap; }
+.library-filter-button { padding: 8px 14px; min-width: 0; flex-shrink: 0; text-transform: uppercase; }
+.library-filter-button.active { color: var(--accent); border-color: var(--accentBorder); background: var(--accentSoft); }
+.library-search { display: flex; align-items: center; gap: 10px; padding: 4px 10px 4px 14px; background: var(--card); border: 1px solid var(--cardBorder); border-radius: 12px; }
+.library-search:focus-within { border-color: var(--accent); }
+.library-search > input { flex: 1; min-width: 0; border: 0; background: transparent; box-shadow: none; padding: 12px 0; }
+.library-search > input:focus { outline: none; }
+.library-search > .ironlog-icon { color: var(--muted); flex-shrink: 0; }
+.library-summary { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px; }
+.library-summary p { margin: 8px 0; }
+.library-summary .button { padding: 8px 0; }
+.library-recent { display: grid; gap: 6px; padding: 10px 0; }
+.library-recent-chips { display: flex; gap: 8px; overflow-x: auto; }
+.library-row { display: flex; align-items: center; min-height: 72px; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--faint); }
+.library-exercise { border: 0; background: transparent; color: var(--text); padding: 0; flex: 1; min-width: 0; text-align: left; display: grid; gap: 2px; min-height: 44px; align-content: center; }
+.library-name { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.library-name strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; }
+.library-exercise small { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.library-custom { font-size: .625rem; line-height: 1.4; letter-spacing: .03em; font-weight: 900; text-transform: uppercase; border: 1px solid var(--accentBorder); border-radius: 4px; padding: 2px 5px; color: var(--accent); background: var(--accentSoft); flex-shrink: 0; }
+.library-row-actions { display: flex; flex-direction: column; gap: 4px; }
+.library-row-actions .icon-button { width: 44px; height: 44px; min-width: 44px; color: var(--muted); }
+.library-row-actions .icon-button[aria-pressed=true] { color: var(--accent); }
+.library-row-actions .icon-button:has(.ironlog-icon-delete-outline) { color: var(--danger); }
+.library-filter-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+.choice-fieldset.library-filter-group { margin-bottom: 16px; }
+.library-more { margin: 16px 0; width: 100%; }
+.library-missing { display: grid; justify-items: center; gap: 8px; padding: 16px; }
+
 @media (max-width: 380px) {
   .gym-stock-row { grid-template-columns: 44px minmax(0, 1fr) 44px; }
   .gym-stock-row > .gym-pairs { grid-column: 2; grid-row: 2; }
