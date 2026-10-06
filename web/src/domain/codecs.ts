@@ -240,6 +240,9 @@ export function encodeAndroidBackup(snapshot: AppSnapshot): string {
     is_bodyweight: e.isBodyweight ?? ["bodyweight_reps", "bodyweight_plus_weight_reps", "assisted_bodyweight"].includes(e.tracking),
     requires_external_load: e.requiresExternalLoad ?? e.tracking === "weight_reps",
     secondary_muscles_json: JSON.stringify(e.secondaryMuscles ?? []),
+    movement_pattern: e.movementPattern ?? null,
+    difficulty: e.difficulty ?? null,
+    aliases_json: JSON.stringify(e.aliases ?? []),
     ...stamp,
   }));
   for (const e of snapshot.exercises) {
@@ -490,6 +493,9 @@ export function decodeAndroidBackup(raw: string): {
       id: str(e.id) || uid(), name: str(e.name) || "Unnamed exercise",
       muscle: str(e.primary_muscle), equipment: str(e.equipment),
       tracking: str(e.tracking_type), category: str(e.category),
+      movementPattern: str(e.movement_pattern) || undefined,
+      difficulty: str(e.difficulty) || undefined,
+      aliases: stringArray(e.aliases_json),
       isBodyweight: bool(e.is_bodyweight), requiresExternalLoad:bool(e.requires_external_load),
       primaryMuscles:relations.filter(m=>m.role==='primary').map(m=>str(m.muscle)),
       secondaryMuscles: [...new Set([...stringArray(e.secondary_muscles_json), ...relations.filter(m=>m.role==='secondary').map(m=>str(m.muscle))])],

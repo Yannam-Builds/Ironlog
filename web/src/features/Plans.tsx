@@ -23,6 +23,7 @@ import {
 import { decodePlans, encodePlan } from "../domain/codecs";
 import { instantiatePlan } from "../domain/plans";
 import { trackingOptions } from "../domain/tracking";
+import { queryExerciseSearch } from "../domain/exercise-search";
 import { AIPlan } from "./plans/AIPlan";
 import type {
   Exercise,
@@ -40,6 +41,11 @@ export function ExercisePicker({
 }) {
   const { data, run, busy } = useApp();
   const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedQuery(query), 180);
+    return () => window.clearTimeout(timer);
+  }, [query]);
   const [custom, setCustom] = useState(false);
   const [muscle, setMuscle] = useState("Chest");
   const [equipment, setEquipment] = useState("Barbell");
@@ -62,9 +68,8 @@ export function ExercisePicker({
     cardio: "Cardio duration",
   };
   const unavailableEquipment = data.gyms.find(g => g.id === data.profile.activeGymId)?.unavailableEquipment ?? [];
-  const list = data.exercises
-    .filter(e => !unavailableEquipment.some(value => value.toLowerCase() === e.equipment?.toLowerCase()))
-    .filter((e) => e.name.toLowerCase().includes(query.toLowerCase()))
+  const list = queryExerciseSearch(data.exercises
+    .filter(e => !unavailableEquipment.some(value => value.toLowerCase() === e.equipment?.toLowerCase())), debouncedQuery)
     .slice(0, 50);
   return (
     <Sheet

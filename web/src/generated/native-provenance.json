@@ -1,5 +1,5 @@
 {
-  "revision": "3eac6d447ca97b05275ed3476d526e9c7ce2172d",
+  "revision": "ce030e182e53923ab840b10bc6a2142c3cdf4899",
   "reference": "Native working tree (file hashes are authoritative)",
   "files": [
     {
@@ -9,6 +9,10 @@
     {
       "path": "app/src/main/assets/exerciseLibrary.json",
       "sha256": "85c5f422ece979b5d07396c3986986dfa16ecfd59c02f6de84ee6d30743fd62d"
+    },
+    {
+      "path": "app/src/main/java/com/ironlog/app/util/ExerciseTrackingTypeNormalizer.kt",
+      "sha256": "2ac25ba1b64596d6f675aecd9b81ec3d10a335bc8bbe177d28945795735baa66"
     },
     {
       "path": "app/src/main/java/com/ironlog/app/data/seed/ProgramTemplates.kt",
