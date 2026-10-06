@@ -176,6 +176,7 @@ export const profileSchema = z.object({
     plateInventory: z.array(plateStock).optional(),
   }).optional(),
   nativeSettings: z.record(z.string(), z.unknown()).optional(),
+  favoriteExerciseIds: z.array(z.string().min(1)).default([]),
   keepAwake: z.boolean(),
   cardShineEnabled: z.boolean().default(true),
   liquidGlassEnabled: z.boolean().default(true),

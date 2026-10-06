@@ -13,6 +13,7 @@ describe("native-style web navigation", () => {
 
   it.each([
     ["plan/strength", "plans"],
+    ["library", "settings"],
     ["history/workout-1", "log"],
     ["body", "stats"],
     ["photos", "stats"],

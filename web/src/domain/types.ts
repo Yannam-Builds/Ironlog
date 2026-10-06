@@ -169,6 +169,7 @@ export interface Profile {
   liquidGlassEnabled: boolean;
   planExerciseNotesVisible: boolean;
   exerciseNextNotes?: Record<string, string>;
+  favoriteExerciseIds?: string[];
   badgeUnlocks: Record<string, number>;
   ledgerBaseline?: OnboardingLedgerBaseline;
   recoveryWeeks: string[];
@@ -273,6 +274,7 @@ export const defaultProfile: Profile = {
   liquidGlassEnabled: true,
   planExerciseNotesVisible: true,
   exerciseNextNotes: {},
+  favoriteExerciseIds: [],
   badgeUnlocks: {},
   recoveryWeeks: [],
 };

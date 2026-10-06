@@ -361,6 +361,8 @@ export function encodeAndroidBackup(snapshot: AppSnapshot): string {
   }));
   data.app_settings.push({ id: "ironlog_settings", key: "ironlog_settings",
     value: JSON.stringify({ ...snapshot.profile.nativeSettings, barWeightKg: basePlateSetup(snapshot.profile).barKg }), value_type: "json", ...stamp });
+  data.app_settings.push({ id: "favorite_exercises", key: "favorite_exercises",
+    value: JSON.stringify([...new Set(snapshot.profile.favoriteExerciseIds ?? [])].sort()), value_type: "json", ...stamp });
   const finiteGyms = snapshot.gyms.filter(g => g.plateInventory !== undefined);
   let activeGym = snapshot.profile.activeGymId
     ? finiteGyms.find(g => g.id === snapshot.profile.activeGymId)
@@ -771,6 +773,12 @@ export function decodeAndroidBackup(raw: string): {
   const selectedGym = mergedGyms.find(g => g.id === activeGymId) ?? activeGym ??
     (!activeGymId ? mergedGyms.find(g => g.id === ext.unsupportedActiveGymId && g.plateInventory === undefined) : undefined);
   const sourceProfile = profileSchema.parse({ ...profile, ...obj(ext.profile) });
+  const favoriteSetting = table("app_settings").find(s => s.key === "favorite_exercises");
+  if (favoriteSetting) {
+    let favorites = parse(str(favoriteSetting.value));
+    if (typeof favorites === "string") favorites = parse(favorites);
+    sourceProfile.favoriteExerciseIds = [...new Set(z.array(z.string().min(1)).parse(favorites))].sort();
+  }
   const nativeSetting = table("app_settings").find(s => s.key === "ironlog_settings");
   let nativeSettings = sourceProfile.nativeSettings;
   const base = ext.profile == null ? nativeDefaultPlateSetup() : basePlateSetup(sourceProfile);

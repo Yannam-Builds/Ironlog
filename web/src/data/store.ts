@@ -617,7 +617,52 @@ export function swapExercise(
   );
 }
 export async function saveExercise(e: Exercise) {
-  await db.exercises.put(exerciseSchema.parse(e));
+  const valid = exerciseSchema.parse({ ...e, name: e.name.trim() });
+  if (!exerciseNameKey(valid.name)) throw Error("Enter an exercise name.");
+  await db.transaction("rw", db.catalog, db.exercises, async () => {
+    const library = await readExerciseLibrary();
+    if (valid.custom && library.some(other => other.id !== valid.id && exerciseNameKey(other.name) === exerciseNameKey(valid.name)))
+      throw Error("An exercise with this name already exists. Choose it from the library.");
+    await db.exercises.put(valid);
+  });
+}
+const exerciseNameKey = (name: string) => name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/_+$/, "");
+
+/** Read current favorites inside the write transaction so different tabs cannot lose additions. */
+export async function setExerciseFavorite(id: string, selected: boolean) {
+  await db.transaction("rw", db.profiles, db.catalog, db.exercises, async () => {
+    if (!(await readExerciseLibrary()).some(exercise => exercise.id === id)) throw Error("Exercise no longer exists.");
+    const row = await db.profiles.get("local");
+    const favorites = new Set(row?.favoriteExerciseIds ?? []);
+    if (selected) favorites.add(id); else favorites.delete(id);
+    const profile = profileSchema.parse({ ...defaultProfile, ...row, favoriteExerciseIds: [...favorites].sort() });
+    await db.profiles.put({ ...profile, id: "local" });
+  });
+}
+
+/** Match Kotlin reference protection; name-only imported references are protected too. */
+export async function deleteCustomExercise(id: string) {
+  await db.transaction("rw", db.catalog, db.exercises, db.profiles, db.plans, db.workouts, async () => {
+    const target = (await readExerciseLibrary()).find(exercise => exercise.id === id);
+    if (!target) throw Error("Exercise no longer exists.");
+    const bundled = await db.catalog.get("bundled");
+    if (!target.custom || bundled?.exercises.some(exercise => exercise.id === id)) throw Error("Built-in exercises cannot be deleted.");
+    const references = (exercise: { exerciseId: string; name: string }) => exercise.exerciseId === id ||
+      (!exercise.exerciseId.trim() && exerciseNameKey(exercise.name) === exerciseNameKey(target.name));
+    if ((await db.plans.toArray()).some(plan => plan.days.some(day => day.exercises.some(references))))
+      throw Error("This exercise is used in a plan. Remove it from the plan before deleting.");
+    if ((await db.workouts.toArray()).some(workout => workout.exercises.some(references)))
+      throw Error("This exercise is used in a workout. Keep it to preserve your history.");
+    await db.exercises.delete(id);
+    const restored = await db.catalog.get("restored");
+    if (restored) await db.catalog.put({ ...restored, exercises: restored.exercises.filter(exercise => exercise.id !== id) });
+    const row = await db.profiles.get("local");
+    const notes = { ...row?.exerciseNextNotes };
+    delete notes[`exercise_next_note:${id}`];
+    const profile = profileSchema.parse({ ...defaultProfile, ...row, exerciseNextNotes: notes,
+      favoriteExerciseIds: (row?.favoriteExerciseIds ?? []).filter(value => value !== id) });
+    await db.profiles.put({ ...profile, id: "local" });
+  });
 }
 export async function saveMeasurement(m: Measurement) {
   await db.measurements.put(snapshotSchema.shape.measurements.element.parse(m));

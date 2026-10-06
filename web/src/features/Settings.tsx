@@ -30,7 +30,6 @@ import {
   decodeWebBackup,
 } from "../domain/codecs";
 import type { AppSnapshot } from "../domain/types";
-import { ExercisePicker } from "./Plans";
 import { GymProfiles } from "./GymProfiles";
 import { basePlateSetup } from "../domain/gym-setup";
 import { loadCatalog } from "../catalog";
@@ -48,7 +47,6 @@ export function Settings() {
   const [confirm, setConfirm] = useState("");
   const [restore, setRestore] = useState<AppSnapshot>();
   const [warnings, setWarnings] = useState<string[]>([]);
-  const [library, setLibrary] = useState(false);
   const [gym, setGym] = useState(false);
   const [barEditor, setBarEditor] = useState(false);
   const [barDraft, setBarDraft] = useState("");
@@ -217,7 +215,7 @@ export function Settings() {
           <strong>Gym & plate setup</strong>
           <Icon name="next" />
         </button>
-        <button className="list-row" onClick={() => setLibrary(true)}>
+        <button className="list-row" onClick={() => navigate("library")}>
           <strong>Exercise library & custom exercises</strong>
           <Icon name="next" />
         </button>
@@ -459,12 +457,6 @@ export function Settings() {
             Delete browser data
           </Button>
         </Sheet>
-      )}
-      {library && (
-        <ExercisePicker
-          onClose={() => setLibrary(false)}
-          onPick={() => setLibrary(false)}
-        />
       )}
       {gym && <GymProfiles onClose={() => setGym(false)} />}
       {barEditor && <Sheet title="Default bar weight" onClose={() => setBarEditor(false)}>

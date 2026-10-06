@@ -7,6 +7,7 @@ export const routeFromHash = (hash = window.location.hash) =>
   hash.replace(/^#\//, "") || "home";
 
 export function parentRoute(route: string): string {
+  if (route === "library") return "settings";
   if (route.startsWith("plan/")) return "plans";
   if (route.startsWith("history/")) return "log";
   if (route === "calendar") return "log";

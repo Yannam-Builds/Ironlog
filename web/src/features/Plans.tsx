@@ -35,18 +35,22 @@ import templates from "../generated/templates.json";
 export function ExercisePicker({
   onPick,
   onClose,
+  initialQuery = "",
+  createOnly = false,
 }: {
   onPick: (e: Exercise) => void;
   onClose: () => void;
+  initialQuery?: string;
+  createOnly?: boolean;
 }) {
   const { data, run, busy } = useApp();
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(initialQuery);
   const [debouncedQuery, setDebouncedQuery] = useState("");
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedQuery(query), 180);
     return () => window.clearTimeout(timer);
   }, [query]);
-  const [custom, setCustom] = useState(false);
+  const [custom, setCustom] = useState(createOnly);
   const [muscle, setMuscle] = useState("Chest");
   const [equipment, setEquipment] = useState("Barbell");
   const [tracking, setTracking] = useState<Tracking>("weight_reps");
@@ -163,7 +167,7 @@ export function ExercisePicker({
               });
             }}
           >
-            Create and select
+            {createOnly ? "Create exercise" : "Create and select"}
           </Button>
         </>
       ) : (
