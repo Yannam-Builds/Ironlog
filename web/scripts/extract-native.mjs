@@ -9,6 +9,7 @@ import { resolve, dirname, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
+import { nativeExerciseCatalog } from "./native-exercise-catalog.mjs";
 
 export function nativeLogoSvg(xml) {
   const paths = [...xml.matchAll(/android:pathData="([^"]+)"/g)];
@@ -143,22 +144,8 @@ function extract(source) {
     throw Error("Native theme contract changed");
   output("src/generated/themes.json", themes);
   const raw = JSON.parse(read(prefix + "assets/exerciseLibrary.json"));
-  const exercises = raw.exercises.map((e) => ({
-    id: e.id,
-    name: e.name,
-    aliases: e.aliases ?? [],
-    muscle: e.primaryMuscle ?? "",
-    equipment: e.equipment ?? "",
-    secondaryMuscles: e.secondaryMuscles ?? [],
-    tracking:
-      e.trackingType === "duration_distance"
-        ? "duration_distance"
-        : e.trackingType === "duration"
-          ? "duration"
-          : e.isBodyweight && !e.requiresExternalLoad
-            ? "bodyweight_reps"
-            : "weight_reps",
-  }));
+  const exercises = nativeExerciseCatalog(raw.exercises,
+    read(prefix + "java/com/ironlog/app/util/ExerciseTrackingTypeNormalizer.kt").toString());
   output("public/data/exercises.json", exercises);
   const norm = (s) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
   const lookup = new Map(
