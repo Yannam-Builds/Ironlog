@@ -144,8 +144,12 @@ function extract(source) {
     throw Error("Native theme contract changed");
   output("src/generated/themes.json", themes);
   const raw = JSON.parse(read(prefix + "assets/exerciseLibrary.json"));
-  const exercises = nativeExerciseCatalog(raw.exercises,
-    read(prefix + "java/com/ironlog/app/util/ExerciseTrackingTypeNormalizer.kt").toString());
+  const exercises = nativeExerciseCatalog(
+    raw.exercises,
+    read(
+      prefix + "java/com/ironlog/app/util/ExerciseTrackingTypeNormalizer.kt",
+    ).toString(),
+  );
   output("public/data/exercises.json", exercises);
   const norm = (s) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
   const lookup = new Map(
@@ -163,6 +167,24 @@ function extract(source) {
       for (const e of d.exercises)
         e.exerciseId = lookup.get(norm(e.name)) ?? "";
   output("src/generated/templates.json", templates);
+  const tutorials = JSON.parse(
+    read(prefix + "assets/ironlog/exercise_youtube_by_normalized_name.json"),
+  );
+  output(
+    "src/generated/exercise-tutorials.json",
+    Object.fromEntries(
+      Object.entries(tutorials).flatMap(([key, row]) => {
+        try {
+          const url = new URL(row.youtubeLink);
+          return ["http:", "https:"].includes(url.protocol)
+            ? [[key, row.youtubeLink]]
+            : [];
+        } catch {
+          return [];
+        }
+      }),
+    ),
+  );
   output(
     "src/generated/body-map.json",
     JSON.parse(read(prefix + "assets/ironlog/body_map_paths.json")),
@@ -171,7 +193,9 @@ function extract(source) {
   // by Compose. Export the complete set so web screens can select the same
   // mascot pose, badge and grade art instead of maintaining approximations.
   const art = prefix + "res/drawable-nodpi/";
-  const artwork = readdirSync(resolve(source, art)).filter((n) => n.endsWith(".png"));
+  const artwork = readdirSync(resolve(source, art)).filter((n) =>
+    n.endsWith(".png"),
+  );
   const fonts = readdirSync(resolve(source, prefix + "res/font/")).filter((n) =>
     n.endsWith(".ttf"),
   );

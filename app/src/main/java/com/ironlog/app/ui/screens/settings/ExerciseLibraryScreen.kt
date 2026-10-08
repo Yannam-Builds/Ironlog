@@ -54,7 +54,7 @@ import com.ironlog.app.ui.theme.IronLogRadius
 import com.ironlog.app.ui.theme.IronLogType
 import com.ironlog.app.util.buildFilterChipOptions
 import com.ironlog.app.util.matchesExerciseFilter
-import com.ironlog.app.util.normalizeExerciseNameKey
+import com.ironlog.app.util.exerciseTutorialLink
 import com.ironlog.app.util.queryExerciseSearch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -340,7 +340,7 @@ fun ExerciseLibraryScreen(
             }
 
             items(filtered, key = { it.id }) { ex ->
-                val hasVideo = videoMap.containsKey(normalizeExerciseNameKey(ex.name))
+                val hasVideo = exerciseTutorialLink(videoMap, ex.name) != null
                 ExerciseRow(
                     exercise = ex,
                     isFavorite = favoriteIds.contains(ex.id),
@@ -351,7 +351,7 @@ fun ExerciseLibraryScreen(
                     onClick = { onExerciseClick?.invoke(ex) },
                     hasVideo = hasVideo,
                     onVideo = {
-                        val link = videoMap[normalizeExerciseNameKey(ex.name)] ?: return@ExerciseRow
+                        val link = exerciseTutorialLink(videoMap, ex.name) ?: return@ExerciseRow
                         runCatching {
                             context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(link)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                         }

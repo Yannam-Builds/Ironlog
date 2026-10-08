@@ -16,6 +16,8 @@ export function Icon({ name, size = 22 }: { name: string; size?: number }) {
   // The Kotlin app uses Compose Outlined navigation and Filled gym controls.
   // Preserve their 24dp filled paths rather than approximating with strokes.
   const composePaths: Record<string, string> = {
+    "arrow-back": "M20,11H7.83l5.59,-5.59L12,4l-8,8 8,8 1.41,-1.41L7.83,13H20v-2z",
+    "trending-up": "M16,6l2.29,2.29 -4.88,4.88 -4,-4L2,17.59 3.41,19l6,-6 4,4 6.3,-6.29L22,13V6z",
     "star-filled": "M12,17.27L18.18,21l-1.64,-7.03L22,9.24l-7.19,-0.61L12,2 9.19,8.63 2,9.24l5.46,4.73L5.82,21z",
     star: "M22,9.24l-7.19,-0.62L12,2 9.19,8.63 2,9.24l5.46,4.73L5.82,21 12,17.27 18.18,21l-1.63,-7.03L22,9.24zM12,15.4l-3.76,2.27 1,-4.28 -3.32,-2.88 4.38,-0.38L12,6.1l1.71,4.04 4.38,0.38 -3.32,2.88 1,4.28L12,15.4z",
     "filter-list": "M10,18h4v-2h-4v2zM3,6v2h18V6H3zM6,13h12v-2H6v2z",
@@ -114,11 +116,12 @@ export function Button({
 export function IconButton({
   name,
   label,
+    size,
   ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & { name: string; label: string }) {
+  }: ButtonHTMLAttributes<HTMLButtonElement> & { name: string; label: string; size?: number }) {
   return (
     <button {...props} className="icon-button" aria-label={label}>
-      <Icon name={name} />
+        <Icon name={name} size={size} />
     </button>
   );
 }

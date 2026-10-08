@@ -320,21 +320,21 @@ export function App() {
         <Onboarding />
       ) : (
         <>
-          <div className="app-shell">
-            {detail && (
+          <div className={`app-shell${route === "library" ? " library-shell" : ""}`}>
+            {detail && route !== "library" && (
               <header className="app-header detail-header">
                 <IconButton
                   name="back"
                   label="Back"
                   onClick={() => backFrom(route)}
                 />
-                {route === "library" ? <h1 className="detail-screen-title">Exercise library</h1> : <strong>
+                <strong>
                   {route.startsWith("plan/")
                     ? "EDIT PLAN"
                     : route.startsWith("history/")
                       ? "WORKOUT"
                       : detailTitles[route] ?? "IRONLOG"}
-                </strong>}
+                </strong>
                 <span aria-hidden="true" />
               </header>
             )}
@@ -416,7 +416,7 @@ export function App() {
               </div>
             </main>
           </div>
-          <nav className={`bottom-nav${data.profile.liquidGlassEnabled ? " liquid-glass" : ""}`} aria-label="Main">
+          {route !== "library" && <nav className={`bottom-nav${data.profile.liquidGlassEnabled ? " liquid-glass" : ""}`} aria-label="Main">
             <span
               className="bottom-nav-selection"
               aria-hidden="true"
@@ -435,7 +435,7 @@ export function App() {
                 </a>
               );
             })}
-          </nav>
+          </nav>}
         </>
       )}
       {busy && (
