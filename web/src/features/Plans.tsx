@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { useApp, navigate, download } from "../ui/context";
+import { guardNavigation } from "../ui/navigation";
 import {
   Button,
   Field,
@@ -612,15 +613,25 @@ export function PlanEditor({ id }: { id: string }) {
   const [addTo, setAddTo] = useState<string>();
   const [confirm, setConfirm] = useState(false);
   const [confirmClose, setConfirmClose] = useState(false);
+  const pendingNavigation = useRef<(() => void) | undefined>(undefined);
+  const releaseNavigationGuard = useRef<(() => void) | undefined>(undefined);
   const [notesSettings, setNotesSettings] = useState(false);
   const [confirmDeleteNotes, setConfirmDeleteNotes] = useState(false);
   const [notesVisible, setNotesVisible] = useState(data.profile.planExerciseNotesVisible);
   const dirty = Boolean(draft && baseline && JSON.stringify(draft) !== JSON.stringify(baseline));
   useEffect(() => {
     if (!dirty) return;
+    const release = guardNavigation((proceed) => {
+      pendingNavigation.current = proceed;
+      setConfirmClose(true);
+    });
+    releaseNavigationGuard.current = release;
     const warn = (event: BeforeUnloadEvent) => event.preventDefault();
     window.addEventListener("beforeunload", warn);
-    return () => window.removeEventListener("beforeunload", warn);
+    return () => {
+      release();
+      window.removeEventListener("beforeunload", warn);
+    };
   }, [dirty]);
   if (!draft)
     return (
@@ -641,7 +652,7 @@ export function PlanEditor({ id }: { id: string }) {
     <>
       <div className="page-title">
         <div className="row">
-          <Button variant="ghost" onClick={() => dirty ? setConfirmClose(true) : navigate("plans")}>Back to plans</Button>
+          <Button variant="ghost" onClick={() => navigate("plans")}>Back to plans</Button>
           <h1>Edit plan</h1>
         </div>
         <IconButton name="note" label="Plan note settings" onClick={() => setNotesSettings(true)} />
@@ -870,6 +881,7 @@ export function PlanEditor({ id }: { id: string }) {
               if (!baseline)
                 throw Error("Plan not found. Reload your saved plans.");
               await savePlanIfUnchanged(draft, baseline);
+              releaseNavigationGuard.current?.();
               navigate("plans");
             }, "Plan saved")
           }
@@ -892,6 +904,7 @@ export function PlanEditor({ id }: { id: string }) {
           onClick={() =>
             run(async () => {
               await duplicatePlan(id);
+                releaseNavigationGuard.current?.();
               navigate("plans");
             })
           }
@@ -922,6 +935,7 @@ export function PlanEditor({ id }: { id: string }) {
             onClick={() =>
               run(async () => {
                 await deletePlan(id);
+                releaseNavigationGuard.current?.();
                 navigate("plans");
               })
             }
@@ -960,7 +974,13 @@ export function PlanEditor({ id }: { id: string }) {
       {confirmClose && (
         <Sheet title="Discard plan edits?" onClose={() => setConfirmClose(false)}>
           <p>Your unsaved plan changes will be lost.</p>
-          <Button variant="danger" onClick={() => navigate("plans")}>Discard and leave</Button>
+          <Button variant="danger" onClick={() => {
+            releaseNavigationGuard.current?.();
+            const proceed = pendingNavigation.current;
+            pendingNavigation.current = undefined;
+            if (proceed) proceed();
+            else navigate("plans");
+          }}>Discard and leave</Button>
           <Button variant="secondary" onClick={() => setConfirmClose(false)}>Keep editing</Button>
         </Sheet>
       )}

@@ -251,6 +251,24 @@ pre {
 .detail-header + .app-content {
   padding-top: 0;
 }
+.detail-shell .app-content {
+  padding-bottom: calc(24px * var(--ui-spacing, 1) + env(safe-area-inset-bottom));
+}
+.tab-shell.has-active-workout .app-content {
+  padding-bottom: calc(max(calc(180px * var(--ui-spacing, 1)), 11rem) + env(safe-area-inset-bottom));
+}
+.tab-shell > .resume {
+  position: fixed;
+  z-index: var(--z-nav);
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(92px + env(safe-area-inset-bottom));
+  width: min(560px, calc(100% - 40px));
+  margin: 0;
+  border-radius: 999px;
+  box-shadow: 0 8px 24px #0003;
+  animation: none;
+}
 .page-title,
 .section-title {
   display: flex;
@@ -2353,7 +2371,7 @@ body.workout-reordering { cursor: grabbing; user-select: none; }
 /* ExerciseLibraryScreen: native rows, scope chips, search and sheet controls. */
 .exercise-library { min-width: 0; }
 .library-shell .app-content { padding-bottom: max(24px, env(safe-area-inset-bottom)); }
-.library-shell .app-content { padding-top: env(safe-area-inset-top); }
+.library-shell .app-content { padding-top: 0; }
 .library-header { height: auto; min-height: 56px; text-align: left; grid-template-columns: 48px 1fr; gap: calc(10px * var(--ui-spacing, 1)); padding-bottom: 8px; }
 .library-header > span { display: none; }
 .library-header .icon-button { color: var(--accent); }

@@ -28,6 +28,8 @@ Thumbs.db
 .agents/
 .impeccable/
 artifacts/
+# Browser automation session snapshots and console logs
+.playwright-cli/
 # Local CI artifact downloads and rendered previews
 output/
 PROJECT.md
