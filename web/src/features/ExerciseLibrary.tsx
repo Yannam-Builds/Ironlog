@@ -3,6 +3,8 @@ import { useApp, navigate } from "../ui/context";
 import { Button, Icon, IconButton, Sheet } from "../ui/components";
 import { deleteCustomExercise, setExerciseFavorite } from "../data/store";
 import { queryExerciseSearch } from "../domain/exercise-search";
+import { exerciseTutorial } from "../domain/exercise-tutorial";
+import { backFrom } from "../ui/navigation";
 import type { Exercise } from "../domain/types";
 import { ExercisePicker } from "./Plans";
 
@@ -93,7 +95,10 @@ export function ExerciseLibrary() {
       category: values("category"),
       movementPattern: values("movementPattern"),
       difficulty: ["beginner", "intermediate", "advanced", "expert"].filter(
-        (value) => values("difficulty").includes(value),
+        (value) =>
+          values("difficulty").some(
+            (difficulty) => difficulty.toLowerCase() === value,
+          ),
       ),
     };
   }, [data.exercises]);
@@ -163,6 +168,21 @@ export function ExerciseLibrary() {
 
   return (
     <section className="exercise-library">
+      <header className="app-header detail-header library-header">
+        <IconButton
+          name="arrow-back"
+          size={24}
+          label="Back"
+          onClick={() => backFrom("library")}
+        />
+        <div>
+          <h1 className="detail-screen-title">Exercise library</h1>
+          <small className="muted">
+            {list.length} exercise{list.length === 1 ? "" : "s"}
+          </small>
+        </div>
+        <span aria-hidden="true" />
+      </header>
       <div className="library-toolbar">
         <div className="library-active-filters">
           {activeFilters.map(([key, value]) => {
@@ -226,10 +246,6 @@ export function ExerciseLibrary() {
         <p className="muted" aria-live="polite">
           {list.length} exercise{list.length === 1 ? "" : "s"}
         </p>
-        <Button variant="ghost" onClick={() => setCreating(true)}>
-          <Icon name="plus" size={18} />
-          Create custom exercise
-        </Button>
       </div>
       {!!recent.length && !debounced.trim() && !activeFilters.length && (
         <div className="library-recent">
@@ -268,6 +284,7 @@ export function ExerciseLibrary() {
             <div className="library-row-actions">
               <IconButton
                 name={favorites.has(ex.id) ? "star-filled" : "star"}
+                size={20}
                 label={`${favorites.has(ex.id) ? "Unfavorite" : "Favorite"} ${ex.name}`}
                 aria-pressed={favorites.has(ex.id)}
                 disabled={busy}
@@ -277,13 +294,33 @@ export function ExerciseLibrary() {
                   )
                 }
               />
+              <IconButton
+                name="trending-up"
+                size={18}
+                label={`Open progress for ${ex.name}`}
+                onClick={() =>
+                  navigate(`exercise/${encodeURIComponent(ex.id)}`)
+                }
+              />
               {ex.custom && (
                 <IconButton
                   name="delete-outline"
+                  size={24}
                   label={`Delete ${ex.name}`}
                   disabled={busy}
                   onClick={() => setDeleting(ex)}
                 />
+              )}
+              {exerciseTutorial(ex.name) && (
+                <a
+                  className="library-video"
+                  href={exerciseTutorial(ex.name)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={`Watch tutorial for ${ex.name}`}
+                >
+                  ▶ VIDEO
+                </a>
               )}
             </div>
           </article>
@@ -322,7 +359,10 @@ export function ExerciseLibrary() {
                 <button
                   key={scope}
                   className={`library-chip ${filters.scope === scope && (scope !== "all" || !filters.bodyweight) ? "active" : ""}`}
-                  aria-pressed={filters.scope === scope && (scope !== "all" || !filters.bodyweight)}
+                  aria-pressed={
+                    filters.scope === scope &&
+                    (scope !== "all" || !filters.bodyweight)
+                  }
                   onClick={() => toggle("scope", scope)}
                 >
                   {title(scope)}
@@ -348,7 +388,10 @@ export function ExerciseLibrary() {
           ).map(
             ([key, label]) =>
               !!options[key].length && (
-                <fieldset className="choice-fieldset library-filter-group" key={key}>
+                <fieldset
+                  className="choice-fieldset library-filter-group"
+                  key={key}
+                >
                   <legend>{label}</legend>
                   <div className="choice-chips">
                     {options[key].map((value) => (

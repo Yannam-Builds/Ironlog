@@ -26,7 +26,7 @@ const bench: Exercise = {
   tracking: "weight_reps",
   secondaryMuscles: ["Triceps"],
   category: "strength",
-  difficulty: "beginner",
+  difficulty: "Beginner",
   movementPattern: "push",
 };
 const row: Exercise = {
@@ -55,6 +55,35 @@ async function openLibrary() {
   );
   return screen.findByRole("heading", { name: "Exercise library" });
 }
+it("uses the native full-screen library and a separate progress control", async () => {
+  await openLibrary();
+  expect(
+    screen.queryByRole("navigation", { name: "Main" }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: "Open progress for Bench Press" }),
+  ).toBeVisible();
+});
+it("offers the exact native tutorial link only for mapped exercise names", async () => {
+  await saveExercise({
+    ...bench,
+    id: "ab-machine",
+    name: "Ab Crunch Machine",
+    custom: true,
+  });
+  await openLibrary();
+  const video = screen.getByRole("link", {
+    name: "Watch tutorial for Ab Crunch Machine",
+  });
+  expect(video).toHaveAttribute(
+    "href",
+    "https://www.youtube.com/results?search_query=Ab+Crunch+Machine+Abdominals+exercise+tutorial",
+  );
+  expect(video).toHaveAttribute("rel", "noopener noreferrer");
+  expect(
+    screen.queryByRole("link", { name: "Watch tutorial for Bench Press" }),
+  ).not.toBeInTheDocument();
+});
 it("opens a separate library destination and persists favorites without dismissing the screen", async () => {
   await openLibrary();
   expect(window.location.hash).toBe("#/library");
@@ -98,7 +127,7 @@ it("combines secondary muscle and difficulty filters, clears them and respects a
   fireEvent.click(
     within(dialog).getByRole("button", { name: "Show exercises" }),
   );
-  expect(screen.getByText("1 exercise")).toBeVisible();
+  expect(screen.getAllByText("1 exercise")).toHaveLength(2);
   expect(
     screen.getByRole("button", { name: "Remove Triceps filter" }),
   ).toBeVisible();
@@ -119,7 +148,7 @@ it("reaches results beyond the old 50-row limit and follows native progress navi
     })),
   );
   await openLibrary();
-  expect(screen.getByText("151 exercises")).toBeVisible();
+  expect(screen.getAllByText("151 exercises")).toHaveLength(2);
   fireEvent.click(screen.getByRole("button", { name: /Show more exercises/ }));
   fireEvent.click(
     screen.getByRole("button", { name: "View progress for Exercise 150" }),
@@ -230,17 +259,18 @@ it("All scope clears the BW-only restriction as in Kotlin", async () => {
   fireEvent.click(screen.getByRole("button", { name: "Filters" }));
   const dialog = screen.getByRole("dialog", { name: "Filters" });
   fireEvent.click(within(dialog).getByRole("button", { name: "BW Only" }));
-  expect(within(dialog).getByRole("button", { name: "All" })).toHaveAttribute("aria-pressed", "false");
-  fireEvent.click(
-    within(dialog).getByRole("button", { name: "All" }),
+  expect(within(dialog).getByRole("button", { name: "All" })).toHaveAttribute(
+    "aria-pressed",
+    "false",
   );
+  fireEvent.click(within(dialog).getByRole("button", { name: "All" }));
   expect(
     within(dialog).getByRole("button", { name: "BW Only" }),
   ).toHaveAttribute("aria-pressed", "false");
   fireEvent.click(
     within(dialog).getByRole("button", { name: "Show exercises" }),
   );
-  expect(screen.getByText("2 exercises")).toBeVisible();
+  expect(screen.getAllByText("2 exercises")).toHaveLength(2);
 });
 it("uses the latest completed workout names as recent search chips", async () => {
   await db.workouts.put({
@@ -272,9 +302,7 @@ it("uses the latest completed workout names as recent search chips", async () =>
     ],
   });
   await openLibrary();
-  fireEvent.click(
-    screen.getByRole("button", { name: "Bench Press" }),
-  );
+  fireEvent.click(screen.getByRole("button", { name: "Bench Press" }));
   expect(screen.getByLabelText("Search exercises")).toHaveValue("Bench Press");
   await waitFor(() =>
     expect(
@@ -282,4 +310,3 @@ it("uses the latest completed workout names as recent search chips", async () =>
     ).not.toBeInTheDocument(),
   );
 });
-

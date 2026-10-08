@@ -2352,6 +2352,13 @@ body.workout-reordering { cursor: grabbing; user-select: none; }
 
 /* ExerciseLibraryScreen: native rows, scope chips, search and sheet controls. */
 .exercise-library { min-width: 0; }
+.library-shell .app-content { padding-bottom: max(24px, env(safe-area-inset-bottom)); }
+.library-shell .app-content { padding-top: env(safe-area-inset-top); }
+.library-header { height: auto; min-height: 56px; text-align: left; grid-template-columns: 48px 1fr; gap: calc(10px * var(--ui-spacing, 1)); padding-bottom: 8px; }
+.library-header > span { display: none; }
+.library-header .icon-button { color: var(--accent); }
+.library-header small { display: block; font-size: .75rem; margin-top: 4px; }
+.library-video { color: var(--accent); font-size: .75rem; font-weight: 800; text-decoration: none; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; padding: 0 8px; }
 .detail-screen-title { font: inherit; font-weight: 800; text-transform: uppercase; margin: 0; }
 .library-toolbar { display: flex; align-items: center; gap: 8px; margin: 8px 0; }
 .library-active-filters { display: flex; flex: 1; min-width: 0; gap: 6px; align-items: center; overflow-x: auto; scrollbar-width: thin; }

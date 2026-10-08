@@ -1,5 +1,5 @@
 {
-  "revision": "ce030e182e53923ab840b10bc6a2142c3cdf4899",
+  "revision": "55a8973dc13ff4d05afe46b890fd07d5106ed192",
   "reference": "Native working tree (file hashes are authoritative)",
   "files": [
     {
@@ -17,6 +17,10 @@
     {
       "path": "app/src/main/java/com/ironlog/app/data/seed/ProgramTemplates.kt",
       "sha256": "4a59436b40d6155ea917ebe995bb4210a37093e132f79d3f36f7358d773c3eed"
+    },
+    {
+      "path": "app/src/main/assets/ironlog/exercise_youtube_by_normalized_name.json",
+      "sha256": "06e9ef477ff327c5dc9e9e945cfbe6a63cecf804f8c5d5967a5b09ab2f3520e1"
     },
     {
       "path": "app/src/main/assets/ironlog/body_map_paths.json",

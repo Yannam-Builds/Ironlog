@@ -14,7 +14,7 @@ export function queryExerciseSearch(exercises: Exercise[], query: string): Exerc
       exercise.equipment, exercise.category ?? "", exercise.movementPattern ?? "", exercise.difficulty ?? ""].join(" "));
     const score = name === q ? 0 : name.startsWith(q) ? 1 : name.includes(q) || aliases.includes(q) ? 2
       : words.length && words.every(word => name.includes(word)) ? 3
-      : words.some(word => name.split(" ").some(part => part.startsWith(word))) ? 4
+      : words.some(word => word.length >= 3 && name.split(" ").some(part => part.startsWith(word))) ? 4
       : words.length && words.every(word => haystack.includes(word)) ? 5
       : words.some(word => word.length >= 3 && haystack.includes(word)) ? 6 : 1000;
     return { exercise, score };
