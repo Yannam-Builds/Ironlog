@@ -68,3 +68,18 @@ it("separates hiding notes from confirmed deletion and guards unsaved close", as
   fireEvent.click(screen.getByRole("button", { name: "Discard and leave" }));
   expect(window.location.hash).toBe("#/plans");
 });
+
+it("generates a deload only after confirmation and saves it explicitly", async () => {
+  await renderEditor();
+  fireEvent.click(screen.getAllByRole("button", { name: "Generate Deload Day" })[0]);
+  expect(screen.getByRole("heading", { name: "Generate Deload Day" })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  expect(screen.queryByDisplayValue("Day A (Deload)")).not.toBeInTheDocument();
+  fireEvent.click(screen.getAllByRole("button", { name: "Generate Deload Day" })[0]);
+  fireEvent.click(screen.getByRole("button", { name: /^Generate$/ }));
+  expect(screen.getByLabelText("Day 3")).toHaveValue("Day A (Deload)");
+  expect((await readSnapshot()).plans[0].days).toHaveLength(2);
+  fireEvent.click(screen.getByRole("button", { name: "Save plan" }));
+  await waitFor(() => expect(window.location.hash).toBe("#/plans"));
+  expect((await readSnapshot()).plans[0].days[2].exercises[0]).toMatchObject({sets:2,notes:"Deload: use 60% of working weight"});
+});

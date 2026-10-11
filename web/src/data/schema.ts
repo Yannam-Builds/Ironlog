@@ -67,6 +67,7 @@ export const workoutSchema = z.object({
   dayId: z.string().optional(),
   name: z.string(),
   startedAt: number,
+  timerStartedAt: number.optional(),
   completedAt: number.optional(),
   durationSeconds: number.optional(),
   status: z.enum(["active", "completed", "discarded"]),
@@ -134,6 +135,9 @@ const onboardingLedgerBaselineSchema = z.object({
   seededAt: number,
 });
 export const profileSchema = z.object({
+  calibrationProvenance: z.object({ firstVerifiedSessionAt: number, importedHistory: z.boolean(), confidence: z.number().min(0).max(1), updatedAt: number }).optional(),
+  badgeOrigins: z.record(z.string(), z.string()).optional(),
+  cloudConfig: z.object({ provider: z.string(), baseUrl: z.string(), model: z.string(), format: z.enum(["openai", "anthropic"]) }).optional(),
   name: z.string(),
   age: number,
   yearOfBirth: z.number().int().min(1900).max(3000).default(2000),
@@ -146,6 +150,9 @@ export const profileSchema = z.object({
   goal: z.string(),
   progressionStyle: z.string().default("LINEAR"),
   goalMode: z.string().default("STRENGTH"),
+  intelligenceMode: z.enum(["built_in", "cloud_ai"]).optional(),
+  goalModesUsed: z.array(z.string()).optional(),
+  lastCreditedGoalWorkoutId: z.string().optional(),
   selectedTrainingDays: z.array(z.number().int().min(0).max(6)).min(1).default([0, 2, 4]),
   trainingAgeMonths: z.number().int().nonnegative().default(0),
   historicalTrainingDaysPerWeek: z.number().int().min(1).max(7).default(3),

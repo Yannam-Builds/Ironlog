@@ -22,6 +22,7 @@ import {
   reorderPlans,
 } from "../data/store";
 import { decodePlans, encodePlan } from "../domain/codecs";
+import { deloadDay } from "../domain/plan-coaching";
 import { instantiatePlan } from "../domain/plans";
 import { trackingOptions } from "../domain/tracking";
 import { queryExerciseSearch } from "../domain/exercise-search";
@@ -617,7 +618,23 @@ export function PlanEditor({ id }: { id: string }) {
   const releaseNavigationGuard = useRef<(() => void) | undefined>(undefined);
   const [notesSettings, setNotesSettings] = useState(false);
   const [confirmDeleteNotes, setConfirmDeleteNotes] = useState(false);
+  const [deloadSource, setDeloadSource] = useState<string>();
+  const [exerciseDrag, setExerciseDrag] = useState<string>();
+  const dragRef = useRef<{ dayId: string; exerciseId: string; original: PlannedExercise[]; centers: { id: string; y: number }[] } | undefined>(undefined);
   const [notesVisible, setNotesVisible] = useState(data.profile.planExerciseNotesVisible);
+  const editorRef = useRef<HTMLDivElement>(null);
+  const exercisePositions = useRef(new Map<string, number>());
+  useLayoutEffect(() => {
+    const positions = new Map<string, number>();
+    editorRef.current?.querySelectorAll<HTMLElement>("[data-exercise-id]").forEach(card => {
+      const id = card.dataset.exerciseId!;
+      const top = card.getBoundingClientRect().top;
+      positions.set(id, top);
+      const prior = exercisePositions.current.get(id);
+      if (prior !== undefined && id !== dragRef.current?.exerciseId && Math.abs(prior-top) > 1 && typeof card.animate === "function") card.animate([{transform:`translateY(${prior-top}px)`},{transform:"translateY(0)"}],{duration:200,easing:"cubic-bezier(0.2,0.8,0.2,1)"});
+    });
+    exercisePositions.current = positions;
+  }, [draft]);
   const dirty = Boolean(draft && baseline && JSON.stringify(draft) !== JSON.stringify(baseline));
   useEffect(() => {
     if (!dirty) return;
@@ -707,6 +724,7 @@ export function PlanEditor({ id }: { id: string }) {
         {(draft.progressionRules?.progressionModel ?? defaultRules.progressionModel) === "percent_1rm" && <Field label="Percent estimated 1RM"><input type="number" min="50" max="95" value={draft.progressionRules?.percent1RM ?? 75} onChange={(event) => editRules("percent1RM", Number(event.target.value))} /></Field>}
         {(draft.progressionRules?.progressionModel ?? defaultRules.progressionModel) === "rpe_rir" && <div className="two-col"><Field label="RPE target"><input type="number" min="1" max="10" value={draft.progressionRules?.rpeTarget ?? 8} onChange={(event) => editRules("rpeTarget", Number(event.target.value))} /></Field><Field label="RIR target"><input type="number" min="0" max="10" value={draft.progressionRules?.rirTarget ?? 2} onChange={(event) => editRules("rirTarget", Number(event.target.value))} /></Field></div>}
       </section>
+      <div ref={editorRef}>
       {draft.days.map((day, di) => (
         <section className="card plan-day" key={day.id}>
           <div className="row">
@@ -720,6 +738,7 @@ export function PlanEditor({ id }: { id: string }) {
                 }
               />
             </Field>
+            <Button variant="ghost" onClick={() => setDeloadSource(day.id)}>Generate Deload Day</Button>
             <IconButton
               name="trash"
               label={`Remove day ${day.name}`}
@@ -731,8 +750,38 @@ export function PlanEditor({ id }: { id: string }) {
             />
           </div>
           {day.exercises.map((ex, ei) => (
-            <div className="plan-exercise" key={ex.id}>
+            <div className={`plan-exercise${exerciseDrag === ex.id ? " dragging" : ""}`} data-exercise-id={ex.id} key={ex.id} style={{ opacity: exerciseDrag === ex.id ? .7 : 1, outline: exerciseDrag === ex.id ? "2px solid var(--accent, #ff4500)" : undefined, transition: "opacity 160ms, outline 160ms" }}>
               <div className="row">
+                <button type="button" className="plan-drag-handle" style={{ touchAction: "none" }} aria-label={`Drag to reorder ${ex.name}`} aria-pressed={exerciseDrag === ex.id}
+                  onPointerDown={event => {
+                    if (event.button !== 0) return;
+                    event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId);
+                    const cards = Array.from(event.currentTarget.closest(".plan-day")!.querySelectorAll<HTMLElement>("[data-exercise-id]"));
+                    dragRef.current = { dayId: day.id, exerciseId: ex.id, original: structuredClone(day.exercises), centers: cards.map(card => ({ id: card.dataset.exerciseId!, y: card.getBoundingClientRect().top + window.scrollY + card.getBoundingClientRect().height / 2 })) };
+                    setExerciseDrag(ex.id);
+                  }}
+                  onPointerMove={event => {
+                    const drag = dragRef.current; if (!drag || drag.exerciseId !== ex.id) return;
+                    const y = event.clientY + window.scrollY;
+                    const others = drag.centers.filter(row => row.id !== drag.exerciseId);
+                    let at = others.findIndex(row => y <= row.y); if (at < 0) at = others.length;
+                    const order = others.map(row => row.id); order.splice(at, 0, drag.exerciseId);
+                    setDraft(current => {
+                      if (!current) return current;
+                      const next = structuredClone(current); const items = next.days.find(d => d.id === drag.dayId)?.exercises;
+                      if (items) next.days.find(d => d.id === drag.dayId)!.exercises = order.map(id => items.find(e => e.id === id)!);
+                      return next;
+                    });
+                    if (event.clientY < 70) window.scrollBy(0, -12);
+                    else if (event.clientY > window.innerHeight - 70) window.scrollBy(0, 12);
+                  }}
+                  onPointerUp={event => { dragRef.current = undefined; setExerciseDrag(undefined); if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId); }}
+                  onPointerCancel={event => {
+                    const drag = dragRef.current;
+                    if (drag) setDraft(current => { if (!current) return current; const next = structuredClone(current); const day = next.days.find(d => d.id === drag.dayId); if (day) day.exercises = drag.original; return next; });
+                    dragRef.current = undefined; setExerciseDrag(undefined);
+                    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+                  }}><Icon name="menu" size={18} /></button>
                 <strong>{ex.name}</strong>
                 <IconButton
                   name="trash"
@@ -858,6 +907,7 @@ export function PlanEditor({ id }: { id: string }) {
           </Button>
         </section>
       ))}
+      </div>
       <Button
         variant="secondary"
         onClick={() =>
@@ -926,6 +976,15 @@ export function PlanEditor({ id }: { id: string }) {
           }}
         />
       )}
+      {deloadSource && <Sheet title="Generate Deload Day" onClose={() => setDeloadSource(undefined)}>
+        <p>This will create "{draft.days.find(day => day.id === deloadSource)?.name} (Deload)" with the same exercises at half the sets (minimum two) and a 60%-weight note.</p>
+        <p className="muted">The new day stays in this draft until you save the plan.</p>
+        <Button onClick={() => {
+          edit(plan => { const day = plan.days.find(day => day.id === deloadSource); if (day) plan.days.push(deloadDay(day, newId)); });
+          setDeloadSource(undefined);
+        }}>Generate</Button>
+        <Button variant="secondary" onClick={() => setDeloadSource(undefined)}>Cancel</Button>
+      </Sheet>}
       {confirm && (
         <Sheet title="Delete this plan?" onClose={() => setConfirm(false)}>
           <p>Completed workouts stay in History. This cannot be undone.</p>

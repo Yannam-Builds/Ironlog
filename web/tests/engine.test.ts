@@ -152,21 +152,13 @@ describe("native-reference deterministic rules", () => {
     expect(deriveSnapshot(s, now).weeklyStreak).toBe(1);
     expect(deriveSnapshot(s, now + 14 * 86400000).weeklyStreak).toBe(0);
   });
-  it("ports ghost progression +2.5kg or +5lb and bodyweight +2reps", () => {
+  it("holds progression without complete effort and target evidence", () => {
     const w = fixture();
-    expect(progressionSuggestion(w.exercises[0], "kg")).toMatchObject({
-      weightKg: 52.5,
-      reps: 8,
-    });
-    expect(progressionSuggestion(w.exercises[0], "lb")!.weightKg).toBeCloseTo(
-      50 + 5 / 2.20462262185,
-    );
+    expect(progressionSuggestion(w.exercises[0], "kg")).toMatchObject({ action: "hold", weightKg: 50 });
+    expect(progressionSuggestion(w.exercises[0], "lb")!.weightKg).toBe(50);
     w.exercises[0].tracking = "bodyweight_reps";
-    w.exercises[0].loggedSets.forEach((s) => (s.weightKg = 0));
-    expect(progressionSuggestion(w.exercises[0])).toMatchObject({
-      weightKg: 0,
-      reps: 10,
-    });
+    w.exercises[0].loggedSets.forEach(s => { s.weightKg = 0; });
+    expect(progressionSuggestion(w.exercises[0])).toMatchObject({ action: "hold", weightKg: 0 });
   });
   it("suggests a day using token-aware native matching and neutral unknown coverage", () => {
     expect(

@@ -1,4 +1,7 @@
 import Dexie, { liveQuery, type Table } from "dexie";
+import { canonicalGoalMode, cloudCoachingEnabled } from "../domain/coaching-mode";
+import { hasCloudSessionKey } from "../domain/cloud-ai";
+import { workoutElapsedSeconds, workoutTimerStartedAt } from "../domain/workout-clock";
 import { basePlateSetup } from "../domain/gym-setup";
 import {
   defaultProfile,
@@ -451,7 +454,9 @@ export function mutateWorkout(
   return serialize(id, () =>
     db.transaction("rw", db.workouts, async () => {
       const w = await requireActive(id, expectedRevision);
+      const priorClock = workoutTimerStartedAt(w);
       recipe(w);
+      w.timerStartedAt = priorClock ?? workoutTimerStartedAt(w);
       if (
         w.id !== id ||
         w.status !== "active" ||
@@ -519,7 +524,7 @@ export function finishWorkout(id: string): Promise<Workout> {
       w.completedAt = Date.now();
       w.durationSeconds = Math.max(
         0,
-        Math.round((w.completedAt - w.startedAt) / 1000),
+        workoutElapsedSeconds(w, w.completedAt),
       );
       w.restEndsAt = undefined;
       w.restPausedRemainingMs = undefined;
@@ -761,6 +766,17 @@ export async function saveHistoricalWorkout(workout: Workout) {
   });
   return valid;
 }
+export async function appendImportedWorkouts(workouts: Workout[]) {
+  const valid = workouts.map(w => workoutSchema.parse({ ...w, imported: true }));
+  if (!valid.length || valid.some(w => w.status !== "completed" || w.completedAt === undefined || w.completedAt < w.startedAt)) throw Error("Only valid completed imported workouts can be appended.");
+  assertUnique(valid.map(w => w.id), "imported workouts");
+  return db.transaction("rw", db.workouts, async () => {
+    const existing = await db.workouts.bulkGet(valid.map(w => w.id));
+    const fresh = valid.filter((_,index) => !existing[index]);
+    await db.workouts.bulkAdd(fresh);
+    return { imported: fresh.length, skipped: valid.length - fresh.length };
+  });
+}
 export async function restoreSnapshot(snapshot: AppSnapshot) {
   const valid = snapshotSchema.parse(snapshot);
   for (const key of [
@@ -860,6 +876,16 @@ export function editHistory(
     }),
   );
 }
+/** Selection is checked as a whole so conflicts cannot cause partial deletion. */
+export async function deleteCompletedWorkouts(selection: { id: string; revision: number }[]) {
+  await Promise.allSettled(selection.flatMap(row => queue.has(row.id) ? [queue.get(row.id)!] : []));
+  return db.transaction("rw", db.workouts, async () => {
+    if (!selection.length || new Set(selection.map(row => row.id)).size !== selection.length) throw Error("Choose completed workouts to delete.");
+    const workouts = await db.workouts.bulkGet(selection.map(row => row.id));
+    if (workouts.some((workout, index) => !workout || workout.status !== "completed" || workout.revision !== selection[index].revision)) throw new RevisionConflict();
+    await db.workouts.bulkDelete(selection.map(row => row.id));
+  });
+}
 export async function completeRecoveryCircuit(now = Date.now()) {
   await db.transaction("rw", db.profiles, db.workouts, async () => {
     const p = await db.profiles.get("local");
@@ -882,10 +908,21 @@ export async function completeRecoveryCircuit(now = Date.now()) {
 export async function reconcileBadges(now = Date.now()) {
   return db.transaction("rw", db.tables, async () => {
     const snapshot = await readSnapshot();
+    const latest = snapshot.workouts.filter(w => creditedProof(w, now)).sort((a,b) => b.startedAt - a.startedAt || b.id.localeCompare(a.id))[0];
+    const oldGoalWorkoutId = snapshot.profile.lastCreditedGoalWorkoutId;
+    const modes = new Set((snapshot.profile.goalModesUsed ?? []).map(canonicalGoalMode).filter((mode): mode is NonNullable<typeof mode> => !!mode));
+    if (latest && latest.id !== snapshot.profile.lastCreditedGoalWorkoutId) {
+      const mode = canonicalGoalMode(snapshot.profile.goalMode);
+      if (mode) modes.add(mode);
+      snapshot.profile.lastCreditedGoalWorkoutId = latest.id;
+    }
+    const oldModes = snapshot.profile.goalModesUsed;
+    snapshot.profile.goalModesUsed = [...modes].sort();
     const earned = deriveSnapshot(snapshot, now).durableUnlockedBadges;
+    if (cloudCoachingEnabled(snapshot.profile) && snapshot.profile.cloudConfig?.model.trim() && hasCloudSessionKey(snapshot.profile.cloudConfig)) earned.push("ai_activated");
     const old = snapshot.profile.badgeUnlocks;
     const added = earned.filter((id) => !(id in old));
-    if (added.length)
+    if (added.length || JSON.stringify(oldModes) !== JSON.stringify(snapshot.profile.goalModesUsed) || oldGoalWorkoutId !== snapshot.profile.lastCreditedGoalWorkoutId)
       await db.profiles.put({
         ...snapshot.profile,
         id: "local",

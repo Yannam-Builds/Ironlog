@@ -12,16 +12,15 @@ This implementation is local-first. It does not contact native app storage, cont
 - `RecoveryReadinessEngine.kt`: effort/type/duration dose factors, native exercise factors, two-phase fatigue decay, bounded probabilistic session combination, manual 48-hour wellness offset and pain flags. All muscle template, anchor, library and region constants were mechanically extracted from `MuscleContributionEngine.kt` into `src/data/native-muscles.json`.
 - `TrainingIntelligenceEngine.generateWarmupSets`: 40/55/70/85%, 8/5/3/1 reps, nearest 2.5kg, bar floor and duplicate removal. At or below the bar weight there are no lower loadable warmups. Targets are pending, never credited until explicitly logged.
 - `WorkoutSuggestionEngine.kt`: token-aware region matching, partial-coverage neutral weighting, stable earliest-day tie breaking.
-- `ActiveWorkoutScreen.buildProgressionSuggestion`: previous top weight +2.5kg / +5lb or bodyweight +2 reps. These are suggestions, not prescriptions; web excludes warmup and cardio rows.
+- Progression uses comparable tracking/equipment occurrences, retained target/effort evidence, resolved exercise/plan/global policy, bounded increments and exact barbell loadability. Advice explains its source and changes inputs only after an explicit action. It remains a coaching heuristic.
 - Native badge thresholds are evaluated from credited sessions and verified PRs. Unlocks are persisted additively by `reconcileBadges`; deleting history does not remove already-earned badges.
 
 ## Known limits (do not claim complete Android parity)
 
-- Web now retains immutable session exercise snapshots, primary-muscle arrays and explicit contribution maps used by recovery. It resolves broad and case-insensitive muscle labels through the native region vocabulary. Native fuzzy review-candidate ranking and every advanced library field are still not ported.
-- Exact IDs, normalized names and exact aliases resolve deterministically. The native fuzzy resolver and its review-candidate ranking are not ported. Unresolved imported names remain visible for review.
+- Web retains immutable session exercise snapshots, multi-primary metadata, contribution maps and native region vocabulary. Exact IDs/names/aliases plus confidence-ranked fuzzy candidates are supported; unresolved or ambiguous imported exercises require explicit review rather than fabricated metadata.
 - Finite physical plate quantities, odd-spare warnings and bounded plate calculation are supported. An unnamed current finite setup is exported as an active native gym named `Current setup`; unlimited-pair profiles remain a web-only compatibility case.
-- Cloud-AI-activation and historical goal-mode-usage badge triggers are not invented. Imported existing unlocks are retained. No Health Connect biometric blending exists on web.
-- Native cached Ledger events, onboarding calibration baselines, advanced preferences and all historical settings are not fully restored by the Android codec. Current web XP is deterministically rebuilt from available history.
+- Cloud activation requires explicit cloud mode, a configured model/validated endpoint and its memory-only session key. Goal-mode badges accumulate canonical modes only when a newly credited workout appears. Durable unlocks survive key removal/history deletion; mode evidence and its workout marker are portable. No Health Connect biometric blending exists on web.
+- Native calibration, provenance, baseline reconstruction, badge dates/origins, recovery credit and supported preferences are restored. Canonical rows override stale extension copies. Cached native Ledger events are not replayed as browser event identities: web XP is rebuilt from available history. Retain original backups for unsupported native settings and event history.
 - Android JSON includes photo URIs but not photo bytes. Those references are reported as skipped; only web ZIP backups preserve actual web photo blobs. Web ZIP preserves the complete web snapshot and applies compressed/expanded size limits before parsing.
 - Android v1 exports retain the required `ironlog_watermelon_export` literal and relational table names. A `webExtension` retains web-only session/check-in/gym fields when roundtripping through this web codec; Android ignores this extension. Android may drop it when re-exporting.
 - Native backup measurement fields are bodyweight, waist, chest, arm and thigh. Other web measurement types survive web ZIP / webExtension but are not native relational rows.
@@ -55,4 +54,8 @@ Verification for this slice: 24 unit/component files, 138 tests, production buil
 
 The five primary routes now follow the current Compose screen hierarchy and navigation geometry. Web Home derives its 30-day session count, working-set count, average duration and weekly volume from the same credited-proof and typed-tracking rules already used by the domain engine.
 
-The web `Create with AI` entry is a deterministic local plan builder over the native template catalog. It does not claim to run Gemini Nano or contact a cloud model. The generated plan is fully editable and persists through the same transactional plan path as library and blank plans.
+The September local builder description below was superseded by the manual prompt/catalog/paste review workflow and optional explicit Cloud AI generation. Browser Gemini Nano is not provided. Provider settings are portable; credentials are memory-only and excluded from every backup. Built-in mode hides cloud insights/generation while preserving the configuration. Significant plan changes are reviewed before atomic import.
+
+## Current closure evidence
+
+The [remaining parity validation](../../docs/reviews/2026-10-11-remaining-parity-validation.md) records the current implementation, runtime evidence, release gates and environmental limits. Earlier dated verification counts below are historical, not current acceptance. No literal cross-platform pixel identity, live-provider availability, physical Safari/OEM certification or guaranteed background execution is claimed.

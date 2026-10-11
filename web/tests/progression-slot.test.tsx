@@ -1,0 +1,22 @@
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, expect, it } from "vitest";
+import { App } from "../src/App";
+import { bootstrap, db, saveProfile } from "../src/data/store";
+import type { SessionExercise, Workout } from "../src/domain/types";
+beforeEach(async () => { await db.delete(); await db.open(); await bootstrap([]); await saveProfile({ onboarded: true }); history.replaceState(null, "", "#/workout"); });
+afterEach(cleanup);
+it("uses the comparable duplicate slot and applies advice only to draft inputs", async () => {
+  const slot: SessionExercise = { id: "matching", exerciseId: "bench", name: "Bench", muscle: "Chest", equipment: "Barbell", tracking: "weight_reps", sets: 3, reps: "8-12", restSeconds: 90, notes: "", supersetGroup: "", isWarmup: false, pendingWarmups: [], loggedSets: Array.from({ length: 3 }, (_, i) => ({ id: `set-${i}`, weightKg: 50, reps: 12, rpe: 8, durationSeconds: 0, distanceKm: 0, kind: "normal", notes: "", loggedAt: Date.now() - 10000 })) };
+  const old: Workout = { id: "past", name: "Past", startedAt: Date.now() - 20000, completedAt: Date.now() - 5000, status: "completed", notes: "", revision: 1, restUsed: false, exercises: [{ ...slot, id: "incompatible", equipment: "Machine", loggedSets: slot.loggedSets.map(s => ({ ...s, weightKg: 100 })) }, slot] };
+  const current: Workout = { ...old, id: "active", status: "active", completedAt: undefined, exercises: [{ ...slot, id: "current", loggedSets: [] }] };
+  await db.workouts.bulkPut([old, current]);
+  render(<App />);
+  expect(await screen.findByText(/Progression option/)).toBeVisible();
+  expect(screen.getByText(/52.5 kg × 12/)).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "Why this suggestion?" }));
+  expect(await screen.findByText(/3 working sets; effort recorded on 3/)).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "Close Why this suggestion?" }));
+  fireEvent.click(screen.getByRole("button", { name: "Use suggestion in inputs" }));
+  await waitFor(() => expect(screen.getByLabelText("KG")).toHaveValue(52.5));
+  expect(await db.workouts.get("active")).toEqual(current);
+});

@@ -1,12 +1,12 @@
 # Web acceptance record
 
-Status: implementation and hardening in progress; **not fully accepted**. The owner requested direct repository/preview publication on 31 August 2026. Deployment remains gated by CI; publication must not be described as native parity or physical-iPhone acceptance. All test data is synthetic. No APK, phone data or private backup was modified.
+Current status: remaining browser-capable checklist implementation and runtime checks are complete; final release/browser/CI/deployment gates are recorded in [remaining parity validation](../../docs/reviews/2026-10-11-remaining-parity-validation.md). Publication is a tested preview, not physical-device certification or literal cross-platform pixel identity. All test data is synthetic; private phone/browser data remains untouched. Dated sections below are historical checkpoints.
 
 ## Implemented journeys
 
 - Native identity, current monochrome logo, all twelve themes, shared landing/app selection, native art and 24-role palette extraction.
 - Lazy-launched working app inside a phone frame, with a separate full-screen mobile entry sharing saved data. Onboarding step changes reset scroll/focus; the landing is not a desktop dashboard.
-- Saved onboarding steps, basic calibration/profile, goals and coaching preferences, starter selection, zero initial rewards.
+- Saved onboarding steps, full calibration/profile, goals and coaching preferences, starter selection and truthful provisional rewards; zero-history defaults remain at zero.
 - Templates, custom plans/exercises, editing, duplication, ordering, active selection, canonical and legacy JSON plans, notes and supersets.
 - Persisted start/resume/finish/discard, stable set IDs, edit/delete/order, effort and notes, explicit warmup queues, rest deadlines, plate diagram and custom substitutions with session/plan scope.
 - Editable History, date filtering, PRs, exercise/volume analytics, body measurements, photo storage/comparison, recovery check-ins/map, Ledger, durable badges and weekly Recovery Circuit.
@@ -69,7 +69,9 @@ Screenshots and traces are local, ignored artifacts under `web/output/playwright
 
 These are local automated checks. They do not close real iPhone Safari/Home Screen, physical Android, browser notification/background execution, Health Connect, widgets or native photo/camera behavior.
 
-## Publication gates still open
+## Historical September publication gates
+
+This list records the September state. Implemented browser-capable feature gaps and later publication results are reconciled in [remaining parity validation](../../docs/reviews/2026-10-11-remaining-parity-validation.md). Physical-device/platform limits remain separate from completed implementation.
 
 1. Desktop WebKit's `context.setOffline(true)` reload returns an internal engine error. A minimal vanilla service worker reproduces the failure without IronLog/Workbox. The application acceptance transport now stops its own actual HTTP origin, keeping the reload/fresh-page/log/finish assertions and requiring an uncached request to fail. The app-independent emulation diagnostic remains unchanged and nonzero on failure. This isolates an emulation-path limitation, not a precise upstream defect, and does not prove shipping Safari or device-level airplane-mode behavior.
 2. Real iPhone Safari and installed Home Screen testing: launch/offline/lock/unlock/termination, storage separation, backup/import, safe areas, keyboard, VoiceOver, photo pickers and timer resumption. Desktop WebKit does not satisfy this gate.
@@ -85,7 +87,7 @@ Only `web/dist` is uploaded by the separate web workflow. Android CI is retained
 
 Use a new test browser profile with synthetic plans. Never clear the owner's existing app or browser storage.
 
-- Onboard from scratch, select a theme and plan, restart, verify zero rewards until eligible proof.
+- Onboard from scratch, select a theme and plan, restart; verify truthful self-reported baseline rewards or zero-history defaults, and separate eligible logged proof.
 - Import a noted plan, create a custom exercise, swap session-only then plan-level; check names/tracking/notes after resume.
 - Log/edit/delete sets and effort; queue warmups, lock/unlock, skip/log explicitly; inspect 65kg barbell view and lb conversion.
 - Finish once, verify History/Ledger/recovery; delete/edit retained sets and check recomputation.

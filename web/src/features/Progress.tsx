@@ -24,14 +24,22 @@ import {
   savePhoto,
   deletePhoto,
   newId,
+  deleteCompletedWorkouts,
+  resetPersonalRecords,
 } from "../data/store";
 import { SetEditor } from "./Workout";
-import type { LoggedSet, Photo } from "../domain/types";
+import type { LoggedSet, Photo, Workout } from "../domain/types";
 import { localDateKey } from "../domain/dates";
 import { setDescription, externalLoadVolume } from "../domain/tracking";
 import { creditedProof, isWorkingSet, workoutDurationSeconds } from "../domain/engine";
+import { CloudInsight } from "./intelligence/CloudInsight";
+import { historyMetadataDraft, editHistoryMetadata } from "../domain/history-metadata";
+import { shareCard } from "../ui/shareCard";
 export function History() {
-  const { data } = useApp();
+  const { data, run, busy } = useApp();
+  const [selecting, setSelecting] = useState(false);
+  const [selected, setSelected] = useState<{ id: string; revision: number }[]>([]);
+  const [confirmSelection, setConfirmSelection] = useState(false);
   const [date, setDate] = useState("");
   const [query, setQuery] = useState("");
   const workouts = data.workouts.filter(
@@ -63,6 +71,7 @@ export function History() {
           Show all workouts
         </Button>
       )}
+      <div className="inline-actions"><Button variant="secondary" onClick={() => { setSelecting(!selecting); setSelected([]); }}>{selecting ? "Cancel selection" : "Select workouts"}</Button>{selecting && <><Button variant="secondary" onClick={() => setSelected(workouts.map(w => ({ id: w.id, revision: w.revision })))}>Select visible workouts</Button><Button variant="danger" disabled={!selected.length || busy} onClick={() => setConfirmSelection(true)}>Delete selected ({selected.length})</Button></>}</div>
       <button className="list-row progress-photos-row" onClick={() => navigate("photos")}>
         <Icon name="camera" /><strong>Progress photos</strong><Icon name="next" />
       </button>
@@ -78,7 +87,8 @@ export function History() {
         <button
           className="card history-row"
           key={w.id}
-          onClick={() => navigate(`history/${w.id}`)}
+          aria-pressed={selecting ? selected.some(row => row.id === w.id) : undefined}
+          onClick={() => selecting ? setSelected(rows => rows.some(row => row.id === w.id) ? rows.filter(row => row.id !== w.id) : [...rows, { id: w.id, revision: w.revision }]) : navigate(`history/${w.id}`)}
         >
           <time>
             <strong>{new Date(w.startedAt).getDate()}</strong>
@@ -97,6 +107,7 @@ export function History() {
           <Icon name="next" />
         </button>
       ))}
+      {confirmSelection && <Sheet title={`Delete ${selected.length} completed workouts?`} onClose={() => setConfirmSelection(false)}><p>The selected history and sets will be removed. Training estimates recalculate; earned badges remain. Active workouts are preserved.</p><Button variant="danger" disabled={busy} onClick={() => void run(() => deleteCompletedWorkouts(selected), "Selected workouts deleted").then(ok => { if (ok) { setConfirmSelection(false); setSelected([]); setSelecting(false); } })}>Delete selected workouts</Button><Button variant="secondary" onClick={() => setConfirmSelection(false)}>Keep workouts</Button></Sheet>}
     </>
   );
 }
@@ -106,11 +117,13 @@ export function HistoryDetail({ id }: { id: string }) {
   const [editing, setEditing] = useState<{
     exerciseId: string;
     set: LoggedSet;
+    revision: number;
   }>();
   const [confirm, setConfirm] = useState(false);
   const [renaming, setRenaming] = useState(false);
-  const [name, setName] = useState(w?.name ?? "");
-  const [notes, setNotes] = useState(w?.notes ?? "");
+  const [metadata, setMetadata] = useState(() => w ? historyMetadataDraft(w) : undefined);
+  const [editBaseline, setEditBaseline] = useState<Workout>();
+  useEffect(() => { setRenaming(false); setEditing(undefined); setConfirm(false); }, [id]);
   if (!w)
     return (
       <Empty title="Workout not found">
@@ -124,7 +137,7 @@ export function HistoryDetail({ id }: { id: string }) {
         <IconButton
           name="edit"
           label="Edit workout name and notes"
-          onClick={() => setRenaming(true)}
+          onClick={() => { setEditBaseline(structuredClone(w)); setMetadata(historyMetadataDraft(w)); setRenaming(true); }}
         />
       </div>
       <p>
@@ -132,6 +145,8 @@ export function HistoryDetail({ id }: { id: string }) {
         {Math.round(workoutDurationSeconds(w) / 60)} min
       </p>
       {w.notes && <p>{w.notes}</p>}
+      <Button variant="secondary" onClick={() => void run(() => shareCard(w.name, [new Date(w.startedAt).toLocaleDateString(), `${Math.round(workoutDurationSeconds(w) / 60)} minutes · ${w.exercises.length} exercises`, ...w.exercises.slice(0, 8).map(e => `${e.name}: ${e.loggedSets.filter(s => isWorkingSet(e, s)).length} working sets`)], "ironlog-workout.png"), "Workout share card ready")}>Share workout</Button>
+      <CloudInsight title="Workout debrief" prompt={`Summarize this completed workout in under 80 words. Give one conservative next-session suggestion. Session: ${w.name}; duration ${Math.round(workoutDurationSeconds(w) / 60)} minutes; exercises: ${JSON.stringify(w.exercises.map(e => ({ name: e.name, workingSets: e.loggedSets.filter(s => isWorkingSet(e, s)).map(s => ({ kg: s.weightKg, reps: s.reps, seconds: s.durationSeconds, rpe: s.rpe, rir: s.rir })) })))}. Do not diagnose injuries.`} />
       {w.exercises.map((e) => (
         <section className="card" key={e.id}>
           <h2>{e.name}</h2>
@@ -155,7 +170,7 @@ export function HistoryDetail({ id }: { id: string }) {
               <IconButton
                 name="edit"
                 label={`Edit set ${i + 1} of ${e.name}`}
-                onClick={() => setEditing({ exerciseId: e.id, set: s })}
+                onClick={() => setEditing({ exerciseId: e.id, set: s, revision: w.revision })}
               />
               <IconButton
                 name="trash"
@@ -191,7 +206,7 @@ export function HistoryDetail({ id }: { id: string }) {
           onSave={(s) =>
             run(
               () =>
-                editHistory(w.id, w.revision, (x) => {
+                editHistory(w.id, editing.revision, (x) => {
                   const ex = x.exercises.find(
                     (y) => y.id === editing.exerciseId,
                   )!;
@@ -206,25 +221,28 @@ export function HistoryDetail({ id }: { id: string }) {
           }
         />
       )}
-      {renaming && (
+      {renaming && metadata && editBaseline && (
         <Sheet title="Edit workout" onClose={() => setRenaming(false)}>
           <Field label="Workout name">
-            <input value={name} onChange={(e) => setName(e.target.value)} />
+            <input value={metadata.name} onChange={(e) => setMetadata({ ...metadata, name: e.target.value })} />
           </Field>
           <Field label="Workout notes">
             <textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
+              value={metadata.notes}
+              onChange={(e) => setMetadata({ ...metadata, notes: e.target.value })}
             />
           </Field>
+          <div className="two-col"><Field label="Workout date"><input type="date" value={metadata.date} onChange={e => setMetadata({ ...metadata, date: e.target.value })} /></Field><Field label="Workout local time"><input type="time" value={metadata.time} onChange={e => setMetadata({ ...metadata, time: e.target.value })} /></Field></div>
+          <Field label="Clock occurrence"><select value={metadata.fold} onChange={e => setMetadata({ ...metadata, fold: e.target.value as "earlier" | "later" })}><option value="earlier">First occurrence</option><option value="later">Second occurrence (repeated DST time only)</option></select></Field>
+          <Field label="Workout duration minutes"><input type="number" min="0" max="1440" step="0.01" value={metadata.durationMinutes} onChange={e => setMetadata({ ...metadata, durationMinutes: Number(e.target.value) })} /></Field>
+          <Field label="Workout rating"><select value={metadata.rating ?? ""} onChange={e => setMetadata({ ...metadata, rating: e.target.value ? Number(e.target.value) : undefined })}><option value="">No rating</option>{[1,2,3,4,5].map(rating => <option key={rating} value={rating}>{rating} / 5</option>)}</select></Field>
           <Button
-            disabled={busy || !name.trim()}
+            disabled={busy || !metadata.name.trim()}
             onClick={() =>
               run(
                 () =>
-                  editHistory(w.id, w.revision, (x) => {
-                    x.name = name;
-                    x.notes = notes;
+                  editHistory(w.id, editBaseline.revision, (x) => {
+                    Object.assign(x, editHistoryMetadata(editBaseline, metadata));
                   }),
                 "Workout updated",
               ).then((ok) => {
@@ -264,7 +282,9 @@ export function HistoryDetail({ id }: { id: string }) {
   );
 }
 export function Stats() {
-  const { data, derived: d } = useApp();
+  const { data, derived: d, run, busy } = useApp();
+  const [chartRange, setChartRange] = useState("14D");
+  const [resetPr, setResetPr] = useState(false);
   const completed = data.workouts.filter((workout) => workout.status === "completed");
   const totalSets = completed.reduce((total, workout) => total + workout.exercises.reduce(
     (count, exercise) => count + exercise.loggedSets.filter((set) => isWorkingSet(exercise, set)).length,
@@ -274,16 +294,23 @@ export function Stats() {
     ? Math.round(completed.slice(0, 10).reduce((total, workout) => total + workoutDurationSeconds(workout), 0) / Math.min(10, completed.length) / 60)
     : 0;
   const activeDays = new Set(completed.filter((workout) => creditedProof(workout)).map((workout) => localDateKey(workout.startedAt)));
-  const frequency = Array.from({ length: 14 }, (_, index) => {
-    const at = Date.now() - (13 - index) * 86400000;
-    return { at, active: activeDays.has(localDateKey(at)) };
+  const counts = new Map<string, number>();
+  completed.filter(w => w.startedAt <= Date.now()).forEach(w => { const key = localDateKey(w.startedAt); counts.set(key, (counts.get(key) ?? 0) + 1); });
+  const chartDays = parseInt(chartRange) || 14;
+  const frequency = chartRange === "All" ? [...counts].sort(([a],[b]) => a.localeCompare(b)).map(([date,sessions]) => ({ at: new Date(`${date}T00:00:00`).getTime(), sessions, active: activeDays.has(date) })) : Array.from({ length: chartDays }, (_, index) => {
+    const day = new Date(); day.setHours(0,0,0,0); day.setDate(day.getDate() - (chartDays - 1 - index));
+    const at = day.getTime();
+    return { at, active: activeDays.has(localDateKey(at)), sessions: counts.get(localDateKey(at)) ?? 0 };
   });
+  const maxSessions = Math.max(1, ...frequency.map(day => day.sessions));
+  const chartPoints = frequency.map((day,index) => `${frequency.length === 1 ? 160 : index / (frequency.length - 1) * 320},${110 - day.sessions / maxSessions * 90}`).join(" ");
   return (
     <>
       <header className="native-screen-title stats-title">
         <span className="eyebrow">Analytics</span>
         <h1>Stats</h1>
         <p>{completed.length} sessions · {d.streak}-day streak</p>
+        <Button variant="ghost" onClick={() => void run(() => shareCard("Training stats", [`${completed.length} completed sessions`, `${d.streak}-day streak · ${totalSets} working sets`, `${averageMinutes} minutes average session`, `${d.xp} XP · ${d.grade} grade`], "ironlog-stats.png"), "Stats share card ready")}>Share stats</Button>
       </header>
       <div className="stats-destinations">
         <button onClick={() => navigate("calendar")}><Icon name="calendar" /><strong>Calendar</strong></button>
@@ -310,11 +337,14 @@ export function Stats() {
         <button onClick={() => navigate("analytics")}>Progress</button>
       </div>
       <section className="card frequency-card">
-        <h2>14-day frequency</h2>
-        <div className="frequency-bars">{frequency.map((day) => <i key={day.at} className={day.active ? "active" : ""} />)}</div>
-        <div className="frequency-labels">{frequency.map((day) => <span key={day.at}>{new Intl.DateTimeFormat(undefined, { weekday: "short" }).format(day.at).slice(0, 2)}</span>)}</div>
+        <h2>Session frequency</h2>
+        <div className="segmented" aria-label="Frequency range">{["14D", "30D", "90D", "All"].map(range => <button key={range} aria-pressed={chartRange === range} onClick={() => setChartRange(range)}>{range}</button>)}</div>
+        <svg viewBox="0 0 320 130" role="img" aria-label={`${chartRange} session frequency, maximum ${maxSessions} per day`} style={{ width: "100%" }}><line x1="0" y1="110" x2="320" y2="110" stroke="currentColor" opacity=".2" /><polyline points={chartPoints} fill="none" stroke="var(--accent)" strokeWidth="2" />{frequency.filter((_,index) => index === 0 || index === frequency.length - 1 || index === Math.floor(frequency.length / 2)).map(day => <text key={day.at} x={frequency.length === 1 ? 160 : frequency.indexOf(day) / (frequency.length - 1) * 320} y="128" textAnchor={day === frequency[0] ? "start" : day === frequency.at(-1) ? "end" : "middle"} fontSize="10" fill="currentColor">{new Date(day.at).toLocaleDateString(undefined, { day: "numeric", month: "short" })}</text>)}</svg>
       </section>
       <h2>Personal records</h2>
+      <Button variant="ghost" onClick={() => setResetPr(true)}>Reset personal records</Button>
+      {resetPr && <Sheet title="Reset personal records?" onClose={() => setResetPr(false)}><p>Workout history remains. Future sets establish new personal-record baselines.</p><Button disabled={busy} variant="danger" onClick={() => void run(() => resetPersonalRecords(), "Personal-record baselines reset").then(ok => { if (ok) setResetPr(false); })}>Reset PRs</Button><Button variant="secondary" onClick={() => setResetPr(false)}>Keep current records</Button></Sheet>}
+      <CloudInsight title="Training summary" prompt={`Summarize training progress in under 100 words with one conservative next step. Goal: ${data.profile.goal}. Completed sessions: ${completed.length}. Last ten session durations (minutes): ${completed.slice(0, 10).map(w => Math.round(workoutDurationSeconds(w) / 60)).join(", ")}. Weekly goal: ${data.profile.weeklyGoal}. Current streak: ${d.streak}. Recent personal records: ${JSON.stringify(d.prs.slice(0, 10).map(pr => ({ exercise: pr.name, kg: pr.weightKg })))}. Do not diagnose injuries.`} />
       <p className="muted">
         Estimated one-rep max from retained working sets. Warmups excluded.
       </p>

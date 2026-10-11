@@ -16,6 +16,8 @@ export function Icon({ name, size = 22 }: { name: string; size?: number }) {
   // The Kotlin app uses Compose Outlined navigation and Filled gym controls.
   // Preserve their 24dp filled paths rather than approximating with strokes.
   const composePaths: Record<string, string> = {
+    "play-outline": "M10,8.64L15.27,12 10,15.36V8.64M8,5v14l11,-7L8,5z",
+    resume: "M12,4V1L8,5l4,4V6c3.31,0 6,2.69 6,6s-2.69,6-6,6c-1.66,0-3.16,-0.67-4.24,-1.76L6.34,17.66C7.79,19.11 9.79,20 12,20c4.42,0 8,-3.58 8,-8s-3.58,-8-8,-8zM6,12c0,-1.66 0.67,-3.16 1.76,-4.24L6.34,6.34C4.89,7.79 4,9.79 4,12h2z",
     "arrow-back": "M20,11H7.83l5.59,-5.59L12,4l-8,8 8,8 1.41,-1.41L7.83,13H20v-2z",
     "trending-up": "M16,6l2.29,2.29 -4.88,4.88 -4,-4L2,17.59 3.41,19l6,-6 4,4 6.3,-6.29L22,13V6z",
     "star-filled": "M12,17.27L18.18,21l-1.64,-7.03L22,9.24l-7.19,-0.61L12,2 9.19,8.63 2,9.24l5.46,4.73L5.82,21z",
@@ -286,6 +288,16 @@ export function NumberWheel({
   onChange: (n: number) => void;
 }) {
   const id = useId();
+  const wheel = useRef<HTMLDivElement>(null);
+  const settling = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const drag = useRef<{ y: number; scroll: number } | null>(null);
+  const suppressClick = useRef(false);
+  const count = Math.floor((max - min) / step) + 1;
+  const bounded = (number: number) => Number((min + Math.max(0, Math.min(count - 1, Math.round((number - min) / step))) * step).toFixed(2));
+  const index = Math.round((bounded(value) - min) / step);
+  const virtualIndex = (scroll: number) => ((Math.round(scroll / 48) % count) + count) % count;
+  useEffect(() => { if (wheel.current && (virtualIndex(wheel.current.scrollTop) !== index || wheel.current.scrollTop === 0)) wheel.current.scrollTop = (count + index) * 48; }, [value, index]);
+  useEffect(() => () => clearTimeout(settling.current), []);
   const [input, setInput] = useState(String(value));
   useEffect(() => setInput(String(value)), [value]);
   const shift = (delta: number) =>
@@ -295,6 +307,29 @@ export function NumberWheel({
   return (
     <div className="number-wheel">
       <label htmlFor={id}>{label}</label>
+      <div className="wheel-viewport" ref={wheel} role="spinbutton" tabIndex={0} aria-label={`${label} wheel`} aria-valuemin={min} aria-valuemax={max} aria-valuenow={value}
+        onKeyDown={(event) => {
+          const delta = event.key === "ArrowUp" ? 1 : event.key === "ArrowDown" ? -1 : event.key === "PageUp" ? 10 : event.key === "PageDown" ? -10 : 0;
+          if (delta || event.key === "Home" || event.key === "End") { event.preventDefault(); onChange(delta ? bounded(value + delta * step) : event.key === "Home" ? min : bounded(max)); }
+        }}
+        onScroll={(event) => {
+          const span = count * 48;
+          const current = event.currentTarget.scrollTop;
+          const shift = current < span / 2 ? span : current > span * 2.5 ? -span : 0;
+          if (shift) { event.currentTarget.scrollTop = current + shift; if (drag.current) drag.current.scroll += shift; }
+          clearTimeout(settling.current); settling.current = setTimeout(() => {
+          if (!wheel.current || drag.current) return;
+          const next = bounded(min + virtualIndex(wheel.current.scrollTop) * step);
+          wheel.current.scrollTop = (count + Math.round((next - min) / step)) * 48;
+          if (next !== value) onChange(next);
+        }, 120); }}
+        onPointerDown={(event) => { if (event.pointerType !== "mouse") return; suppressClick.current = false; drag.current = { y: event.clientY, scroll: event.currentTarget.scrollTop }; }}
+        onPointerMove={(event) => { if (drag.current && Math.abs(event.clientY - drag.current.y) > 4) { event.currentTarget.setPointerCapture(event.pointerId); event.currentTarget.scrollTop = drag.current.scroll + drag.current.y - event.clientY; } }}
+        onPointerUp={(event) => { if (!drag.current) return; const moved = Math.abs(event.clientY - drag.current.y) > 4; drag.current = null; suppressClick.current = moved; if (moved) onChange(bounded(min + virtualIndex(event.currentTarget.scrollTop) * step)); }}
+        onPointerCancel={() => { drag.current = null; }}>
+        {Array.from({ length: count * 3 }, (_, i) => <div key={i} className={`wheel-value${i % count === index ? " selected" : ""}`} aria-hidden="true" onClick={() => { if (suppressClick.current) { suppressClick.current = false; return; } onChange(bounded(min + (i % count) * step)); }}>{Number((min + (i % count) * step).toFixed(2))}</div>)}
+      </div>
+      <small>Swipe to adjust · values snap to center</small>
       <div className="wheel-control">
         <button
           type="button"

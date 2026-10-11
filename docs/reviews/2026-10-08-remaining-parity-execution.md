@@ -4,20 +4,24 @@ Baseline: c5ace518, signed .10/code11. Whole-plan authorization includes impleme
 
 | Slice | Status | Acceptance |
 |---|---|---|
-| Root navigation | Implemented; 320px/desktop runtime checks pending | Route ownership, detail chrome, unsaved editor interception, browser Back/Forward and scroll restoration |
+| Root navigation | Implemented and verified | Route ownership, detail chrome, unsaved editor interception, browser Back/Forward and scroll restoration; 320px/390px/desktop runtime |
 | Native exercise integrity | Implemented; focused tests and both reviews passed | Transactional duplicate/create/rename, metadata fidelity, real ObjectBox regressions |
-| Home and interaction motion | Pending | Measured density/geometry, whole gradient cycle, native plan/day/active card controls; drag/swipe/sheets evidence |
-| Plan controls and intelligence | Pending | Editor pointer reorder, deload action, today directive, progression rationale |
-| History editing and sharing | Pending | Saved date/time/duration/rating, bulk delete/share, chronology and mutation safeguards |
-| AI review and optional cloud | Pending | Active gym context, unresolved review lock/rematch, provider/model settings, explicit requests/cancel/retry, summaries/debrief |
-| Analytics | Pending | ISO week/program ranges, display-unit chart values, radar/prior overlay, muscle drill, share |
-| Portability | Pending | Complete calibration/provenance, native legacy formats, Strong/Hevy reviewed CSV import |
-| Existing body/photos/onboarding | Verify | Current supported workflows, reload/retry, byte export/share fallback; no invented missing features |
-| Release/workspace | Pending | Full checks, signed update compatibility, deployed verification, organized artifacts and handoff |
+| Home and interaction motion | Implemented and verified | Measured density/geometry, whole gradient cycle, native plan/day/active card controls; drag/swipe/sheets evidence |
+| Plan controls and intelligence | Implemented and verified | Editor pointer reorder, deload action, today directive, progression rationale |
+| History editing and sharing | Implemented and verified | Saved date/time/duration/rating, bulk delete/share, chronology and mutation safeguards |
+| AI review and optional cloud | Implemented and verified with synthetic responses | Active gym context, unresolved review lock/rematch, provider/model settings, explicit mode, requests/cancel/retry, summaries/debrief; no live credential certification |
+| Analytics | Implemented and verified | ISO week/program ranges, display-unit chart values, radar/prior overlay, muscle drill, share |
+| Portability | Implemented and verified | Complete calibration/provenance/fixed baseline clock, native legacy formats, Strong/Hevy/OpenWeight reviewed import; canonical precedence; credential redaction |
+| Existing body/photos/onboarding | Verified | Reload/retry, goals, date comparison, notes, selected delete, byte export/share fallback and atomic onboarding completion |
+| Release/workspace | Signed update verified; final browser/publication gates in progress | 767 native tests/lint0errors; 342 web tests; signed .11/code12 retained-data emulator update; full browser/offline/CI/deployment completion follows |
 
 Physical Safari/Home Screen and OEM device certification cannot be replaced by emulation. Record those environmental limits separately from implemented browser-capable features. Android-only integrations remain excluded. No all-parity claim from source inspection alone.
 
-## Explicit pause checkpoint
+## Resumed implementation
+
+The owner revoked the pause and requested completion of the entire remaining checklist. All implementation slices above are now reconciled against source and runtime evidence. See [remaining parity validation](2026-10-11-remaining-parity-validation.md), the final Home/cloud/portability runtime reports, and [workspace inventory](2026-10-11-workspace-inventory.md). The native source remains authoritative; unrelated work is preserved. Provider key casing, explicit built-in/cloud gating, cloud activation and per-new-proof goal-mode badges were closed during final quality review. Code quality review approved all final fixes.
+
+## Historical explicit pause checkpoint
 
 Paused at the user's request on 8 October 2026. Branch: feat/remaining-parity-closure. Nothing from this batch has been pushed, released or deployed; public web and signed .10 APK remain the prior published version.
 

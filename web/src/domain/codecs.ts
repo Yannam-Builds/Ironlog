@@ -1,4 +1,8 @@
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
+import { calculateOnboardingBaseline } from "./onboarding-baseline";
+import { cloudCoachingEnabled } from "./coaching-mode";
+import { nativeProviderKey, webProviderName } from "./provider-codec";
+import { portableProfile, portableNativeSettings } from "./portable-profile";
 import {
   defaultProfile,
   type AppSnapshot,
@@ -190,6 +194,7 @@ const sections = [
   "iron_ledger_events",
 ];
 export function encodeAndroidBackup(snapshot: AppSnapshot): string {
+  snapshot = { ...snapshot, profile: portableProfile(snapshot.profile) };
   // Native plans store exercise foreign keys, not names. Materialize named unresolved
   // entries so a backup never turns a visible movement into an empty reference.
   const library = new Map(snapshot.exercises.map((e) => [e.id, e]));
@@ -352,17 +357,35 @@ export function encodeAndroidBackup(snapshot: AppSnapshot): string {
       bodyweight_kg: snapshot.profile.weightKg,
       weight_unit: snapshot.profile.unit,
       weekly_goal_days: snapshot.profile.weeklyGoal,
-      goal_mode: snapshot.profile.goal,
+      goal_mode: snapshot.profile.goalMode,
+      training_age_months: snapshot.profile.trainingAgeMonths,
+      historical_training_days_per_week: snapshot.profile.historicalTrainingDaysPerWeek,
+      first_verified_session_at: snapshot.profile.calibrationProvenance?.firstVerifiedSessionAt ?? 0,
+      imported_history: snapshot.profile.calibrationProvenance?.importedHistory ?? snapshot.workouts.some(w => w.imported),
+      confidence: snapshot.profile.calibrationProvenance?.confidence ?? 0.5,
+      has_past_training: snapshot.profile.hasPastTraining,
+      has_gym_access: snapshot.profile.hasGymAccess,
+      baseline_pushups: snapshot.profile.baselinePushups,
+      baseline_pullups: snapshot.profile.baselinePullups,
+      baseline_bench_kg: snapshot.profile.baselineBenchKg,
+      baseline_lat_pulldown_kg: snapshot.profile.baselineLatPulldownKg,
+      baseline_mile_run_seconds: snapshot.profile.baselineMileRunSeconds,
       ...stamp,
+      updated_at: snapshot.profile.calibrationProvenance?.updatedAt ?? snapshot.profile.ledgerBaseline?.seededAt ?? stamp.updated_at,
     },
   ];
   data.app_settings = Object.entries(snapshot.profile.exerciseNextNotes ?? {}).map(([key, value]) => ({
     id: key, key, value, value_type: "string", ...stamp,
   }));
   data.app_settings.push({ id: "ironlog_settings", key: "ironlog_settings",
-    value: JSON.stringify({ ...snapshot.profile.nativeSettings, barWeightKg: basePlateSetup(snapshot.profile).barKg }), value_type: "json", ...stamp });
+    value: JSON.stringify({ ...snapshot.profile.nativeSettings, barWeightKg: basePlateSetup(snapshot.profile).barKg,
+      intelligenceMode: cloudCoachingEnabled(snapshot.profile) ? "cloud_ai" : "builtin",
+      ...(snapshot.profile.cloudConfig ? { cloudAiProviderPreset: nativeProviderKey(snapshot.profile.cloudConfig.provider), cloudAiBaseUrl: snapshot.profile.cloudConfig.baseUrl, cloudAiModelName: snapshot.profile.cloudConfig.model, cloudAiApiFormat: snapshot.profile.cloudConfig.format } : {}),
+    }), value_type: "json", ...stamp });
   data.app_settings.push({ id: "favorite_exercises", key: "favorite_exercises",
     value: JSON.stringify([...new Set(snapshot.profile.favoriteExerciseIds ?? [])].sort()), value_type: "json", ...stamp });
+  data.app_settings.push({ id: "gamification_goal_modes_used", key: "gamification_goal_modes_used", value: JSON.stringify(snapshot.profile.goalModesUsed ?? []), value_type: "json", ...stamp });
+  if (snapshot.profile.lastCreditedGoalWorkoutId) data.app_settings.push({ id: "gamification_goal_mode_last_workout_id", key: "gamification_goal_mode_last_workout_id", value: snapshot.profile.lastCreditedGoalWorkoutId, value_type: "string", ...stamp });
   const finiteGyms = snapshot.gyms.filter(g => g.plateInventory !== undefined);
   let activeGym = snapshot.profile.activeGymId
     ? finiteGyms.find(g => g.id === snapshot.profile.activeGymId)
@@ -665,6 +688,13 @@ export function decodeAndroidBackup(raw: string): {
   } catch {
     result.warnings.push("Badge metadata could not be read.");
   }
+  let recoveryWeeks: string[] = [];
+  try {
+    const completions = obj(JSON.parse(str(gamification.recovery_circuit_completions_json, "{}")));
+    recoveryWeeks = Object.entries(completions).filter(([week, count]) => /^\d{4}-W\d{2}$/.test(week) && typeof count === "number" && count > 0).map(([week]) => week);
+  } catch {
+    result.warnings.push("Recovery circuit metadata could not be read.");
+  }
   const exerciseNextNotes: Record<string, string> = {};
   const gymSetting = table("app_settings").find(s => s.key === "gym_profiles_json");
   const nativeGyms = gymSetting ? parse(str(gymSetting.value)) : [];
@@ -700,7 +730,20 @@ export function decodeAndroidBackup(raw: string): {
     unit: calibration.weight_unit === "lb" ? ("lb" as const) : ("kg" as const),
     weeklyGoal: num(calibration.weekly_goal_days, 3),
     goal: str(calibration.goal_mode) || defaultProfile.goal,
+    goalMode: str(calibration.goal_mode) || defaultProfile.goalMode,
+    trainingAgeMonths: num(calibration.training_age_months),
+    historicalTrainingDaysPerWeek: num(calibration.historical_training_days_per_week, 3),
+    hasPastTraining: bool(calibration.has_past_training),
+    hasGymAccess: calibration.has_gym_access == null ? true : bool(calibration.has_gym_access),
+    baselinePushups: num(calibration.baseline_pushups),
+    baselinePullups: num(calibration.baseline_pullups),
+    baselineBenchKg: num(calibration.baseline_bench_kg),
+    baselineLatPulldownKg: num(calibration.baseline_lat_pulldown_kg),
+    baselineMileRunSeconds: num(calibration.baseline_mile_run_seconds),
+    calibrationProvenance: { firstVerifiedSessionAt: num(calibration.first_verified_session_at), importedHistory: bool(calibration.imported_history), confidence: num(calibration.confidence, 0.5), updatedAt: num(calibration.updated_at) },
+    badgeOrigins: Object.fromEntries(Object.keys(badges).map(id => [id, "native_import"])),
     badgeUnlocks: badges,
+    recoveryWeeks,
     activePlanId:
       str(table("plans").find((p) => bool(p.is_active))?.id) || undefined,
   };
@@ -772,7 +815,17 @@ export function decodeAndroidBackup(raw: string): {
   ] : extendedGyms;
   const selectedGym = mergedGyms.find(g => g.id === activeGymId) ?? activeGym ??
     (!activeGymId ? mergedGyms.find(g => g.id === ext.unsupportedActiveGymId && g.plateInventory === undefined) : undefined);
-  const sourceProfile = profileSchema.parse({ ...profile, ...obj(ext.profile) });
+  // Native rows may have changed since a browser export. Keep extension-only
+  // preferences, but never let stale extension copies replace native facts.
+  const extensionProfile = obj(ext.profile);
+  const calibrationFields = ["weightKg", "unit", "weeklyGoal", "goalMode", "trainingAgeMonths", "historicalTrainingDaysPerWeek", "hasPastTraining", "hasGymAccess", "baselinePushups", "baselinePullups", "baselineBenchKg", "baselineLatPulldownKg", "baselineMileRunSeconds", "calibrationProvenance"] as const;
+  const nativeCalibration = Object.keys(calibration).length ? Object.fromEntries(calibrationFields.map(key => [key, profile[key]])) : {};
+  const nativeGamification = Object.keys(gamification).length ? { badgeUnlocks: badges, badgeOrigins: profile.badgeOrigins, recoveryWeeks } : {};
+  const sourceProfile = profileSchema.parse({ ...profile, ...extensionProfile, ...nativeCalibration, ...nativeGamification });
+  if (Object.keys(calibration).length) {
+    sourceProfile.onboarded = extensionProfile.onboarded === false ? false : true;
+    sourceProfile.ledgerBaseline = profileSchema.shape.ledgerBaseline.parse(calculateOnboardingBaseline(sourceProfile, sourceProfile.ledgerBaseline?.seededAt ?? num(calibration.updated_at)));
+  }
   const favoriteSetting = table("app_settings").find(s => s.key === "favorite_exercises");
   if (favoriteSetting) {
     let favorites = parse(str(favoriteSetting.value));
@@ -787,7 +840,9 @@ export function decodeAndroidBackup(raw: string): {
     // Older SettingsRepository JSON rows can contain a quoted JSON object.
     if (typeof parsed === "string") parsed = parse(parsed);
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw Error("Invalid native settings");
-    nativeSettings = obj(parsed);
+    nativeSettings = portableNativeSettings(obj(parsed));
+    if (typeof nativeSettings.cloudAiBaseUrl === "string" && typeof nativeSettings.cloudAiModelName === "string") sourceProfile.cloudConfig = { provider: webProviderName(str(nativeSettings.cloudAiProviderPreset, "Custom")), baseUrl: nativeSettings.cloudAiBaseUrl, model: nativeSettings.cloudAiModelName, format: nativeSettings.cloudAiApiFormat === "anthropic" ? "anthropic" : "openai" };
+    if (typeof nativeSettings.intelligenceMode === "string") sourceProfile.intelligenceMode = ["cloud_ai", "auto", "cloud", "cloudai"].includes(nativeSettings.intelligenceMode.toLowerCase()) ? "cloud_ai" : "built_in";
     const rawBar = nativeSettings.barWeightKg ?? 20;
     const bar = Number(rawBar);
     if ((typeof rawBar !== "string" && typeof rawBar !== "number") ||
@@ -795,6 +850,10 @@ export function decodeAndroidBackup(raw: string): {
       throw Error("Invalid native default bar weight");
     base.barKg = bar;
   }
+  const modeEvidence = table("app_settings").find(s => s.key === "gamification_goal_modes_used");
+  if (modeEvidence) { let modes = parse(str(modeEvidence.value)); if (typeof modes === "string") modes = parse(modes); sourceProfile.goalModesUsed = z.array(z.string()).parse(modes); }
+  const modeMarker = table("app_settings").find(s => s.key === "gamification_goal_mode_last_workout_id");
+  if (modeMarker) sourceProfile.lastCreditedGoalWorkoutId = str(modeMarker.value);
   const gymProfile = gymSetting ? selectedGym
     ? { activeGymId: selectedGym.id === ext.currentSetupId ? undefined : selectedGym.id,
         barKg: selectedGym.barKg, platesKg: selectedGym.platesKg, plateInventory: selectedGym.plateInventory }
@@ -836,7 +895,7 @@ export function decodeAndroidBackup(raw: string): {
     counts.iron_ledger_events
   )
     result.warnings.push(
-      "Android-only settings, calibration baselines and cached Ledger events are not restored. Web Ledger is rebuilt from history. Keep the original Android backup.",
+      "Cached native Ledger events are not replayed. Web Ledger is rebuilt from retained calibration and history. Keep the original Android backup for Android-only integrations.",
     );
   if (result.unresolved)
     result.warnings.push(
@@ -847,7 +906,7 @@ export function decodeAndroidBackup(raw: string): {
 export async function encodeWebBackup(
   snapshot: AppSnapshot,
 ): Promise<Uint8Array> {
-  const valid = snapshotSchema.parse(snapshot);
+  const valid = snapshotSchema.parse({ ...snapshot, profile: portableProfile(snapshot.profile) });
   const files: Record<string, Uint8Array> = {};
   const photos = [];
   for (const p of valid.photos) {

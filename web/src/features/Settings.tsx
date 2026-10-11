@@ -33,6 +33,8 @@ import type { AppSnapshot } from "../domain/types";
 import { GymProfiles } from "./GymProfiles";
 import { basePlateSetup } from "../domain/gym-setup";
 import { loadCatalog } from "../catalog";
+import { decodeLegacyBackup } from "../domain/legacy-import";
+import { ExternalImport } from "./history/ExternalImport";
 import {
   filterSettingsDestinations,
   settingsDestinations,
@@ -48,6 +50,7 @@ export function Settings() {
   const [restore, setRestore] = useState<AppSnapshot>();
   const [warnings, setWarnings] = useState<string[]>([]);
   const [gym, setGym] = useState(false);
+  const [externalImport, setExternalImport] = useState(false);
   const [barEditor, setBarEditor] = useState(false);
   const [barDraft, setBarDraft] = useState("");
   const validBar = barDraft.trim() !== "" && Number.isFinite(Number(barDraft)) && Number(barDraft) >= 0 && Number(barDraft) <= 100;
@@ -157,6 +160,7 @@ export function Settings() {
             ))}
           </select>
         </Field>
+        <Field label="Training goal"><select value={p.goalMode.toUpperCase()} disabled={busy} onChange={e => void run(() => saveProfile({ goalMode: e.target.value, goal: e.target.selectedOptions[0].text }))}><option value="STRENGTH">Strength</option><option value="HYPERTROPHY">Muscle growth</option><option value="GENERAL_FITNESS">General fitness</option></select></Field>
         <Switch
           checked={p.keepAwake}
           disabled={busy}
@@ -267,6 +271,7 @@ export function Settings() {
           Android JSON includes training data, not photo files or native-only
           settings. Keep the original Android backup when migrating.
         </p>
+        <Button variant="secondary" onClick={() => setExternalImport(true)}>Import Strong, Hevy or OpenWeight history</Button>
         <Field label="Restore a browser ZIP or Android JSON">
           <input
             type="file"
@@ -282,7 +287,8 @@ export function Settings() {
                     setRestore(await decodeWebBackup(file));
                     setWarnings([]);
                   } else {
-                    const decoded = decodeAndroidBackup(await file.text());
+                    const raw = await file.text();
+                    const decoded = JSON.parse(raw).type === "ironlog_watermelon_export" ? decodeAndroidBackup(raw) : (() => { const legacy = decodeLegacyBackup(raw, data.exercises); return { snapshot: legacy.snapshot, result: { warnings: legacy.warnings } }; })();
                     setRestore(decoded.snapshot);
                     setWarnings(decoded.result.warnings);
                   }
@@ -459,6 +465,7 @@ export function Settings() {
         </Sheet>
       )}
       {gym && <GymProfiles onClose={() => setGym(false)} />}
+      {externalImport && <ExternalImport onClose={() => setExternalImport(false)} />}
       {barEditor && <Sheet title="Default bar weight" onClose={() => setBarEditor(false)}>
         <Field label="Default bar weight (kg)">
           <input type="number" inputMode="decimal" min="0" max="100" step="any" value={barDraft}

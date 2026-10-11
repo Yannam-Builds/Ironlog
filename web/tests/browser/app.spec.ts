@@ -187,6 +187,7 @@ test("workout survives reload, pending warmups never self-log, deletion persists
   ).toBeVisible();
   await page.getByRole("button", { name: /Freestyle workout/ }).click();
   await expect(page.locator(".set-row")).toHaveCount(2);
+  await page.getByRole("button", { name: "Back", exact: true }).click();
   await page.getByRole("link", { name: "Home", exact: true }).click();
   await page.getByRole("button", { name: "Start freestyle", exact: true }).click();
   await page.getByRole("button", { name: "Add exercise", exact: true }).click();
