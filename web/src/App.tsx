@@ -24,7 +24,7 @@ import { VolumeAnalytics } from "./features/stats/VolumeAnalytics";
 import { BodyMeasurements, BodyWeight } from "./features/body/BodyComposition";
 import { ProgressPhotos } from "./features/body/ProgressPhotos";
 import { Research } from "./research";
-import { backFrom } from "./ui/navigation";
+import { backFrom, isTabRoute, subscribeNavigation } from "./ui/navigation";
 const tabs = ["Home", "Plans", "Log", "Stats", "Settings"];
 const tabRoutes = tabs.map((tab) => tab.toLowerCase());
 const detailTitles: Record<string, string> = {
@@ -49,6 +49,11 @@ export function App() {
   );
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
+  useEffect(() => {
+    if (!status) return;
+    const timeout = window.setTimeout(() => setStatus(""), 5000);
+    return () => window.clearTimeout(timeout);
+  }, [status]);
   const [busy, setBusy] = useState(false);
   const running = useRef(false);
   const [now, setNow] = useState(Date.now());
@@ -71,7 +76,7 @@ export function App() {
   useLayoutEffect(() => {
     // Focus the committed route before it can be interacted with. A deferred
     // animation frame can otherwise steal focus between Enter's key events.
-    window.scrollTo(0, 0);
+    window.scrollTo(0, Number(history.state?.ironlogScrollY) || 0);
     main.current?.focus({ preventScroll: true });
   }, [route]);
   useEffect(() => {
@@ -83,15 +88,14 @@ export function App() {
     );
   }, []);
   useEffect(() => {
-    const hash = () => {
-      const nextRoute = location.hash.replace(/^#\//, "") || "home";
+    const unsubscribeNavigation = subscribeNavigation((nextRoute, direction) => {
       const from = tabRoutes.indexOf(routeRef.current);
       const to = tabRoutes.indexOf(nextRoute);
       if (from >= 0 && to >= 0 && from !== to) {
         routeDirection.current = to > from ? "next" : "previous";
-      }
+      } else routeDirection.current = direction;
       setRoute(nextRoute);
-    };
+    });
     const visible = () => {
       if (document.visibilityState === "visible") {
         setNow(Date.now());
@@ -104,14 +108,13 @@ export function App() {
     const theme = (e: StorageEvent) => {
       if (e.key === "ironlog-theme") applyTheme(currentTheme());
     };
-    window.addEventListener("hashchange", hash);
     document.addEventListener("visibilitychange", visible);
     window.addEventListener("pageshow", visible);
     window.addEventListener("online", network);
     window.addEventListener("offline", network);
     window.addEventListener("storage", theme);
     return () => {
-      window.removeEventListener("hashchange", hash);
+      unsubscribeNavigation();
       document.removeEventListener("visibilitychange", visible);
       window.removeEventListener("pageshow", visible);
       window.removeEventListener("online", network);
@@ -229,7 +232,7 @@ export function App() {
       </main>
     );
   const active = data.workouts.find((w) => w.status === "active");
-  const detail = !["home", "plans", "log", "stats", "settings"].includes(route);
+  const detail = !isTabRoute(route);
   const selectedTabRoute = route === "library" ? "settings" : route.startsWith("plan/")
     ? "plans"
     : route.startsWith("history/") || route === "calendar"
@@ -320,7 +323,7 @@ export function App() {
         <Onboarding />
       ) : (
         <>
-          <div className={`app-shell${route === "library" ? " library-shell" : ""}`}>
+          <div className={`app-shell${detail ? " detail-shell" : active ? " tab-shell has-active-workout" : " tab-shell"}${route === "library" ? " library-shell" : ""}`}>
             {detail && route !== "library" && (
               <header className="app-header detail-header">
                 <IconButton
@@ -338,7 +341,7 @@ export function App() {
                 <span aria-hidden="true" />
               </header>
             )}
-            {active && route !== "workout" && (
+            {active && !detail && (
               <button className="resume" onClick={() => navigate("workout")}>
                 <Icon name="log" />
                 <span>Resume {active.name}</span>
@@ -416,7 +419,7 @@ export function App() {
               </div>
             </main>
           </div>
-          {route !== "library" && <nav className={`bottom-nav${data.profile.liquidGlassEnabled ? " liquid-glass" : ""}`} aria-label="Main">
+          {!detail && <nav className={`bottom-nav${data.profile.liquidGlassEnabled ? " liquid-glass" : ""}`} aria-label="Main">
             <span
               className="bottom-nav-selection"
               aria-hidden="true"
@@ -428,6 +431,7 @@ export function App() {
                 <a
                   key={r}
                   href={`#/${r}`}
+                  onClick={(event) => { event.preventDefault(); navigate(r); }}
                   aria-current={route === r ? "page" : undefined}
                 >
                   <Icon name={r} size={21} />

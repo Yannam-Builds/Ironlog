@@ -1,3 +1,4 @@
+import { workoutElapsedSeconds } from "../domain/workout-clock";
 import {
   useEffect,
   useLayoutEffect,
@@ -41,7 +42,8 @@ import {
   controlWorkoutRest,
 } from "../data/store";
 import { plateCalculation, warmupTargets } from "../domain/engine";
-import { progressionSuggestion } from "../domain/engine";
+import { recommendProgression } from "../domain/progression-advice";
+import { resolveProgressionPolicy } from "../domain/program-intelligence";
 import type {
   Exercise,
   LoggedSet,
@@ -348,8 +350,14 @@ function ExerciseCard({
     });
     setTargets(true);
   };
-  const previous = recentPerformances(data.workouts, e).find(row => row.comparable)?.exercise;
-  const suggestion = previous ? progressionSuggestion(previous, p.unit) : null;
+  const previousEvidence = recentPerformances(data.workouts, e).find(row => row.comparable);
+  const previous = previousEvidence ? data.workouts.find(workout => workout.id === previousEvidence.workoutId)?.exercises.find(exercise => exercise.id === previousEvidence.exercise.id) : undefined;
+  const [whySuggestion, setWhySuggestion] = useState(false);
+  const plan = data.plans.find(plan => plan.id === w.planId);
+  const suggestion = previous ? recommendProgression(previous, e, {
+    unit: p.unit, setup: p, sourceDate: previousEvidence?.occurredAt,
+    policy: resolveProgressionPolicy(plan?.exerciseProgressionOverrides?.[e.exerciseId], plan?.progressionRules, p.progressionStyle),
+  }) : null;
   const mutate = (
     recipe: (ex: SessionExercise, workout: WorkoutData) => void,
     message?: string,
@@ -610,14 +618,26 @@ function ExerciseCard({
           Copy previous set
         </Button>
       )}
-      {suggestion && (
-        <p className="muted">
-          Last-session progression option:{" "}
-          {displayWeight(suggestion.weightKg, p.unit)} {p.unit} ×{" "}
-          {suggestion.reps}. Adjust for form, effort and recovery; this is not a
-          prescription.
-        </p>
-      )}
+      {suggestion && <div className="insight">
+        <p><strong>{suggestion.action === "hold" ? "Repeat and assess" : "Progression option"}</strong>: {displayWeight(suggestion.weightKg, p.unit)} {p.unit} × {suggestion.reps}</p>
+        <p className="muted">{suggestion.reason}</p>
+        <Button variant="ghost" onClick={() => setWhySuggestion(true)}>Why this suggestion?</Button>
+        <Button variant="secondary" onClick={() => {
+          setWeight(String(displayWeight(suggestion.weightKg, p.unit)));
+          setReps(String(suggestion.reps));
+        }}>Use suggestion in inputs</Button>
+        <p className="muted">Review technique, effort and recovery before logging. This only fills the inputs.</p>
+      </div>}
+      {whySuggestion && suggestion && <Sheet title="Why this suggestion?" onClose={() => setWhySuggestion(false)}>
+        <p>{suggestion.reason}</p>
+        <p><strong>{suggestion.policy.label}</strong> · {suggestion.policy.source.replaceAll("_", " ")}</p>
+        {suggestion.sourceDate && <p>Source session: {new Date(suggestion.sourceDate).toLocaleDateString()}.</p>}
+        <p>Previous session: {suggestion.workingSets} working sets; effort recorded on {suggestion.effortRecordedSets}. Target: {e.sets} sets × {e.reps}.</p>
+        <p>Minimum effort in reserve: {suggestion.policy.minimumEffortMargin}. Maximum load increase: {Math.round(suggestion.policy.maximumLoadIncreaseRatio * 100)}%.</p>
+        {suggestion.loadStepKg !== undefined && <p>Available increment: {displayWeight(suggestion.loadStepKg, p.unit)} {p.unit}.</p>}
+        {!!suggestion.missingEvidence.length && <p>Missing evidence: {suggestion.missingEvidence.join(", ")}.</p>}
+        <p className="muted">Rule-based coaching heuristic; not an individualized physiological prediction. Your inputs and plan change only when you choose.</p>
+      </Sheet>}
       <details className="set-details">
         <summary>Effort, type & note</summary>
         <div className="two-col">
@@ -1033,7 +1053,7 @@ export function Workout() {
     .reduce((total, set) => total + set.weightKg * set.reps, 0) ?? 0;
   const workingSets = w.exercises.flatMap((exercise) => exercise.loggedSets)
     .filter((set) => set.kind !== "warmup").length;
-  const elapsedSeconds = Math.max(0, Math.floor((now - w.startedAt) / 1000));
+  const elapsedSeconds = workoutElapsedSeconds(w, now);
   const restDuration = Math.max(1, lastPerformed?.exercise.restSeconds ?? data.profile.restSeconds);
   const restProgress = Math.max(0, Math.min(1, remaining / restDuration));
   const moveExerciseToPointer = (draggedId: string, y: number) => {

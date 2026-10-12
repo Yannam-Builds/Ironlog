@@ -49,14 +49,14 @@ class ExerciseRepository(
         observeQuery { exercisesBox.query().build() }.map { rows -> filterRows(rows, filters) }
 
     suspend fun getExercisesSnapshot(filters: ExerciseFilters = ExerciseFilters()): List<LegacyExerciseShape> =
-        withContext(Dispatchers.IO) { filterRows(exercisesBox.all, filters).map(::mapExerciseRowToLegacyShape) }
+        withContext(Dispatchers.IO) { catalogRows(filters) }
 
     suspend fun getCompactCatalogMarkdown(): String = withContext(Dispatchers.IO) {
         val canonical = context?.let { catalogMarkdownFile(it) }
         if (canonical != null && canonical.exists()) {
             return@withContext canonical.readText()
         }
-        val generated = buildCompactCatalogMarkdown(filterRows(exercisesBox.all, ExerciseFilters()).map(::mapExerciseRowToLegacyShape))
+        val generated = buildCompactCatalogMarkdown(catalogRows())
         canonical?.let {
             it.parentFile?.mkdirs()
             it.writeText(generated)
@@ -80,8 +80,6 @@ class ExerciseRepository(
         requireNonEmpty(input.equipment, "equipment")
         requireNonEmpty(input.category, "category")
         val normalized = normalizeExerciseNameKey(name)
-        val duplicate = exercisesBox.query(ExerciseEntity_.normalizedName.equal(normalized)).build().use { it.find() }
-        if (duplicate.isNotEmpty()) error("Exercise with this name already exists.")
 
         // Validate every child before the parent is written so a bad contribution cannot leave
         // behind a partially-created exercise.
@@ -111,6 +109,7 @@ class ExerciseRepository(
             secondaryMusclesJson = input.secondaryMuscles?.let { org.json.JSONArray(it).toString() }
         }
         store.runInTx {
+            requireUniqueName(normalized)
             exercisesBox.put(created)
             val muscleCreates = input.muscles.orEmpty().map { m ->
                 ExerciseMuscleEntity().apply {
@@ -131,22 +130,26 @@ class ExerciseRepository(
 
     suspend fun updateExercise(id: String, input: UpdateExerciseInput): ExerciseEntity = withContext(Dispatchers.IO) {
         requireNonEmpty(id, "id")
-        val exercise = findExerciseByUidOrThrow(id)
-        val now = System.currentTimeMillis()
-        if (!input.name.isNullOrEmpty()) {
-            val updatedName = normalizeExerciseName(input.name)
-            exercise.name = updatedName
-            // Use normalizeExerciseName first to get a non-null String, then call the
-            // String overload of normalizeExerciseNameKey (underscore format) — consistent
-            // with createCustomExercise which also stores in underscore format.
-            exercise.normalizedName = normalizeExerciseNameKey(updatedName)
+        val updatedName = input.name?.let { normalizeExerciseName(it).also { name -> requireNonEmpty(name, "name") } }
+        input.primaryMuscle?.let { requireNonEmpty(it.trim(), "primary_muscle") }
+        input.equipment?.let { requireNonEmpty(it.trim(), "equipment") }
+        input.category?.let { requireNonEmpty(it.trim(), "category") }
+        lateinit var exercise: ExerciseEntity
+        store.runInTx {
+            exercise = findExerciseByUidOrThrow(id)
+            if (updatedName != null) {
+                val normalized = normalizeExerciseNameKey(updatedName)
+                requireUniqueName(normalized, exercise.objectBoxId)
+                exercise.name = updatedName
+                exercise.normalizedName = normalized
+            }
+            input.primaryMuscle?.let { exercise.primaryMuscle = it.trim() }
+            input.equipment?.let { exercise.equipment = it.trim() }
+            input.category?.let { exercise.category = it.trim() }
+            input.notes?.let { exercise.notes = it }
+            exercise.updatedAt = System.currentTimeMillis()
+            exercisesBox.put(exercise)
         }
-        if (!input.primaryMuscle.isNullOrEmpty()) exercise.primaryMuscle = input.primaryMuscle
-        if (!input.equipment.isNullOrEmpty()) exercise.equipment = input.equipment
-        if (!input.category.isNullOrEmpty()) exercise.category = input.category
-        if (input.notes != null) exercise.notes = input.notes.ifEmpty { "" }
-        exercise.updatedAt = now
-        exercisesBox.put(exercise)
         syncCompactCatalogMarkdown()
         exercise
     }
@@ -184,7 +187,7 @@ class ExerciseRepository(
     suspend fun buildExerciseAlternatives(exerciseId: String, filters: ExerciseFilters = ExerciseFilters()): SubstitutionEngine.AlternativesResult =
         withContext(Dispatchers.IO) {
             requireNonEmpty(exerciseId, "exerciseId")
-            val exercises = exercisesBox.all.map(::mapExerciseRowToLegacyShape)
+            val exercises = catalogRows()
             val target = exercises.find { it.id == exerciseId || it.exerciseId == exerciseId }
                 ?: return@withContext SubstitutionEngine.AlternativesResult.EMPTY
             SubstitutionEngine.buildExerciseAlternatives(target, exercises, filters, filters.limit ?: 12)
@@ -197,8 +200,33 @@ class ExerciseRepository(
     internal fun findExerciseByName(name: String): ExerciseEntity? =
         exercisesBox.query(ExerciseEntity_.name.equal(name)).build().use { it.findFirst() }
 
-    internal fun mapExerciseRowToLegacyShape(row: ExerciseEntity): LegacyExerciseShape {
-        val primary = if (row.primaryMuscle.isNotBlank()) listOf(row.primaryMuscle) else emptyList()
+    /** Called inside the owning write transaction; duplicate legacy rows are not rewritten. */
+    private fun requireUniqueName(normalized: String, exceptId: Long = 0) {
+        val duplicate = exercisesBox.query(ExerciseEntity_.normalizedName.equal(normalized)).build().use { query ->
+            query.find().any { it.objectBoxId != exceptId }
+        }
+        if (duplicate) error("Exercise with this name already exists.")
+    }
+
+    /** Batch-load relationships once, avoiding a lazy relation query per catalog entry. */
+    private fun catalogRows(filters: ExerciseFilters = ExerciseFilters()): List<LegacyExerciseShape> = store.callInReadTx {
+        mapExerciseRows(filterRows(exercisesBox.all, filters))
+    }
+
+    private fun mapExerciseRows(rows: List<ExerciseEntity>): List<LegacyExerciseShape> {
+        val primaryByUid = musclesBox.all.filter { it.role.equals("primary", true) }.groupBy { it.exerciseUid }
+        return rows.map { row -> mapExerciseRowToLegacyShape(row, primaryByUid[row.uid].orEmpty().map { it.muscle }) }
+    }
+
+    private fun metadataStrings(json: String?): List<String> = json?.let {
+        runCatching {
+            val array = org.json.JSONArray(it)
+            (0 until array.length()).mapNotNull { index -> (array.opt(index) as? String)?.trim()?.takeIf(String::isNotBlank) }.distinct()
+        }.getOrElse { emptyList() }
+    }.orEmpty()
+
+    internal fun mapExerciseRowToLegacyShape(row: ExerciseEntity, primaryRelationships: List<String> = emptyList()): LegacyExerciseShape {
+        val primary = (listOf(row.primaryMuscle) + primaryRelationships).map(String::trim).filter(String::isNotBlank).distinct()
         val category = row.category.ifBlank { "strength" }
         val trackingType = ExerciseTrackingTypeNormalizer.normalize(
             name = row.name,
@@ -212,23 +240,18 @@ class ExerciseRepository(
             name = row.name,
             primaryMuscles = primary,
             primaryMuscle = row.primaryMuscle.ifBlank { null },
-            secondaryMuscles = row.secondaryMusclesJson?.let { json ->
-                runCatching {
-                    val arr = org.json.JSONArray(json)
-                    (0 until arr.length()).map { arr.getString(it) }
-                }.getOrElse { emptyList() }
-            } ?: emptyList(),
+            secondaryMuscles = metadataStrings(row.secondaryMusclesJson),
             equipment = row.equipment.ifBlank { "Other" },
             category = category,
             trackingType = trackingType,
             isCustom = row.isCustom,
-            aliases = emptyList(),
+            aliases = metadataStrings(row.aliasesJson),
             isBodyweight = row.isBodyweight || row.equipment.lowercase() == "bodyweight",
             movementPattern = row.movementPattern,
             difficulty = row.difficulty,
             apparatus = row.apparatusJson,
             equipmentDetail = row.equipmentDetail,
-            sourceTags = emptyList(),
+            sourceTags = metadataStrings(row.sourceTagsJson),
             notes = row.notes,
         )
     }
@@ -244,7 +267,7 @@ class ExerciseRepository(
     private fun syncCompactCatalogMarkdown() {
         val ctx = context ?: return
         val file = catalogMarkdownFile(ctx)
-        val rows = filterRows(exercisesBox.all, ExerciseFilters()).map(::mapExerciseRowToLegacyShape)
+        val rows = catalogRows()
         file.parentFile?.mkdirs()
         file.writeText(buildCompactCatalogMarkdown(rows))
     }

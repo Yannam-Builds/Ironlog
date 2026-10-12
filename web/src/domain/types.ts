@@ -89,6 +89,8 @@ export interface Workout {
   dayId?: string;
   name: string;
   startedAt: number;
+  /** Durable first logged-set clock; creation time remains chronology metadata. */
+  timerStartedAt?: number;
   completedAt?: number;
   durationSeconds?: number;
   status: "active" | "completed" | "discarded";
@@ -123,6 +125,9 @@ export interface OnboardingLedgerBaseline {
   seededAt: number;
 }
 export interface Profile {
+  cloudConfig?: import("./cloud-ai").CloudConfig;
+  calibrationProvenance?: { firstVerifiedSessionAt: number; importedHistory: boolean; confidence: number; updatedAt: number };
+  badgeOrigins?: Record<string, string>;
   name: string;
   age: number;
   yearOfBirth: number;
@@ -135,6 +140,9 @@ export interface Profile {
   goal: string;
   progressionStyle: string;
   goalMode: string;
+  intelligenceMode?: "built_in" | "cloud_ai";
+  goalModesUsed?: string[];
+  lastCreditedGoalWorkoutId?: string;
   selectedTrainingDays: number[];
   trainingAgeMonths: number;
   historicalTrainingDaysPerWeek: number;

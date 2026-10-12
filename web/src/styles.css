@@ -251,6 +251,24 @@ pre {
 .detail-header + .app-content {
   padding-top: 0;
 }
+.detail-shell .app-content {
+  padding-bottom: calc(24px * var(--ui-spacing, 1) + env(safe-area-inset-bottom));
+}
+.tab-shell.has-active-workout .app-content {
+  padding-bottom: calc(max(calc(180px * var(--ui-spacing, 1)), 11rem) + env(safe-area-inset-bottom));
+}
+.tab-shell > .resume {
+  position: fixed;
+  z-index: var(--z-nav);
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(92px + env(safe-area-inset-bottom));
+  width: min(560px, calc(100% - 40px));
+  margin: 0;
+  border-radius: 999px;
+  box-shadow: 0 8px 24px #0003;
+  animation: none;
+}
 .page-title,
 .section-title {
   display: flex;
@@ -1103,8 +1121,8 @@ body.plan-reordering {
   position: relative;
   isolation: isolate;
   overflow: hidden;
-  padding: calc(25px * var(--ui-spacing, 1));
-  border-color: var(--accentBorder);
+  padding: calc(16px * var(--ui-spacing, 1));
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
 }
 .card-shine-layer {
   position: absolute;
@@ -1120,9 +1138,10 @@ body.plan-reordering {
   z-index: 1;
 }
 .today-card h2 {
-  font-size: 1.8rem;
-  letter-spacing: -0.025em;
-  margin-top: calc(25px * var(--ui-spacing, 1));
+  font-size: 24px;
+  line-height: 30px;
+  letter-spacing: -0.5px;
+  margin: calc(12px * var(--ui-spacing, 1)) 0 calc(6px * var(--ui-spacing, 1));
 }
 .today-card .button {
   width: 100%;
@@ -1352,9 +1371,11 @@ body.plan-reordering {
 .message {
   position: fixed;
   z-index: var(--z-message);
-  top: calc(8px + env(safe-area-inset-top));
+  bottom: calc(168px + env(safe-area-inset-bottom));
   left: 50%;
   transform: translateX(-50%);
+  margin: 0;
+  pointer-events: none;
   display: flex;
   gap: calc(12px * var(--ui-spacing, 1));
   align-items: center;
@@ -1373,6 +1394,8 @@ body.plan-reordering {
   border-color: var(--danger);
   margin: 0;
 }
+.message button { pointer-events: auto; }
+html:has(.detail-shell) .message { bottom: calc(84px + env(safe-area-inset-bottom)); }
 .message button,
 .rest-banner button {
   border: 0;
@@ -2353,7 +2376,7 @@ body.workout-reordering { cursor: grabbing; user-select: none; }
 /* ExerciseLibraryScreen: native rows, scope chips, search and sheet controls. */
 .exercise-library { min-width: 0; }
 .library-shell .app-content { padding-bottom: max(24px, env(safe-area-inset-bottom)); }
-.library-shell .app-content { padding-top: env(safe-area-inset-top); }
+.library-shell .app-content { padding-top: 0; }
 .library-header { height: auto; min-height: 56px; text-align: left; grid-template-columns: 48px 1fr; gap: calc(10px * var(--ui-spacing, 1)); padding-bottom: 8px; }
 .library-header > span { display: none; }
 .library-header .icon-button { color: var(--accent); }
@@ -2396,4 +2419,30 @@ body.workout-reordering { cursor: grabbing; user-select: none; }
   .gym-stock-row { grid-template-columns: 44px minmax(0, 1fr) 44px; }
   .gym-stock-row > .gym-pairs { grid-column: 2; grid-row: 2; }
   .gym-stock-row > .icon-button { grid-column: 3; grid-row: 1; }
+}
+
+/* Home StartWorkoutCard; SVG owns physical brush coordinates. */
+.today-card .eyebrow { color: var(--accent); font-size: 12px; letter-spacing: 1px; }
+.today-round-start { display: grid; place-items: center; flex: none; width: 48px; height: 48px; border-radius: 50%; color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent); }
+.today-badges { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 12px; color: var(--subtext); margin-bottom: calc(12px * var(--ui-spacing, 1)); }
+.today-goal-badge, .today-progress-badge { border-radius: 999px; padding: 3px 8px; font-weight: 700; color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.today-progress-badge { color: var(--success); background: color-mix(in srgb, var(--success) 18%, transparent); font-size: 10px; }
+.today-day-carousel { display: flex; gap: calc(8px * var(--ui-spacing, 1)); overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; }
+.today-day-carousel > button { width: 116px; min-height: 64px; flex: none; display: grid; gap: 4px; align-content: center; padding: 12px; background: var(--surface); border: 1.5px solid var(--cardBorder); border-radius: 16px; color: var(--text); text-align: center; }
+.today-day-carousel strong { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 13px; line-height: 18px; text-transform: uppercase; letter-spacing: .5px; }
+.today-day-carousel span { font-size: 12px; color: var(--subtext); line-height: 16px; }
+.today-day-carousel > .recommended { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
+.today-card .button.ghost { border: 1px solid color-mix(in srgb, var(--accent) 13%, transparent); color: var(--muted); font-size: 10px; margin-top: calc(12px * var(--ui-spacing, 1)); min-height: 36px; letter-spacing: 1px; }
+.today-card .button.danger { border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent); color: var(--danger); background: transparent; font-size: 10px; min-height: 36px; }
+.wheel-viewport { height: 240px; padding-block: 96px; overflow-y: auto; scrollbar-width: none; scroll-snap-type: y mandatory; overscroll-behavior-y: contain; touch-action: pan-y; cursor: grab; margin-top: 10px; background: linear-gradient(transparent 40%, var(--surface) 40%, var(--surface) 60%, transparent 60%); }
+.wheel-value { height: 48px; display: grid; place-items: center; scroll-snap-align: center; color: var(--subtext); opacity: .34; font-size: 19px; user-select: none; }
+.wheel-value.selected { font-size: 27px; font-weight: 900; color: var(--text); opacity: 1; }
+.number-wheel > small { color: var(--muted); font-size: 12px; }
+.today-card h2 { text-wrap: wrap; font-weight: var(--type-w900, 900); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.today-card { border-radius: 24px; }
+.today-card .today-goal-badge, .today-card .today-progress-badge { font-size: 12px; letter-spacing: .5px; }
+.today-card .today-rhythm { color: var(--muted); font-size: 12px; line-height: 24px; margin: calc(12px * var(--ui-spacing, 1)) 2px 0; }
+.today-card .button.ghost, .today-card .button.danger { font-size: 12px; border-radius: 8px; letter-spacing: 1.2px; padding-block: 9px; }
+@media (max-width: 360px) {
+  .analytics-summary .stats-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 18px; }
 }

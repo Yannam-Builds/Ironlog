@@ -151,6 +151,7 @@ export function recomputeOnboardingBaseline(
       // unlocks at exactly the baseline seed instant. Remove only those legacy
       // rows; a badge earned independently at another instant remains durable.
       return !(
+        profile.badgeOrigins?.[id] !== "native_import" &&
         previousBaseline?.supportedBadgeIds.includes(id) &&
         unlockedAt === previousBaseline.seededAt
       );

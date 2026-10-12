@@ -37,9 +37,9 @@ android {
         minSdk = 26
         targetSdk = 36
         versionCode = providers.gradleProperty("IRONLOG_VERSION_CODE").orNull?.toIntOrNull()
-            ?: 11
+            ?: 12
         versionName = providers.gradleProperty("IRONLOG_VERSION_NAME").orNull
-            ?: "0.1.0-pre-alpha.10"
+            ?: "0.1.0-pre-alpha.11"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

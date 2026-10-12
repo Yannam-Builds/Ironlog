@@ -1,5 +1,5 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { App } from "../src/App";
 import { bootstrap, db, readSnapshot, saveProfile } from "../src/data/store";
 import type { Workout } from "../src/domain/types";
@@ -7,7 +7,7 @@ import type { Workout } from "../src/domain/types";
 const workout: Workout = { id: "bench-day", name: "Push", startedAt: Date.now() - 86_400_000, completedAt: Date.now() - 82_800_000, durationSeconds: 3600, status: "completed", notes: "", restUsed: false, revision: 1, exercises: [{ id: "bench-slot", exerciseId: "bench", name: "Bench Press", tracking: "weight_reps", muscle: "Chest", equipment: "Barbell", sets: 3, reps: "8", restSeconds: 90, notes: "", supersetGroup: "", isWarmup: false, pendingWarmups: [], loggedSets: [1, 2, 3].map((index) => ({ id: `set-${index}`, weightKg: 80, reps: 8, durationSeconds: 0, distanceKm: 0, kind: "normal", notes: "", loggedAt: Date.now() - 86_400_000 })) }] };
 
 beforeEach(async () => { await db.delete(); await db.open(); await bootstrap([]); await saveProfile({ onboarded: true }); await db.workouts.put(workout); });
-afterEach(cleanup);
+afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 it("shows range-bound region evidence and an honest readiness trend", async () => {
   history.replaceState(null, "", "#/recovery"); render(<App />);
@@ -31,10 +31,14 @@ it("persists native score controls, notes and pain that stays visible in recomme
 });
 
 it("runs the native choose-start-complete circuit stages once for the eligible week", async () => {
+  // Keep the credited session and circuit in the same ISO week, including
+  // when this test runs just after midnight on a Monday.
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-10-07T12:00:00"));
   const goal = (await readSnapshot()).profile.weeklyGoal;
   await db.workouts.clear();
   const completedAt = Date.now() - 1_000;
-  for (let index = 0; index < goal - 1; index++) await db.workouts.put({ ...workout, id: `session-${index}`, startedAt: completedAt - 3_600_000, completedAt });
+  for (let index = 0; index < goal - 1; index++) await db.workouts.put({ ...workout, id: `session-${index}`, startedAt: completedAt - 3_600_000, completedAt, exercises: workout.exercises.map(e => ({ ...e, loggedSets: e.loggedSets.map(s => ({ ...s, loggedAt: completedAt - 1000 })) })) });
   history.replaceState(null, "", "#/ledger"); render(<App />);
   fireEvent.click(await screen.findByRole("button", { name: "Open recovery circuit" }));
   fireEvent.click(screen.getByRole("button", { name: /Core Circuit/ }));

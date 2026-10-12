@@ -1,5 +1,10 @@
 import { useState } from "react";
-import { useApp, navigate, hasTrainingHistory } from "../ui/context";
+import { useApp, navigate } from "../ui/context";
+import { startWorkout } from "../data/store";
+import { recommendedPlanDay, todayDirective } from "../domain/plan-coaching";
+import { CloudSettings } from "./intelligence/CloudSettings";
+import { CloudInsight } from "./intelligence/CloudInsight";
+import { cloudCoachingEnabled } from "../domain/coaching-mode";
 import { manualPlanPrompt } from "../domain/manual-prompt";
 import { Button, Field } from "../ui/components";
 import { buildTrainingIntelligence, computeProgramInsights, resolveProgressionPolicy } from "../domain/program-intelligence";
@@ -7,23 +12,43 @@ export function Intelligence() {
   const { data, derived: d, run } = useApp();
   const [equipment, setEquipment] = useState("Barbell, dumbbells, cables");
   const [limitations, setLimitations] = useState("");
+  const [cloudSettings, setCloudSettings] = useState(false);
   const p = data.profile;
   const prompt = manualPlanPrompt(p, equipment, limitations);
   const intelligence = buildTrainingIntelligence(data.workouts, { goalMode: p.goalMode, weeklyGoalDays: p.weeklyGoal });
+  const activePlan = data.plans.find(plan => plan.id === p.activePlanId);
+  const recommended = recommendedPlanDay(activePlan, data.workouts);
+  const directive = todayDirective(intelligence);
+  const activeWorkout = data.workouts.find(workout => workout.status === "active");
+  const latestCheckin = data.checkins.filter(c => c.at <= Date.now()).sort((a,b) => b.at-a.at)[0];
+  const pain = latestCheckin && Date.now()-latestCheckin.at <= 48*3600000 ? latestCheckin.painRegions : [];
+  const rules = activePlan?.progressionRules;
+  const deload = rules && rules.deloadEveryWeeks > 0 && rules.currentWeek % rules.deloadEveryWeeks === 0;
   return (
     <>
       <h1>Training intelligence</h1>
+      {cloudCoachingEnabled(p) ? <section className="card"><h2>Cloud AI</h2><p>Optional cloud tools run only when you ask.</p><Button variant="secondary" onClick={() => setCloudSettings(true)}>Cloud AI settings</Button></section> : <Button variant="secondary" onClick={() => setCloudSettings(true)}>Cloud AI settings</Button>}
+      <CloudInsight title="Recovery advice" prompt={`Give one conservative recovery recommendation in under 60 words. Do not diagnose injuries. Recovery scores: ${JSON.stringify(d.readiness)}.`} />
+      <CloudInsight title="Split suggestion" prompt={`Suggest a ${p.weeklyGoal}-day split for ${p.goal}, under 80 words. Recent trained regions: ${[...new Set(data.workouts.filter(w => w.status === "completed").slice(0, 20).flatMap(w => w.exercises.map(e => e.muscle)))].join(", ")}.`} />
       <section className="card">
-        <h2>Your next session</h2>
-        <p>
-          {hasTrainingHistory(data.workouts)
-            ? `${d.limitingRegion} is currently the limiting region in your training estimate. Review that region and how you feel before selecting the next session.`
-            : "Complete a session to give recovery guidance a training history to work with."}
-        </p>
-        <Button variant="secondary" onClick={() => navigate("recovery")}>
-          Review recovery
-        </Button>
+        <h2>Today's directive</h2>
+        <h3>{directive.title}</h3><p>{directive.reason}</p>
+        <p className="muted">{d.readiness ? `Recovery estimate: ${d.readiness}/100 · ${d.state}.` : "Recovery estimate needs logged training evidence."}</p>
+        {!!pain.length && <p className="warning-panel">Current pain flags: {pain.join(", ")}. Review your check-in and recovery before training.</p>}
+        {recommended && <p>Next planned session: <strong>{recommended.name}</strong> · {activePlan?.name}</p>}
+        <Button onClick={() => {
+          if (activeWorkout) { navigate("workout"); return; }
+          if (!activePlan || !recommended) { navigate("plans"); return; }
+          void run(() => startWorkout(activePlan.id, recommended.id)).then(ok => { if (ok) navigate("workout"); });
+        }}>{activeWorkout ? "Resume active workout" : recommended ? `Start ${recommended.name}` : "Choose a plan"}</Button>
+        <Button variant="secondary" onClick={() => navigate("recovery")}>Recovery map</Button>
+        <Button variant="ghost" onClick={() => navigate("plans")}>Create with AI / program insights</Button>
       </section>
+      {deload && <section className="card warning-panel">
+        <h2>Deload week</h2><h3>Week {rules.currentWeek} — Scheduled deload</h3>
+        <p>Reduce load to 60% of working weight. Reduce working sets by about 40% (3 → 2). Keep rep ranges the same.</p>
+        <Button variant="secondary" onClick={() => navigate(`plan/${activePlan!.id}`)}>Review or generate deload day</Button>
+      </section>}
       <section className="card">
         <h2>Weekly training load</h2>
         <p className="muted">Weighted working-set equivalents against goal-adjusted reference bands.</p>
@@ -58,6 +83,7 @@ export function Intelligence() {
           <p><strong>{policy.label}</strong> · {policy.source.replaceAll("_", " ")}</p>
           <p>{insight.recommendation}</p>
           <Button variant="secondary" onClick={() => navigate(`plan/${plan.id}`)}>Review plan</Button>
+          {plan.days.map(day => <CloudInsight key={day.id} title={`Evaluate ${day.name}`} prompt={`Evaluate this session for ${p.goal} in under 70 words. Note missing movement patterns without medical claims. Day: ${day.name}. Exercises: ${day.exercises.slice(0, 12).map(exercise => exercise.name).join(", ")}. Progression policy: ${policy.label}.`} />)}
         </section>;
       })}
       <section>
@@ -94,10 +120,10 @@ export function Intelligence() {
         </Button>
         <p className="muted">
           External AI output can be wrong. Review exercise selection, volume,
-          and technique cues before training. No cloud API key is stored or
-          requested here.
+          and technique cues before training.
         </p>
       </section>
+      {cloudSettings && <CloudSettings onClose={() => setCloudSettings(false)} />}
     </>
   );
 }

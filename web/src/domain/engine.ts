@@ -1,3 +1,5 @@
+import { recommendProgression } from "./progression-advice";
+import { canonicalGoalMode } from "./coaching-mode";
 import type {
   AppSnapshot,
   LoggedSet,
@@ -83,7 +85,7 @@ function detectFamily(name: string) {
     ].find(([term]) => text.includes(term))?.[1] ?? ""
   );
 }
-export function regionContribution(e: SessionExercise): Record<string, number> {
+export function fineMuscleContribution(e: SessionExercise): Record<string, number> {
   const anchors = muscles.ANCHOR_OVERRIDES as Record<
       string,
       Record<string, number>
@@ -125,6 +127,10 @@ export function regionContribution(e: SessionExercise): Record<string, number> {
       fine = normalize(merged);
     } else fine = Object.keys(t).length ? t : l;
   }
+  return fine;
+}
+export function regionContribution(e: SessionExercise): Record<string, number> {
+  const fine = fineMuscleContribution(e);
   const out: Record<string, number> = {};
   for (const [k, v] of Object.entries(fine)) {
     const r = (muscles.FINE_MUSCLE_TO_REGION as Record<string, string>)[k];
@@ -544,6 +550,7 @@ export function deriveSnapshot(snapshot: AppSnapshot, now = Date.now()) {
     ["streak_3", streak >= 3],
     ["first_rest_timer", snapshot.workouts.some((w) => w.restUsed)],
     ["first_plan", snapshot.plans.length > 0],
+    ["all_goal_modes", new Set((snapshot.profile.goalModesUsed ?? []).map(canonicalGoalMode).filter(Boolean)).size >= 3],
     ["workouts_10", qualified.length >= 10],
     ["consistency_4w", weeks.size >= 4],
     ["first_pr", verifiedPrWorkouts.size > 0],
@@ -681,24 +688,9 @@ export function warmupTargets(targetKg: number, barKg = 20): WarmupTarget[] {
       return true;
     });
 }
-/** Native ghost-set suggestion, not an automatic load prescription. Never used for cardio. */
-export function progressionSuggestion(
-  exercise: SessionExercise,
-  unit: "kg" | "lb" = "kg",
-): { weightKg: number; reps: number } | null {
-  if (isTimed(exercise) || trackingMode(exercise) === "assisted_bodyweight" || !["weight_reps", "bodyweight_reps", "bodyweight_plus_weight_reps"].includes(trackingMode(exercise))) return null;
-  const sets = exercise.loggedSets.filter((s) => s.kind !== "warmup");
-  if (!sets.length) return null;
-  const top = sets.reduce((a, b) => (b.weightKg > a.weightKg ? b : a));
-  if (top.weightKg > 0)
-    return {
-      weightKg: top.weightKg + (unit === "lb" ? 5 / 2.20462262185 : 2.5),
-      reps: Math.trunc(top.reps),
-    };
-  return {
-    weightKg: 0,
-    reps: Math.trunc(Math.max(...sets.map((s) => s.reps))) + 2,
-  };
+/** Compatibility entry point for conservative, evidence-based suggestions. */
+export function progressionSuggestion(exercise: SessionExercise, unit: "kg" | "lb" = "kg") {
+  return recommendProgression(exercise, exercise, { unit });
 }
 const suggestionRegions: Record<string, string[]> = {
   Shoulders: [

@@ -271,6 +271,7 @@ test("two tabs share one active session and retain writes, deletion, and complet
   await expect(
     page.getByRole("heading", { name: "No active workout" }),
   ).toBeVisible();
+  await page.getByRole("button", { name: "Go Home", exact: true }).click();
   await page.getByRole("link", { name: "Log", exact: true }).click();
   await expect(page.locator(".history-row")).toHaveCount(1);
   await page.locator(".history-row").click();

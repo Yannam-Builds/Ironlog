@@ -1,8 +1,11 @@
-import { useId } from "react";
+import { useEffect, useState } from "react";
+import { NativeCardShine } from "../ui/NativeCardShine";
+import { workoutElapsedSeconds } from "../domain/workout-clock";
+import { dailyProof } from "../domain/daily-proof";
 import { useApp, navigate, hasTrainingHistory } from "../ui/context";
-import { Button, Fox, Grade, Icon, Progress } from "../ui/components";
+import { Button, Fox, Grade, Icon, Progress, Sheet, RollingTimerText } from "../ui/components";
 import { BodyMap } from "../ui/BodyMap";
-import { startWorkout } from "../data/store";
+import { startWorkout, discardWorkout } from "../data/store";
 import {
   creditedProof,
   isWorkingSet,
@@ -12,30 +15,21 @@ import {
 import { externalLoadVolume } from "../domain/tracking";
 import { isoWeekKey } from "../domain/dates";
 
-/** Exact browser counterpart of CardGradient.kt's moving user-space brush. */
-function NativeCardShine() {
-  const gradientId = `card-shine-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
-  return (
-    <svg className="card-shine-layer" aria-hidden="true" preserveAspectRatio="none">
-      <defs>
-        <linearGradient id={gradientId} gradientUnits="userSpaceOnUse" x1="-600" y1="0" x2="300" y2="100%">
-          <stop offset="0" stopColor="var(--accent)" stopOpacity="0.03" />
-          <stop offset="0.35" stopColor="var(--accent)" stopOpacity="0.2" />
-          <stop offset="0.65" stopColor="var(--accent)" stopOpacity="0.28" />
-          <stop offset="1" stopColor="var(--accent)" stopOpacity="0.04" />
-          <animate attributeName="x1" values="-600;1800;-600" dur="10s" calcMode="linear" repeatCount="indefinite" />
-          <animate attributeName="x2" values="300;2700;300" dur="10s" calcMode="linear" repeatCount="indefinite" />
-        </linearGradient>
-      </defs>
-      <rect width="100%" height="100%" fill={`url(#${gradientId})`} />
-    </svg>
-  );
-}
-
 export function Home() {
   const { data, derived: d, run, busy } = useApp();
   const p = data.profile;
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const [now, setNow] = useState(Date.now());
   const active = data.workouts.find((workout) => workout.status === "active");
+  useEffect(() => {
+    if (!active) return;
+    const tick = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(tick);
+  }, [active?.id]);
+  const elapsed = active ? workoutElapsedSeconds(active, now) : 0;
+  const timer = elapsed >= 3600
+    ? `${Math.floor(elapsed / 3600)}:${String(Math.floor(elapsed / 60) % 60).padStart(2, "0")}:${String(elapsed % 60).padStart(2, "0")}`
+    : `${String(Math.floor(elapsed / 60)).padStart(2, "0")}:${String(elapsed % 60).padStart(2, "0")}`;
   const plan = data.plans.find((candidate) => candidate.id === p.activePlanId);
   const previous = data.workouts.find(
     (workout) => workout.status === "completed" && workout.planId === plan?.id,
@@ -62,6 +56,13 @@ export function Home() {
         : 0
     ];
 
+  const weekday = (new Date().getDay() + 6) % 7;
+  const nextProtectedOffset = Array.from({ length: 7 }, (_, i) => i + 1).find((offset) => p.selectedTrainingDays.includes((weekday + offset) % 7)) ?? 1;
+  const nextProtectedDate = new Date();
+  nextProtectedDate.setDate(nextProtectedDate.getDate() + nextProtectedOffset);
+  const rhythmBlurb = !p.selectedTrainingDays.includes(weekday)
+    ? `Today is outside your protected training rhythm. Next protected day: ${nextProtectedDate.toLocaleDateString(undefined, { weekday: "long" })}. You can still train if recovery supports it.`
+    : null;
   const completed = data.workouts.filter((workout) => workout.status === "completed");
   const credited = completed.filter((workout) => creditedProof(workout));
   const recentSessions = credited.filter(
@@ -119,20 +120,8 @@ export function Home() {
         : hour < 22
           ? "Good evening"
           : "Good night";
-  const proofHeadline = active
-    ? "Finish what you started"
-    : !plan
-      ? "Set your proof loop"
-      : d.weeklyCount >= p.weeklyGoal
-        ? "Weekly proof secured"
-        : "Your next proof is ready";
-  const proofDetail = active
-    ? `${active.name} is saved and ready to resume.`
-    : !plan
-      ? "Pick a plan so Home can drive the next session automatically."
-      : d.weeklyCount >= p.weeklyGoal
-        ? "Your weekly goal is complete. Keep building when recovery supports it."
-        : `${day?.name ?? plan.name} is ready when you are.`;
+  const latestCheckin = data.checkins.filter(c => c.at <= now && now - c.at <= 48 * 3600000).sort((a,b) => b.at - a.at)[0];
+  const proof = dailyProof(data.workouts, !!plan, d.readiness, latestCheckin?.painRegions ?? [], now);
   const shareWeeklySummary = async () => {
     const text = [
       "IronLog Weekly Summary",
@@ -169,10 +158,10 @@ export function Home() {
         <div className="daily-proof-main">
           <div>
             <span className="eyebrow">Daily proof</span>
-            <h2>{proofHeadline}</h2>
-            <p>{proofDetail}</p>
+            <h2>{proof.headline}</h2>
+            <p>{proof.detail}</p>
           </div>
-          <Fox pose="20_clipboard" />
+          <Fox pose={proof.fox} />
         </div>
         <div className="daily-proof-meta">
           <span>{d.grade} · Level {d.level}</span>
@@ -180,8 +169,8 @@ export function Home() {
             {d.streak ? `${d.streak}d streak · Ledger` : "Open Ledger"}
           </button>
         </div>
+        {(proof.route === "plans" || proof.route === "recovery") && <Button onClick={() => navigate(proof.route)}>{proof.action}</Button>}
         {!plan && !active && <>
-          <Button onClick={() => navigate("plans")}>Choose a program</Button>
           <Button
             variant="ghost"
             disabled={busy}
@@ -195,35 +184,43 @@ export function Home() {
         </>}
       </section>
 
-      {(plan || active) && (
-        <section className={`card today-card native-card${data.profile.cardShineEnabled ? " animated-card-shine" : ""}`}>
-          {data.profile.cardShineEnabled && <NativeCardShine />}
-          <div className="row">
-            <span className="eyebrow">Today’s workout</span>
-            <Icon name="log" />
+      <section className={`card today-card native-card${p.cardShineEnabled ? " animated-card-shine" : ""}`}>
+        {p.cardShineEnabled && <NativeCardShine />}
+        <div className="row">
+          <span className="eyebrow">{active ? "IN PROGRESS" : "TODAY'S WORKOUT"}</span>
+          <button className="today-round-start" aria-label={active ? "Resume workout" : "Start workout"} disabled={busy} onClick={() => {
+            if (active) navigate("workout");
+            else void run(async () => { await startWorkout(plan?.id, day?.id); navigate("workout"); });
+          }}><Icon name={active ? "resume" : "play-outline"} size={22} /></button>
+        </div>
+        <h2>{active?.name ?? plan?.name ?? "Start Workout"}</h2>
+        <div className="today-badges">
+          {active ? <><span className="today-progress-badge">● IN PROGRESS</span><RollingTimerText value={timer} /></> : <>
+            <span className="today-goal-badge">{p.goalMode.toLowerCase().replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase())}</span>
+            {rotation.length > 0 && <span>{rotation.length} days{averageMinutes > 0 ? ` · avg ${averageMinutes}m` : ""}</span>}
+          </>}
+        </div>
+        {active ? <>
+          <Button disabled={busy} onClick={() => navigate("workout")}>RESUME WORKOUT</Button>
+          <Button variant="danger" disabled={busy} onClick={() => setConfirmDiscard(true)}>DISCARD WORKOUT</Button>
+        </> : rotation.length ? <>
+          <div className="today-day-carousel" aria-label="Plan days">
+            {[day!, ...rotation.filter((candidate) => candidate.id !== day?.id)].map((candidate) => <button key={candidate.id} disabled={busy}
+              className={candidate.id === day?.id ? "recommended" : ""}
+              aria-label={`${candidate.name}, ${candidate.exercises.length} exercises${candidate.id === day?.id ? ", recommended for today" : ""}`}
+              onClick={() => void run(async () => { await startWorkout(plan!.id, candidate.id); navigate("workout"); })}>
+              <strong>{candidate.name}</strong><span>{candidate.exercises.length} exercises</span>
+            </button>)}
           </div>
-          <h2>{active?.name ?? day?.name ?? "Make room for the work."}</h2>
-          <p>{active
-            ? "Your session is saved. Pick up where you left off."
-            : plan && day
-              ? `${plan.name} · ${day.exercises.length} exercises`
-              : "Pick a program or start a freestyle session."}</p>
-          <Button
-            disabled={busy}
-            onClick={() => active
-              ? navigate("workout")
-              : plan && day
-                ? run(async () => {
-                    await startWorkout(plan.id, day.id);
-                    navigate("workout");
-                  })
-                : navigate("plans")}
-          >
-            {active ? "Resume workout" : plan ? "Start workout" : "Choose a program"}
-            <Icon name="next" />
-          </Button>
-        </section>
-      )}
+          {rhythmBlurb && <p className="today-rhythm">{rhythmBlurb}</p>}
+          <Button variant="ghost" disabled={busy} onClick={() => void run(async () => { await startWorkout(); navigate("workout"); })}><Icon name="plus" size={12} />START WITHOUT PLAN</Button>
+        </> : <Button disabled={busy} onClick={() => void run(async () => { await startWorkout(); navigate("workout"); })}>START WORKOUT</Button>}
+      </section>
+      {confirmDiscard && active && <Sheet title="Discard workout?" onClose={() => setConfirmDiscard(false)}>
+        <p>This will discard your in-progress workout. Completed workout history is preserved.</p>
+        <Button variant="danger" disabled={busy} onClick={() => void run(() => discardWorkout(active.id), "Workout discarded").then((ok) => { if (ok) setConfirmDiscard(false); })}>Discard workout</Button>
+        <Button variant="ghost" onClick={() => setConfirmDiscard(false)}>Keep workout</Button>
+      </Sheet>}
 
       <section className="card home-stats native-card" aria-label="Training overview">
         <div><strong>{recentSessions}</strong><span>Sessions</span></div>
