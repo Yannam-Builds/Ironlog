@@ -222,6 +222,7 @@ test("active workout exercise cards reorder by pointer and persist", async ({ pa
   expect(targetBox).not.toBeNull();
   await page.mouse.move(draggedBox!.x + draggedBox!.width / 2, draggedBox!.y + draggedBox!.height / 2);
   await page.mouse.down();
+  await expect(dragged).toHaveAttribute("aria-pressed", "true");
   await page.mouse.move(targetBox!.x + targetBox!.width / 2, targetBox!.y + targetBox!.height / 2, { steps: 8 });
   await page.mouse.up();
 
@@ -245,12 +246,19 @@ test("plan cards reorder by pointer and the top plan becomes active", async ({ p
   const dragged = page.getByRole("button", { name: "Drag to reorder Plan Two" });
   const target = page.getByRole("button", { name: "Drag to reorder Plan One" });
   await expect(dragged).toBeEnabled();
+  const feedback = page.locator(".message");
+  await expect(feedback).toContainText("Plan saved");
+  const beforeDismiss = await dragged.boundingBox();
+  await feedback.getByRole("button", { name: "Dismiss", exact: true }).click();
+  const afterDismiss = await dragged.boundingBox();
+  expect(afterDismiss!.y).toBeCloseTo(beforeDismiss!.y, 1);
   const draggedBox = await dragged.boundingBox();
   const targetBox = await target.boundingBox();
   expect(draggedBox).not.toBeNull();
   expect(targetBox).not.toBeNull();
   await page.mouse.move(draggedBox!.x + draggedBox!.width / 2, draggedBox!.y + draggedBox!.height / 2);
   await page.mouse.down();
+  await expect(dragged).toHaveAttribute("aria-pressed", "true");
   await page.mouse.move(targetBox!.x + targetBox!.width / 2, targetBox!.y + targetBox!.height / 2, { steps: 8 });
   await page.mouse.up();
 

@@ -49,6 +49,11 @@ export function App() {
   );
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
+  useEffect(() => {
+    if (!status) return;
+    const timeout = window.setTimeout(() => setStatus(""), 5000);
+    return () => window.clearTimeout(timeout);
+  }, [status]);
   const [busy, setBusy] = useState(false);
   const running = useRef(false);
   const [now, setNow] = useState(Date.now());
