@@ -9,6 +9,14 @@ plugins {
     id("org.jetbrains.kotlin.plugin.serialization")
     id("org.jetbrains.kotlin.plugin.compose") // Kotlin 2.x Compose compiler plugin
 }
+
+// Keep cross-test coroutine failures attributable in CI instead of truncating
+// the suppressed cause to the name of the next test.
+tasks.withType<Test>().configureEach {
+    testLogging {
+        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+    }
+}
 apply(plugin = "io.objectbox")
 
 // Pin Kotlin/serialization artifacts to 2.1.0 (Kotlin 2.x baseline).

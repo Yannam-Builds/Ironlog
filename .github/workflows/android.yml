@@ -35,3 +35,13 @@ jobs:
 
       - name: Test, lint, and assemble debug
         run: ./gradlew testDebugUnitTest lintDebug assembleDebug --no-daemon
+
+      - name: Preserve failing test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-test-failures
+          path: |
+            app/build/test-results/testDebugUnitTest
+            app/build/reports/tests/testDebugUnitTest
+          retention-days: 7
