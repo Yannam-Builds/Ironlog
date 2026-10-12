@@ -21,7 +21,7 @@ Root CLI helpers and screenshots are ignored under `web/output/playwright/`: `fi
 ## Integrated gates
 
 - Web: 68 unit/component files, 342 tests passed after final domain/UI changes; TypeScript and production build passed. Scoped output verifier passed 185 files. The build retains its known large-chunk and public-font URL warnings; paths are checked at runtime/output.
-- Android: 767 JVM tests across181 report files, no failures/errors; lint0 errors,162 warnings,19 hints. These pre-existing warnings are not described as resolved.
+- Android: 767 JVM tests across181 report files: 766 passed, one manual benchmark skipped, no failures/errors; lint0 errors,162 warnings,19 hints. These pre-existing warnings are not described as resolved.
 - Signed minified APK: `0.1.0-pre-alpha.11`, code12, package `com.ironlogpro.app`, SDK36/min26. Build succeeded. v2 signature valid, one signer; certificate SHA256 `93970f38b16f3a10e958cdd1339b6f2ca0616cef65595fc53f1d1123a373bba7`.
 - APK SHA256: `310ec88b4a0cac83a446a3ea3062e1de220841b8c952cf9492bff902f3e9e4eb`.
 - Update QA: API36.1 retained synthetic AVD, `adb install -r` succeeded from .10/code11. Original firstInstallTime `2026-10-05 23:45:09` retained; Athlete/Full Body Beginner/active FULL BODY A survived. MainActivity resumed, crash buffer empty; screenshot inspected.
@@ -32,3 +32,5 @@ Browser acceptance exposed feedback covering Back. An initial inline placement f
 ## Environmental limits
 
 Desktop Chromium/WebKit and emulated touch do not certify physical Safari/Home Screen, VoiceOver/TalkBack or OEM behavior. Native font rendering and browser font metrics are not literally pixel-identical. No provider credentials/billing/CORS plan was available for live integration certification. Native cached Ledger event records cannot be replayed as web event identities; web recomputes available evidence and preserves durable unlocks/provenance. Android photo URIs cannot convey bytes. Android Health Connect, foreground services/widgets/on-device AI and guaranteed lock-screen background alarms remain outside browser capability. This is a tested pre-alpha preview, not Play Store production readiness or a bug-free guarantee.
+
+Final Linux unit run exposed the onboarding integration test querying the next heading before asynchronous IndexedDB/snapshot completion under CI load. The step helper now waits for the committed button to unmount (bounded five seconds), then checks the next heading and the final calibration. No production onboarding behavior changed. The full local 342-test suite passes; fresh CI remains the publication gate.

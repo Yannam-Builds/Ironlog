@@ -13,7 +13,7 @@ Baseline: c5ace518, signed .10/code11. Whole-plan authorization includes impleme
 | Analytics | Implemented and verified | ISO week/program ranges, display-unit chart values, radar/prior overlay, muscle drill, share |
 | Portability | Implemented and verified | Complete calibration/provenance/fixed baseline clock, native legacy formats, Strong/Hevy/OpenWeight reviewed import; canonical precedence; credential redaction |
 | Existing body/photos/onboarding | Verified | Reload/retry, goals, date comparison, notes, selected delete, byte export/share fallback and atomic onboarding completion |
-| Release/workspace | Signed update verified; final browser/publication gates in progress | 767 native tests/lint0errors; 342 web tests; signed .11/code12 retained-data emulator update; full browser/offline/CI/deployment completion follows |
+| Release/workspace | Signed update verified; final browser/publication gates in progress | 766 native tests passed, one manual benchmark skipped/lint0errors; 342 web tests; signed .11/code12 retained-data emulator update; full browser/offline/CI/deployment completion follows |
 
 Physical Safari/Home Screen and OEM device certification cannot be replaced by emulation. Record those environmental limits separately from implemented browser-capable features. Android-only integrations remain excluded. No all-parity claim from source inspection alone.
 

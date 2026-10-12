@@ -16,6 +16,9 @@ async function clickNext(name: RegExp) {
   const button = await screen.findByRole("button", { name });
   await waitFor(() => expect(button).toBeEnabled());
   await act(async () => fireEvent.click(button));
+  // IndexedDB persistence and the snapshot subscription finish asynchronously.
+  // Wait for the committed step before querying its heading on slower CI workers.
+  await waitFor(() => expect(button).not.toBeInTheDocument(), { timeout: 5000 });
 }
 
 it("completes the ten-page native onboarding sequence and persists calibration", async () => {
