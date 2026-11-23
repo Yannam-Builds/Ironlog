@@ -57,6 +57,15 @@ These screenshots come from a newer native preview using the demo profile **Athl
 
 The activity is a **simulated Central Park run** created in the Android QA app on a Galaxy S25 Ultra. The exported card uses the app's endpoint hiding. The gallery displays the transparent PNG over a dark background. Basemap by [OpenFreeMap](https://openfreemap.org/) and [OpenMapTiles](https://openmaptiles.org/), with data from [© OpenStreetMap contributors](https://www.openstreetmap.org/copyright).
 
+### Photo cards and route replay
+
+| Post-run photo card | 2D replay | 3D terrain replay |
+| :---: | :---: | :---: |
+| <a href=".github/assets/screens/preview-cardio-photo.webp"><img src=".github/assets/screens/preview-cardio-photo.webp" width="240" alt="IronLog share card with a fictional runner's post-run selfie, a route overlay, and run distance, pace, and time"></a> | <a href=".github/assets/screens/preview-replay-2d.webp"><img src=".github/assets/screens/preview-replay-2d.webp" width="240" alt="Top-down replay of the simulated Central Park route with the playhead scrubbed to six minutes and eight seconds"></a> | <a href=".github/assets/screens/preview-replay-3d.webp"><img src=".github/assets/screens/preview-replay-3d.webp" width="240" alt="IronLog route playback in 3D terrain mode with a tilted map, follow camera and Pause control"></a> |
+| Add a photo behind the clipped route and run stats. | Scrub to a recorded moment to see position and pace. | Follow the same timeline on a tilted terrain map. |
+
+The portrait is AI-generated. The card was exported from Share Studio on the Galaxy S25 Ultra, and the replay images show the same simulated run with endpoints hidden. Basemap by [OpenFreeMap](https://openfreemap.org/) and [OpenMapTiles](https://openmaptiles.org/), with data from [© OpenStreetMap contributors](https://www.openstreetmap.org/copyright). Terrain sources are credited by [Mapterhorn](https://mapterhorn.com/attribution/).
+
 ## Everything in IronLog
 
 The lists below describe the native Android app. Newer items ship in preview builds first; web support varies by feature.
