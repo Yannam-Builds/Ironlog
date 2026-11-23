@@ -36,18 +36,17 @@ Both versions keep their primary record on the device or browser where it was cr
 
 ## Inside the Android app
 
-<table>
-  <tr>
-    <td width="50%"><img src=".github/assets/screens/home.png" alt="IronLog Home with the sample athlete name Athlete, Daily Proof, and the next training action"></td>
-    <td width="50%"><img src=".github/assets/screens/recovery.png" alt="IronLog recovery map showing the front body view below its controls"></td>
-  </tr>
-  <tr>
-    <td align="center"><strong>Home · the next useful action</strong></td>
-    <td align="center"><strong>Recovery · context by muscle</strong></td>
-  </tr>
-</table>
+These screenshots come from a newer native preview using the demo profile **Athlete** and a starter barbell plan. The downloadable APK above is an earlier release.
 
-The Home image is a native sample capture using the name **Athlete**. It is not a mockup or a screenshot of a personal training account.
+| Today's workout | Plan and training days | Active workout |
+| :---: | :---: | :---: |
+| <a href=".github/assets/screens/preview-home-shift-green.webp"><img src=".github/assets/screens/preview-home-shift-green.webp" width="240" alt="Athlete on IronLog Home with the Shift Green workout card and cardio shortcuts"></a> | <a href=".github/assets/screens/preview-plans-shift-green.webp"><img src=".github/assets/screens/preview-plans-shift-green.webp" width="240" alt="Plans tab with the active Novice Barbell Strength program and three training days"></a> | <a href=".github/assets/screens/preview-workout-onyx-green.webp"><img src=".github/assets/screens/preview-workout-onyx-green.webp" width="240" alt="Onyx Green workout screen with previous-set scope, warm-up controls, and the set logger"></a> |
+| Start the recommended day from Home. | Choose a plan and switch between its days. | See previous sets and warm-ups beside the logger. |
+
+| Onyx Green | Midnight Blue | Theme previews |
+| :---: | :---: | :---: |
+| <a href=".github/assets/screens/preview-resume-onyx-green.webp"><img src=".github/assets/screens/preview-resume-onyx-green.webp" width="240" alt="Minimized workout on Home with pure-black surfaces and mint actions"></a> | <a href=".github/assets/screens/preview-resume-midnight-blue.webp"><img src=".github/assets/screens/preview-resume-midnight-blue.webp" width="240" alt="Minimized workout on Home with near-black surfaces and blue actions"></a> | <a href=".github/assets/screens/preview-appearance-midnight-blue.webp"><img src=".github/assets/screens/preview-appearance-midnight-blue.webp" width="240" alt="Appearance theme picker showing Shift Green, Onyx Green, and the selected Midnight Blue preset"></a> |
+| Pure black with mint controls. | Near-black navy with icy blue controls. | Compare and switch themes in Settings. |
 
 ### Built for the work between sets
 
