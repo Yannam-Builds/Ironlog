@@ -8,7 +8,7 @@
 ![Local first](https://img.shields.io/badge/data-local--first-FF4500)
 [![License](https://img.shields.io/badge/license-Apache%202.0-3C8D72)](LICENSE)
 
-**A strength-training companion that keeps the workout, recovery context, and earned progress in one local record.**
+**One local-first training log for the weight room, the road, and everything you learn between sessions.**
 
 [Open the web app](https://yannam-builds.github.io/Ironlog/app/) · [Download Android preview](https://github.com/Yannam-Builds/Ironlog/releases/tag/v0.1.0-pre-alpha.11) · [See the native screens](#inside-the-android-app) · [Build locally](#build-and-verify)
 
@@ -48,13 +48,19 @@ These screenshots come from a newer native preview using the demo profile **Athl
 | <a href=".github/assets/screens/preview-resume-onyx-green.webp"><img src=".github/assets/screens/preview-resume-onyx-green.webp" width="240" alt="Minimized workout on Home with pure-black surfaces and mint actions"></a> | <a href=".github/assets/screens/preview-resume-midnight-blue.webp"><img src=".github/assets/screens/preview-resume-midnight-blue.webp" width="240" alt="Minimized workout on Home with near-black surfaces and blue actions"></a> | <a href=".github/assets/screens/preview-appearance-midnight-blue.webp"><img src=".github/assets/screens/preview-appearance-midnight-blue.webp" width="240" alt="Appearance theme picker showing Shift Green, Onyx Green, and the selected Midnight Blue preset"></a> |
 | Pure black with mint controls. | Near-black navy with icy blue controls. | Compare and switch themes in Settings. |
 
-### Built for the work between sets
+### From the first set to the finish line
 
-- **Log quickly.** Record sets, load, reps, effort, rest and notes; resume an active workout after leaving the screen.
-- **Follow a plan.** Use a starter program or edit days and exercises. Progression suggestions and substitutions remain explainable and optional.
-- **Read recovery with context.** Workout history, manual check-ins, sleep and supported Health Connect inputs can inform training decisions. Readiness is an estimate, not medical clearance.
-- **Keep honest progress.** Personal records, streaks, XP, badges and Forge Fox widgets depend on completed training evidence.
-- **Own the record.** Workout data lives locally in ObjectBox on Android. IronLog backup, import and export are explicit; automatic Android backup is disabled for sensitive fitness and photo data.
+The newer Android preview shown here adds outdoor training and route replay. The downloadable APK above is an earlier preview. Web support varies by feature.
+
+| Feature | What you can do in the Android preview |
+| --- | --- |
+| **Strength logging** | Record load, reps, effort, set type and notes. Compare previous sets across workouts or within the same plan day. Configure exercise and set-type rest timers, calculate warm-ups for the plates you have, and resume a minimized workout. |
+| **Plans and progression** | Pick, build, import, or share a program. Organize days and exercises, keep rep ranges through logging, track personal records, and review why a progression was suggested. |
+| **Outdoor cardio** | Record Run, Bike, and Walk with a live GPS map, distance, pace or speed, pause and resume, and a visible screen-off recording service. Review the saved route and splits. |
+| **Route replay and sharing** | Scrub recorded time in 2D or use the 3D camera where terrain is available. Review metrics along the route, export GPX, and create a share card with control over whether the route and its endpoints appear. |
+| **Recovery and progress** | Review estimated muscle recovery, workout history, volume, body measurements and photos. See separate weekly strength, running, and cycling totals. Connect supported Health Connect signals if you choose. |
+| **Motivation and personalization** | Earn Ledger progress, badges and personal records from logged training. Choose colors, typography, layout spacing, and optional motion. Use widgets, reminders, and rest notifications. |
+| **Data ownership** | Train with a local history. Keep explicit backups, preview restores, and delete or export activities. Optional cloud intelligence uses the provider you configure. |
 
 ## How it is built
 
