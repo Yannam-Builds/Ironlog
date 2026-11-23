@@ -1,45 +1,69 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="320" viewBox="0 0 1200 320" role="img" aria-labelledby="loop-title loop-desc">
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="360" viewBox="0 0 1200 360" role="img" aria-labelledby="loop-title loop-desc">
   <title id="loop-title">The IronLog training loop</title>
-  <desc id="loop-desc">Four connected steps: record a set, assess recovery, credit the completed work, and adjust the next session.</desc>
+  <desc id="loop-desc">Five connected steps that repeat: plan the program, lift and log sets with rest timers, move with GPS cardio, read recovery, and prove the work with the Ledger, records and share cards.</desc>
   <style>
-    :root { --bg:#050505; --panel:#111; --line:#363636; --text:#fff; --muted:#aaa; --forge:#ff4500; --ready:#00c170; --earned:#ffd700; }
-    @media (prefers-color-scheme: light) { :root { --bg:#f6f7f8; --panel:#fff; --line:#c9cdd2; --text:#111; --muted:#505761; --forge:#d93600; --ready:#087f4d; --earned:#8a6100; } }
+    :root { --bg:#141414; --panel:#1f1f1f; --line:#414741; --text:#f0f4f0; --muted:#a1ada3; --mint:#65da94; --blue:#86bdff; --gold:#e8c477; --violet:#c5abff; --teal:#69d7c6; }
+    @media (prefers-color-scheme: light) { :root { --bg:#f4f6f4; --panel:#ffffff; --line:#c8d0c9; --text:#101511; --muted:#4f5b52; --mint:#18834d; --blue:#1d5fb4; --gold:#8a6100; --violet:#6b44c2; --teal:#0e7c6d; } }
     .current { stroke-dasharray:6 10; animation:flow 3s linear infinite; }
-    .marker { animation:steps 10s ease-in-out infinite; }
+    .marker { animation:steps 12s ease-in-out infinite; }
+    .glow { animation:glow 12s ease-in-out infinite; }
     @keyframes flow { to { stroke-dashoffset:-32; } }
-    @keyframes steps { 0%,12% { transform:translateX(0); } 29%,39% { transform:translateX(290px); } 56%,66% { transform:translateX(580px); } 83%,94% { transform:translateX(870px); } 100% { transform:translateX(0); } }
-    @media (prefers-reduced-motion: reduce) { .current,.marker { animation:none; } .marker { transform:translateX(870px); } }
+    @keyframes steps {
+      0%,10% { transform:translateX(0); } 18%,28% { transform:translateX(226px); } 36%,46% { transform:translateX(452px); }
+      54%,64% { transform:translateX(678px); } 72%,90% { transform:translateX(904px); } 100% { transform:translateX(0); }
+    }
+    @keyframes glow { 0%,100% { opacity:.35; } 50% { opacity:1; } }
+    @media (prefers-reduced-motion: reduce) { .current,.marker,.glow { animation:none; } .glow { opacity:1; } }
   </style>
-  <rect width="1200" height="320" rx="20" fill="var(--bg)"/>
-  <text x="44" y="51" fill="var(--text)" font-family="Arial,sans-serif" font-size="25" font-weight="800">One continuous training record</text>
-  <text x="44" y="80" fill="var(--muted)" font-family="Arial,sans-serif" font-size="16">Each decision keeps the evidence from the session before it.</text>
-  <path d="M144 119H1014" stroke="var(--line)" stroke-width="2"/>
-  <path d="M144 119H1014" stroke="var(--forge)" stroke-width="2" class="current"/>
-  <circle cx="144" cy="119" r="7" fill="var(--forge)" class="marker"/>
-  <g font-family="Arial,sans-serif">
-    <g transform="translate(35 146)">
-      <rect width="242" height="132" rx="14" fill="var(--panel)" stroke="var(--line)"/>
-      <text x="18" y="29" fill="var(--forge)" font-size="14" font-weight="800" letter-spacing="2">01 / TRAIN</text>
-      <text x="18" y="67" fill="var(--text)" font-size="23" font-weight="800">Record the set</text>
-      <text x="18" y="96" fill="var(--muted)" font-size="15">Load, reps and effort</text>
+  <rect width="1200" height="360" rx="22" fill="var(--bg)"/>
+  <g font-family="Arial,Helvetica,sans-serif">
+    <text x="44" y="52" fill="var(--text)" font-size="25" font-weight="800">One continuous training record</text>
+    <text x="44" y="81" fill="var(--muted)" font-size="16">Strength and cardio share one history, one recovery picture and one Ledger. Each session informs the next.</text>
+  </g>
+  <path d="M138 124H1062" stroke="var(--line)" stroke-width="2"/>
+  <path d="M138 124H1062" stroke="var(--mint)" stroke-width="2" class="current"/>
+  <circle cx="138" cy="124" r="7" fill="var(--mint)" class="marker"/>
+  <path d="M1062 124 C 1150 124, 1150 330, 600 330 C 50 330, 50 124, 138 124" fill="none" stroke="var(--line)" stroke-width="1.5" stroke-dasharray="3 7"/>
+  <g font-family="Arial,Helvetica,sans-serif">
+    <g transform="translate(40 150)">
+      <rect width="196" height="150" rx="16" fill="var(--panel)" stroke="var(--line)"/>
+      <path d="M22 30h22M22 38h22M22 46h14" stroke="var(--violet)" stroke-width="3" stroke-linecap="round"/>
+      <text x="58" y="44" fill="var(--violet)" font-size="13" font-weight="800" letter-spacing="2">01 / PLAN</text>
+      <text x="22" y="86" fill="var(--text)" font-size="19" font-weight="800">Pick the program</text>
+      <text x="22" y="112" fill="var(--muted)" font-size="14">Build, import or</text>
+      <text x="22" y="131" fill="var(--muted)" font-size="14">scan a shared plan</text>
     </g>
-    <g transform="translate(325 146)">
-      <rect width="242" height="132" rx="14" fill="var(--panel)" stroke="var(--line)"/>
-      <text x="18" y="29" fill="var(--ready)" font-size="14" font-weight="800" letter-spacing="2">02 / RECOVER</text>
-      <text x="18" y="67" fill="var(--text)" font-size="23" font-weight="800">Read the context</text>
-      <text x="18" y="96" fill="var(--muted)" font-size="15">History and check-in</text>
+    <g transform="translate(266 150)">
+      <rect width="196" height="150" rx="16" fill="var(--panel)" stroke="var(--line)"/>
+      <path d="M22 38h26m-20-10v20m14-20v20" stroke="var(--mint)" stroke-width="3" stroke-linecap="round"/>
+      <text x="58" y="44" fill="var(--mint)" font-size="13" font-weight="800" letter-spacing="2">02 / LIFT</text>
+      <text x="22" y="86" fill="var(--text)" font-size="19" font-weight="800">Log the set</text>
+      <text x="22" y="112" fill="var(--muted)" font-size="14">Load, reps, effort,</text>
+      <text x="22" y="131" fill="var(--muted)" font-size="14">warm-ups and rest</text>
     </g>
-    <g transform="translate(615 146)">
-      <rect width="242" height="132" rx="14" fill="var(--panel)" stroke="var(--line)"/>
-      <text x="18" y="29" fill="var(--earned)" font-size="14" font-weight="800" letter-spacing="2">03 / PROVE</text>
-      <text x="18" y="67" fill="var(--text)" font-size="23" font-weight="800">Credit the work</text>
-      <text x="18" y="96" fill="var(--muted)" font-size="15">Streaks, PRs and Ledger</text>
+    <g transform="translate(492 150)">
+      <rect width="196" height="150" rx="16" fill="var(--panel)" stroke="var(--line)"/>
+      <path d="M20 46 C 28 26, 36 50, 44 32 S 52 30, 54 26" fill="none" stroke="var(--blue)" stroke-width="3" stroke-linecap="round"/>
+      <text x="62" y="44" fill="var(--blue)" font-size="13" font-weight="800" letter-spacing="2">03 / MOVE</text>
+      <text x="22" y="86" fill="var(--text)" font-size="19" font-weight="800">Run, ride, walk</text>
+      <text x="22" y="112" fill="var(--muted)" font-size="14">GPS route, splits,</text>
+      <text x="22" y="131" fill="var(--muted)" font-size="14">indoor machines</text>
     </g>
-    <g transform="translate(905 146)">
-      <rect width="242" height="132" rx="14" fill="var(--panel)" stroke="var(--line)"/>
-      <text x="18" y="29" fill="var(--text)" font-size="14" font-weight="800" letter-spacing="2">04 / REPEAT</text>
-      <text x="18" y="67" fill="var(--text)" font-size="23" font-weight="800">Adjust the plan</text>
-      <text x="18" y="96" fill="var(--muted)" font-size="15">A better next session</text>
+    <g transform="translate(718 150)">
+      <rect width="196" height="150" rx="16" fill="var(--panel)" stroke="var(--line)"/>
+      <path d="M24 44a12 12 0 1 1 11 8" fill="none" stroke="var(--teal)" stroke-width="3" stroke-linecap="round"/>
+      <text x="58" y="44" fill="var(--teal)" font-size="13" font-weight="800" letter-spacing="2">04 / RECOVER</text>
+      <text x="22" y="86" fill="var(--text)" font-size="19" font-weight="800">Read the body</text>
+      <text x="22" y="112" fill="var(--muted)" font-size="14">Muscle map, check-in,</text>
+      <text x="22" y="131" fill="var(--muted)" font-size="14">Health Connect</text>
+    </g>
+    <g transform="translate(944 150)">
+      <rect width="216" height="150" rx="16" fill="var(--panel)" stroke="var(--line)"/>
+      <path d="M22 38l8 8 16-18" fill="none" stroke="var(--gold)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="glow"/>
+      <text x="58" y="44" fill="var(--gold)" font-size="13" font-weight="800" letter-spacing="2">05 / PROVE</text>
+      <text x="22" y="86" fill="var(--text)" font-size="19" font-weight="800">Earn the record</text>
+      <text x="22" y="112" fill="var(--muted)" font-size="14">Ledger, grades, PRs</text>
+      <text x="22" y="131" fill="var(--muted)" font-size="14">and share cards</text>
     </g>
   </g>
 </svg>

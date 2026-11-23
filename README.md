@@ -4,31 +4,31 @@
 
 [![Android CI](https://github.com/Yannam-Builds/Ironlog/actions/workflows/android.yml/badge.svg)](https://github.com/Yannam-Builds/Ironlog/actions/workflows/android.yml)
 [![IronLog Web](https://github.com/Yannam-Builds/Ironlog/actions/workflows/web-pages.yml/badge.svg)](https://github.com/Yannam-Builds/Ironlog/actions/workflows/web-pages.yml)
-![Android 8+](https://img.shields.io/badge/Android-8.0%2B-00C170?logo=android&logoColor=white)
-![Local first](https://img.shields.io/badge/data-local--first-FF4500)
+![Android 8+](https://img.shields.io/badge/Android-8.0%2B-65DA94?logo=android&logoColor=white)
+![Local first](https://img.shields.io/badge/data-local--first-86BDFF)
 [![License](https://img.shields.io/badge/license-Apache%202.0-3C8D72)](LICENSE)
 
 **One local-first training log for the weight room, the road, and everything you learn between sessions.**
 
-[Open the web app](https://yannam-builds.github.io/Ironlog/app/) · [Download Android preview](https://github.com/Yannam-Builds/Ironlog/releases/tag/v0.1.0-pre-alpha.11) · [See the native screens](#inside-the-android-app) · [Build locally](#build-and-verify)
+[Open the web app](https://yannam-builds.github.io/Ironlog/app/) · [Download Android preview](https://github.com/Yannam-Builds/Ironlog/releases/tag/v0.1.0-pre-alpha.11) · [See the native screens](#inside-the-android-app) · [All features](#everything-in-ironlog) · [Build locally](#build-and-verify)
 
 </div>
 
 > [!NOTE]
-> IronLog is in active pre-alpha development. The signed [`0.1.0-pre-alpha.11` Android preview APK](https://github.com/Yannam-Builds/Ironlog/releases/tag/v0.1.0-pre-alpha.11) is available; there is no Play Store listing yet.
+> IronLog is in active pre-alpha development. The signed [`0.1.0-pre-alpha.11` Android preview APK](https://github.com/Yannam-Builds/Ironlog/releases/tag/v0.1.0-pre-alpha.11) is available; there is no Play Store listing yet. Several features below come from newer native previews and are not in that APK.
 
 ## The training loop
 
-![The four stages of the IronLog training loop](.github/assets/training-loop.svg)
+![The five stages of the IronLog training loop](.github/assets/training-loop.svg)
 
-Log load, reps and effort during a session. Use the session and a recovery check-in to understand the next decision. Credit completed work to the Iron Ledger, then adjust the plan. The motion in these diagrams follows that flow and stops when reduced motion is requested.
+Pick a program, log your sets, record your runs and rides, read your recovery, and earn your progress in the Iron Ledger. Strength and cardio live in one history, so every session informs the next. The motion in these diagrams stops when reduced motion is requested.
 
 ## Use IronLog
 
 | Android app | Web app |
 | --- | --- |
-| Jetpack Compose app with ObjectBox storage, Health Connect, foreground workout tracking, widgets, and optional on-device or user-configured cloud intelligence. | Installable browser app with local workout storage, a full-screen mobile layout, and a live app preview inside the website. |
-| Plans, workout logging, history, recovery, body tracking, Ledger, and explicit backup/restore. | Home, Plans, Log, Stats, Settings, recovery, measurements, photo comparison, Ledger, and validated backup/restore. |
+| Jetpack Compose app with ObjectBox storage, Health Connect, foreground workout and GPS tracking, widgets, and optional on-device or user-configured cloud intelligence. | Installable browser app with local workout storage, a full-screen mobile layout, and a live app preview inside the website. |
+| Plans, strength logging, outdoor and indoor cardio, history, recovery, body tracking, Ledger, and explicit backup/restore. | Home, Plans, Log, Stats, Settings, recovery, measurements, photo comparison, Ledger, and validated backup/restore. |
 
 The web app shares IronLog's visual system and core training flow. It is still a preview: Android-only integrations and some native behavior do not have browser equivalents. The [web acceptance record](web/docs/acceptance.md) and [parity notes](web/docs/domain-parity.md) describe what is tested and what remains different.
 
@@ -57,35 +57,92 @@ These screenshots come from a newer native preview using the demo profile **Athl
 
 The activity is a **simulated Central Park run** created in the Android QA app on a Galaxy S25 Ultra. The exported card uses the app's endpoint hiding. The gallery displays the transparent PNG over a dark background. Basemap by [OpenFreeMap](https://openfreemap.org/) and [OpenMapTiles](https://openmaptiles.org/), with data from [© OpenStreetMap contributors](https://www.openstreetmap.org/copyright).
 
-### From the first set to the finish line
+## Everything in IronLog
 
-The newer Android preview shown here adds outdoor training and route replay. The downloadable APK above is an earlier preview. Web support varies by feature.
+The lists below describe the native Android app. Newer items ship in preview builds first; web support varies by feature.
 
-| Feature | What you can do in the Android preview |
-| --- | --- |
-| **Strength logging** | Record load, reps, effort, set type and notes. Compare previous sets across workouts or within the same plan day. Configure exercise and set-type rest timers, calculate warm-ups for the plates you have, and resume a minimized workout. |
-| **Plans and progression** | Pick, build, import, or share a program. Organize days and exercises, keep rep ranges through logging, track personal records, and review why a progression was suggested. |
-| **Outdoor cardio** | Record Run, Bike, and Walk with a live GPS map, distance, pace or speed, pause and resume, and a visible screen-off recording service. Review the saved route and splits. |
-| **Route replay and sharing** | Scrub recorded time in 2D or use the 3D camera where terrain is available. Review metrics along the route, export GPX, and create a share card with control over whether the route and its endpoints appear. |
-| **Recovery and progress** | Review estimated muscle recovery, workout history, volume, body measurements and photos. See separate weekly strength, running, and cycling totals. Connect supported Health Connect signals if you choose. |
-| **Motivation and personalization** | Earn Ledger progress, badges and personal records from logged training. Choose colors, typography, layout spacing, and optional motion. Use widgets, reminders, and rest notifications. |
-| **Data ownership** | Train with a local history. Keep explicit backups, preview restores, and delete or export activities. Optional cloud intelligence uses the provider you configure. |
+### Strength training
+
+- **Fast set logging:** load, reps, set type (normal, warm-up, drop, AMRAP, to failure), RPE or RIR, and notes per set.
+- **Previous performance:** see your last sets for an exercise across all workouts or only within the same plan day.
+- **Warm-up calculator** that works from the bar and plates in your current gym profile.
+- **Rest timers** per exercise and per set type, with a countdown notification that you can pause, extend by 30 seconds or skip from the lock screen.
+- **Supersets**, exercise swaps, extra exercises and per-session target overrides without changing the plan.
+- **Minimize and resume** a workout from Home; a foreground notification keeps the session alive.
+- **Edit or back-fill** completed workouts, including the date, duration, sets and notes.
+- **Workout calendar** and a searchable, filterable history.
+
+### Plans and progression
+
+- Pick from a **program library**, build your own in the plan editor, or create one with the **AI plan creator**.
+- **Share plans** and import them by **scanning a QR code**.
+- Rep ranges carry through logging; a **progression engine** suggests when to add load and explains why.
+- **Program insights** and **training intelligence** review adherence, volume and next-session targets, using the built-in engine or a cloud provider you configure.
+- **Personal records** with an estimated one-rep max, and a per-exercise progress view.
+
+### Cardio
+
+- **Run, Bike and Walk** with a live GPS map, distance, pace or speed, elevation, auto-pause, and a visible foreground service that keeps recording with the screen off.
+- **Map styles:** automatic, light, dark, terrain and satellite, with optional 3D tilt.
+- **Voice coach** announcements for splits and status changes.
+- **Indoor sessions** for treadmill, stationary bike, rower and StairMaster.
+- **Saved routes** with kilometre or mile splits, **2D and 3D route replay**, and **GPX export**.
+- **Share Studio:** design a transparent share card with your route, distance, pace and time, and hide the route's endpoints for privacy.
+
+### Recovery and body
+
+- **Muscle recovery map** (front and back) estimated from your logged training, plus a daily readiness check-in.
+- **Health Connect** (optional): sleep, resting heart rate and heart-rate variability inform recovery.
+- **Body weight** tracking, **body measurements**, and **progress photos** with side-by-side date comparison.
+
+### Stats and analytics
+
+- Weekly totals split by strength, running, cycling, walking and indoor training.
+- **Volume analytics** by muscle group and week, with a shareable summary.
+- Session, streak, set and duration summaries, the last-14-days activity chart, and exercise progress charts.
+
+### Motivation: the Iron Ledger
+
+- Logged work earns **Ledger grades** (Graphite, Iron, Steel, Titanium, Obsidian, Iridium, Aether and Apex), with credit only for qualifying sessions.
+- **Badges and achievements**, a **daily proof** card, streaks and a weekly goal.
+- The **Forge Fox** mascot reacts to your training state.
+
+### Personalization
+
+- **15 themes**, including Shift Green, Onyx Green, Midnight Blue, Royal Amethyst, Titanium Blue, AMOLED and Light.
+- Typography presets and font choice, adjustable spacing, and kg or lb.
+- Optional motion: an animated workout-card shine that follows how you tilt the phone, and a liquid-glass tab bar. Battery mode turns decorative rendering off.
+- **Home-screen widgets:** dashboard, grade-and-streak badge, and War Room.
+- **Reminders** with quiet hours, milestone notifications and rest alerts.
+
+### Your data
+
+- Everything is stored **locally** on your device; there is no account and no automatic cloud sync.
+- **Encrypted snapshots** and scheduled automatic backups, with a preview before any restore.
+- **Import** from IronLog backups, Strong CSV, Hevy CSV and OpenWeight JSON; **export** JSON or CSV.
+- Exercise library management with custom exercises, and gym profiles for your bars and plates.
+- Delete individual activities, or clear history, with a clear description of what is removed.
+
+### In development
+
+- A **workout island**: an optional pill shown over other apps during a workout, with the rest countdown and set progress.
 
 ## How it is built
 
 ```mermaid
 flowchart LR
     UI["Compose screens"] --> STATE["ViewModels"]
-    STATE --> DOMAIN["Training · recovery · Ledger"]
+    STATE --> DOMAIN["Training · cardio · recovery · Ledger"]
     DOMAIN --> DATA["Repositories"]
     DATA --> DB[("ObjectBox")]
     DATA --> PORT["Backup / import / export"]
     DATA --> HC["Health Connect"]
     DOMAIN --> AI["Optional intelligence"]
+    SVC["Workout + GPS services"] --> DATA
     DB --> WIDGETS["Widgets and workers"]
 ```
 
-The Android app uses Kotlin, Jetpack Compose, ObjectBox, WorkManager, Health Connect, CameraX/ML Kit and Jetpack Glance. The separate [web project](web/README.md) uses React, TypeScript and IndexedDB.
+The Android app uses Kotlin, Jetpack Compose, ObjectBox, WorkManager, Health Connect, CameraX/ML Kit and Jetpack Glance, plus MapLibre for GPS maps in the newer native previews. The separate [web project](web/README.md) uses React, TypeScript and IndexedDB.
 
 ## Build and verify
 
