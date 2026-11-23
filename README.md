@@ -6,7 +6,7 @@
 [![IronLog Web](https://github.com/Yannam-Builds/Ironlog/actions/workflows/web-pages.yml/badge.svg)](https://github.com/Yannam-Builds/Ironlog/actions/workflows/web-pages.yml)
 ![Android 8+](https://img.shields.io/badge/Android-8.0%2B-00C170?logo=android&logoColor=white)
 ![Local first](https://img.shields.io/badge/data-local--first-FF4500)
-[![License](https://img.shields.io/badge/license-proprietary-B91C1C)](LICENSE)
+[![License](https://img.shields.io/badge/license-Apache%202.0-3C8D72)](LICENSE)
 
 **A strength-training companion that keeps the workout, recovery context, and earned progress in one local record.**
 
@@ -75,7 +75,7 @@ The Android app uses Kotlin, Jetpack Compose, ObjectBox, WorkManager, Health Con
 
 ## Build and verify
 
-The source is visible for evaluation, but is proprietary. Building, modifying, deploying or redistributing it requires prior written permission under the [IronLog Proprietary License](LICENSE).
+IronLog's first-party Android and web source code is available under the [Apache License, Version 2.0](LICENSE).
 
 Android requires JDK 17 and Android SDK 36. From the repository root:
 
@@ -101,6 +101,6 @@ GitHub Actions also runs browser acceptance in Chromium and WebKit, including a 
 
 Before a store release, IronLog still needs broader Android API/OEM regression coverage, Play data-safety and Health Connect declarations, final privacy and foreground-service review, signing-key/history remediation, and a release version decision. The [native app audit](docs/reviews/2026-08-31-ironlog-app-audit.md) and [notification/settings audit](docs/reviews/2026-09-01-notification-feature-harmony-settings-audit.md) record known issues and their evidence.
 
-Original IronLog code, branding and artwork are proprietary. Earlier versions remain under the terms shipped with those versions; public visibility does not make this repository open source. Third-party software, font and data notices are in [Third-party notices](THIRD_PARTY_NOTICES.md).
+The Apache license covers first-party source code in this release. The IronLog name, logo, and original visual artwork remain reserved. Third-party software, fonts, data and artwork retain their own terms. See [Third-party notices](THIRD_PARTY_NOTICES.md) before redistributing bundled assets. Earlier releases retain the terms they shipped with.
 
 <div align="center"><strong>Train. Recover. Prove it.</strong></div>

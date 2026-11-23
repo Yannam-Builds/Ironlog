@@ -1,6 +1,6 @@
 # Contributing to IronLog
 
-IronLog is proprietary software. It does not operate an open contribution program.
+IronLog's first-party source is licensed under [Apache 2.0](LICENSE). The project currently reviews code and asset submissions by prior arrangement.
 
 ## Approval required
 

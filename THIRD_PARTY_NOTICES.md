@@ -1,5 +1,10 @@
 # Third-Party Notices
 
+The root Apache 2.0 license applies to IronLog's first-party source code. The
+project's name, logo and original artwork are reserved. Bundled third-party
+materials remain subject to their original licenses. The legacy full-body
+overview geometry has unresolved provenance and is outside the Apache grant.
+
 IronLog includes exercise data derived from the projects identified below.
 Those materials remain subject to their respective terms. The IronLog project
 license does not replace or restrict these third-party terms.

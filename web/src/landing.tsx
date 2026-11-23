@@ -468,7 +468,7 @@ function Landing() {
             software credits.
           </p>
           <a href={`${import.meta.env.BASE_URL}licenses/IronLog-LICENSE.txt`}>
-            IronLog Proprietary License
+            Apache 2.0 source license
           </a>
           <span> · </span>
           <a href={`${import.meta.env.BASE_URL}licenses/Lexend-OFL.txt`}>
