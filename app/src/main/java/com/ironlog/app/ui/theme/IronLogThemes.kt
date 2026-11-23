@@ -143,7 +143,40 @@ object IronLogThemes {
         chartPrimary = Color(0xFFD42010), chartSecondary = Color(0xFF0A63C9), chartTertiary = Color(0xFF1B8F4B),
     )
 
+    val ShiftGreen = IronLogThemeTokens(
+        name = "SHIFT_GREEN", bg = Color(0xFF1C1C1C), card = Color(0xFF272727),
+        cardBorder = Color(0xFF414741), surface = Color(0xFF222522), accent = Color(0xFF65DA94),
+        accentSoft = Color(0x2965DA94), accentBorder = Color(0x6665DA94), text = Color(0xFFF0F4F0),
+        subtext = Color(0xFFC0C8C1), muted = Color(0xFFA1ADA3), faint = Color(0xFF3A433C),
+        tabBg = Color(0xFF202320), gold = Color(0xFFE8C477), textOnAccent = Color(0xFF082517),
+        onCard = Color(0xFFF0F4F0), ghostText = Color(0xFF8C978E), success = Color(0xFF8CE2A9),
+        warning = Color(0xFFE8C477), danger = Color(0xFFFFB4AB), info = Color(0xFF93C5FF),
+        onDanger = Color(0xFF580F0C), chartPrimary = Color(0xFF65DA94),
+        chartSecondary = Color(0xFF93C5FF), chartTertiary = Color(0xFFE8C477),
+    )
+
+    val OnyxGreen = ShiftGreen.copy(
+        name = "ONYX_GREEN", bg = Color.Black, card = Color(0xFF101512),
+        cardBorder = Color(0xFF2A3B31), surface = Color(0xFF0A100C), tabBg = Color(0xFF0B100D),
+        accent = Color(0xFFA0F1BD), accentSoft = Color(0x29A0F1BD), accentBorder = Color(0x66A0F1BD),
+        faint = Color(0xFF21352A), textOnAccent = Color(0xFF062519),
+        chartPrimary = Color(0xFFA0F1BD), chartSecondary = Color(0xFF72D5DE),
+    )
+
+    val MidnightBlue = ShiftGreen.copy(
+        name = "MIDNIGHT_BLUE", bg = Color(0xFF05070B), card = Color(0xFF111A28),
+        cardBorder = Color(0xFF2A405C), surface = Color(0xFF0B1320), tabBg = Color(0xFF080F19),
+        accent = Color(0xFF86BDFF), accentSoft = Color(0x2986BDFF), accentBorder = Color(0x6686BDFF),
+        text = Color(0xFFEDF5FF), subtext = Color(0xFFBACCE3), muted = Color(0xFF95ABC5),
+        faint = Color(0xFF223751), textOnAccent = Color(0xFF0A2343), onCard = Color(0xFFEDF5FF),
+        ghostText = Color(0xFF839BB8), info = Color(0xFF9FCCFF), chartPrimary = Color(0xFF86BDFF),
+        chartSecondary = Color(0xFF69D7C6), chartTertiary = Color(0xFFC5ABFF),
+    )
+
     fun byName(name: String?): IronLogThemeTokens = when (name) {
+        "shift_green" -> ShiftGreen
+        "onyx_green" -> OnyxGreen
+        "midnight_blue" -> MidnightBlue
         "burnt_terracotta" -> BurntTerracotta
         "crimson_steel" -> CrimsonSteel
         "deep_forest" -> DeepForest

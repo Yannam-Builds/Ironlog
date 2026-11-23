@@ -1,5 +1,6 @@
 ﻿package com.ironlog.app.ui.screens.settings
 
+import com.ironlog.app.ui.theme.IronLogThemes
 import com.ironlog.app.ui.theme.appGapDp
 import com.ironlog.app.ui.theme.appPadding
 import com.ironlog.app.ui.theme.appSpacedBy
@@ -189,7 +190,15 @@ private val PROVIDER_PRESETS = listOf(
 
 // FIXED: 30 — Theme preview tokens: static bg + accent per theme for visual preview cards
 private data class ThemeToken(val id: String, val name: String, val bg: Color, val accent: Color)
+private fun themePreview(id: String, label: String): ThemeToken {
+    val theme = IronLogThemes.byName(id)
+    return ThemeToken(id, label, theme.bg, theme.accent)
+}
+
 private val THEME_TOKENS = listOf(
+    themePreview("shift_green", "Shift Green"),
+    themePreview("onyx_green", "Onyx Green"),
+    themePreview("midnight_blue", "Midnight Blue"),
     ThemeToken("obsidian_silver",  "Obsidian Silver",  Color(0xFF131313), Color(0xFFFDFDFC)),
     ThemeToken("deep_forest",      "Deep Forest",      Color(0xFF121412), Color(0xFFB0CFAD)),
     ThemeToken("titanium_blue",    "Titanium Blue",    Color(0xFF11131C), Color(0xFFB8C3FF)),
