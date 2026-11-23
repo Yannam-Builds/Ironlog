@@ -48,6 +48,15 @@ These screenshots come from a newer native preview using the demo profile **Athl
 | <a href=".github/assets/screens/preview-resume-onyx-green.webp"><img src=".github/assets/screens/preview-resume-onyx-green.webp" width="240" alt="Minimized workout on Home with pure-black surfaces and mint actions"></a> | <a href=".github/assets/screens/preview-resume-midnight-blue.webp"><img src=".github/assets/screens/preview-resume-midnight-blue.webp" width="240" alt="Minimized workout on Home with near-black surfaces and blue actions"></a> | <a href=".github/assets/screens/preview-appearance-midnight-blue.webp"><img src=".github/assets/screens/preview-appearance-midnight-blue.webp" width="240" alt="Appearance theme picker showing Shift Green, Onyx Green, and the selected Midnight Blue preset"></a> |
 | Pure black with mint controls. | Near-black navy with icy blue controls. | Compare and switch themes in Settings. |
 
+### GPS routes and share cards
+
+| Saved GPS route | Share Studio | Exported card |
+| :---: | :---: | :---: |
+| <a href=".github/assets/screens/preview-cardio-map.webp"><img src=".github/assets/screens/preview-cardio-map.webp" width="240" alt="Saved 4.12 km synthetic Central Park run with blue route, kilometre splits and 3D replay action"></a> | <a href=".github/assets/screens/preview-cardio-studio.webp"><img src=".github/assets/screens/preview-cardio-studio.webp" width="240" alt="Share Studio with route, pace, time and adjustable layouts, on a transparent background preview"></a> | <a href=".github/assets/screens/preview-cardio-share.png"><img src=".github/assets/screens/preview-cardio-share.webp" width="240" alt="Exported Central Park demo card with distance, pace, time and a route with hidden endpoints"></a> |
+| Review the route and splits or start replay. | Change layout and control which route details appear. | Download the original transparent PNG. |
+
+The activity is a **simulated Central Park run** created in the Android QA app on a Galaxy S25 Ultra. The exported card uses the app's endpoint hiding. The gallery displays the transparent PNG over a dark background. Basemap by [OpenFreeMap](https://openfreemap.org/) and [OpenMapTiles](https://openmaptiles.org/), with data from [© OpenStreetMap contributors](https://www.openstreetmap.org/copyright).
+
 ### From the first set to the finish line
 
 The newer Android preview shown here adds outdoor training and route replay. The downloadable APK above is an earlier preview. Web support varies by feature.
