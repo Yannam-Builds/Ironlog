@@ -91,7 +91,6 @@ See the [six-feature OpenGym reference](docs/opengym-feature-reference-2026-08-3
 
 Installed with the skill-installer helper without replacing existing directories:
 
-- Anthropic Frontend Design: `3b3fad96af16a10759d930941b4520ba0c40edae`.
 - Vercel React Best Practices and Composition Patterns: `063bee94c3f4df8453406c830b0a7df0f2860278`.
 
 Existing Impeccable/redesign, accessibility, citation-verification, TDD, browser-testing and independent-review workflows guided implementation. Native IronLog identity takes precedence over generic styling advice.

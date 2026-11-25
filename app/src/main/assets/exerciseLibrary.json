@@ -7,7 +7,7 @@
     "sourceLibraries": [
       "ironlog-original",
       "ironlog-additions",
-      "codex-source-verified"
+      "source-verified"
     ],
     "appEquipmentValues": [
       "Barbell",
